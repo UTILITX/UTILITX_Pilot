@@ -141,18 +141,18 @@ export default function EsriMap({
           }
 
           // Define basemap layers (using basemapLayer for now - deprecation warning is acceptable)
-          const basemaps: Record<string, L.TileLayer> = {
-            Imagery: EL.basemapLayer("Imagery", {
-              apikey: process.env.NEXT_PUBLIC_ARCGIS_API_KEY!,
-            }),
-            Streets: EL.basemapLayer("Streets", {
-              apikey: process.env.NEXT_PUBLIC_ARCGIS_API_KEY!,
-            }),
-            Topographic: EL.basemapLayer("Topographic", {
-              apikey: process.env.NEXT_PUBLIC_ARCGIS_API_KEY!,
-            }),
-          };
-
+    const basemaps: Record<string, L.TileLayer> = {
+        Imagery: EL.basemapLayer("Imagery", {
+        apikey: process.env.NEXT_PUBLIC_ARCGIS_API_KEY!,
+        }),
+        Streets: EL.basemapLayer("Streets", {
+        apikey: process.env.NEXT_PUBLIC_ARCGIS_API_KEY!,
+        }),
+        Topographic: EL.basemapLayer("Topographic", {
+        apikey: process.env.NEXT_PUBLIC_ARCGIS_API_KEY!,
+        }),
+    };
+  
           // Add default basemap - wait a bit more to ensure panes are ready
           setTimeout(() => {
             try {
@@ -164,7 +164,7 @@ export default function EsriMap({
             }
 
             // Add layer control after basemap is added
-            setTimeout(() => {
+    setTimeout(() => {
               try {
                 if (L.control && L.control.layers && map.getContainer() && map.getPane('mapPane')) {
                   const layerControl = L.control.layers(basemaps, undefined, {
@@ -180,18 +180,18 @@ export default function EsriMap({
                 // Continue without layer control - not critical
               }
             }, 100);
-          }, 100);
-
+    }, 100);
+  
           // Add hosted WorkAreas layer (polygons) - "workarea" layer
           // Wait a bit more to ensure map is fully ready
           setTimeout(() => {
             try {
               if (map.getPane('overlayPane') && map.getContainer()) {
-                const workAreas = EL.featureLayer({
-                  url: process.env.NEXT_PUBLIC_WORKAREA_LAYER_URL!,
-                  apikey: process.env.NEXT_PUBLIC_ARCGIS_API_KEY!,
-                  style: () => ({ color: "#0077ff", weight: 2, fillOpacity: 0.15 }),
-                }).addTo(map);
+    const workAreas = EL.featureLayer({
+      url: process.env.NEXT_PUBLIC_WORKAREA_LAYER_URL!,
+      apikey: process.env.NEXT_PUBLIC_ARCGIS_API_KEY!,
+      style: () => ({ color: "#0077ff", weight: 2, fillOpacity: 0.15 }),
+    }).addTo(map);
 
                 workAreasLayerRef.current = workAreas;
               }
@@ -204,12 +204,12 @@ export default function EsriMap({
           setTimeout(() => {
             try {
               if (map.getPane('overlayPane') && map.getContainer()) {
-                const records = EL.featureLayer({
-                  url: process.env.NEXT_PUBLIC_RECORDS_LAYER_URL!,
-                  apikey: process.env.NEXT_PUBLIC_ARCGIS_API_KEY!,
-                  pointToLayer: (_feature, latlng) =>
-                    L.circleMarker(latlng, { radius: 6, color: "#ff6600", fillOpacity: 0.8 }),
-                }).addTo(map);
+    const records = EL.featureLayer({
+      url: process.env.NEXT_PUBLIC_RECORDS_LAYER_URL!,
+      apikey: process.env.NEXT_PUBLIC_ARCGIS_API_KEY!,
+      pointToLayer: (_feature, latlng) =>
+        L.circleMarker(latlng, { radius: 6, color: "#ff6600", fillOpacity: 0.8 }),
+    }).addTo(map);
 
                 recordsLayerRefInternal.current = records;
               }
@@ -238,25 +238,29 @@ export default function EsriMap({
             try {
               if (mode === "draw" && map.getContainer() && map.getPane('mapPane')) {
                 if (enableWorkAreaDrawing) {
-                  // Add controls and enable polygon drawing for work area
+                  // Add controls and enable polygon/rectangle drawing for work area
                   map.pm.addControls({
                     position: "topleft",
-                    drawMarker: false, // Only allow polygon for work area
-                    drawPolyline: false,
-                    drawPolygon: true, // Only polygon for work area
+                    drawMarker: false, // Work areas are only polygons/rectangles
+                    drawCircle: false, // Work areas are only polygons/rectangles
+                    drawRectangle: true, // Enable rectangle drawing
+                    drawPolyline: false, // Work areas are only polygons/rectangles
+                    drawPolygon: true, // Enable polygon drawing
                     editMode: true,
                     dragMode: false,
                     cutPolygon: false,
                     removalMode: true,
                   });
                   
-                  // Enable polygon drawing mode
+                  // Enable polygon drawing mode by default
                   map.pm.enableDraw("Polygon");
                 } else if (georefMode !== "none") {
                   // Enable drawing controls for records based on geometry type
                   map.pm.addControls({
                     position: "topleft",
                     drawMarker: georefMode === "point",
+                    drawCircle: false, // Records are only point, line, or polygon
+                    drawRectangle: false, // Records are only point, line, or polygon
                     drawPolyline: georefMode === "line",
                     drawPolygon: georefMode === "polygon",
                     editMode: true,
@@ -264,7 +268,7 @@ export default function EsriMap({
                     cutPolygon: false,
                     removalMode: true,
                   });
-                  
+
                   // Enable the appropriate drawing mode
                   if (georefMode === "point") {
                     map.pm.enableDraw("Marker");
@@ -289,7 +293,7 @@ export default function EsriMap({
             }
           }, 400);
 
-          // Handle work area polygon drawing
+          // Handle work area drawing (polygons and rectangles only)
           const handleWorkAreaDrawing = async (e: any) => {
             if (isDrawingRecordRef.current) return; // Don't handle if we're drawing a record
 
@@ -297,11 +301,15 @@ export default function EsriMap({
             const geojson = layer.toGeoJSON();
             const geometry = geojson.geometry;
 
-            if (geometry.type !== "Polygon") return;
+            // Work areas are only polygons (rectangles are also polygons in GeoJSON)
+            if (geometry.type !== "Polygon") {
+              return;
+            }
 
             isDrawingWorkAreaRef.current = true;
 
             // Convert GeoJSON coordinates to LatLng[]
+            // Polygon: [[[lng, lat], [lng, lat], ...]] (first ring is exterior)
             const coordinates = geometry.coordinates[0]; // First ring
             const path: LatLng[] = coordinates.map((coord: number[]) => ({
               lat: coord[1],
@@ -327,7 +335,9 @@ export default function EsriMap({
                 geometry,
                 attributes
               );
-              workAreas.refresh();
+              if (workAreasLayerRef.current) {
+                workAreasLayerRef.current.refresh();
+              }
 
               // Update polygon state
               if (onPolygonChange) {
@@ -427,7 +437,9 @@ export default function EsriMap({
                   geometry,
                   attributes
                 );
-                records.refresh();
+                if (recordsLayerRefInternal.current) {
+                  recordsLayerRefInternal.current.refresh();
+                }
 
                 if (onGeorefComplete) {
                   onGeorefComplete(result);
@@ -464,12 +476,14 @@ export default function EsriMap({
               };
 
               try {
-                await addFeatureToLayer(
-                  process.env.NEXT_PUBLIC_RECORDS_LAYER_URL!,
-                  geometry,
-                  attributes
-                );
-                records.refresh();
+          await addFeatureToLayer(
+            process.env.NEXT_PUBLIC_RECORDS_LAYER_URL!,
+            geometry,
+            attributes
+          );
+                if (recordsLayerRefInternal.current) {
+                  recordsLayerRefInternal.current.refresh();
+                }
 
                 if (onGeorefComplete) {
                   onGeorefComplete(result);
@@ -521,7 +535,9 @@ export default function EsriMap({
                 attributes
               )
                 .then(() => {
-                  records.refresh();
+                  if (recordsLayerRefInternal.current) {
+                  recordsLayerRefInternal.current.refresh();
+                }
                   if (onGeorefComplete) {
                     onGeorefComplete(result);
                   }
@@ -565,16 +581,7 @@ export default function EsriMap({
                 }
               }
 
-              // Draw existing polygon if provided
-              if (polygon && polygon.length >= 3) {
-                const latlngs = polygon.map((p) => [p.lat, p.lng] as [number, number]);
-                const poly = L.polygon(latlngs, {
-                  color: "#0077ff",
-                  weight: 2,
-                  fillOpacity: 0.15,
-                }).addTo(map);
-                currentPolygonLayerRef.current = poly;
-              }
+              // Polygon will be handled by separate useEffect to avoid re-initialization
 
               // Draw bubbles (markers) - only if markersGroup is ready
               if (markersGroupRef.current) {
@@ -652,7 +659,7 @@ export default function EsriMap({
                   mapContainer.addEventListener("dragover", (e) => e.preventDefault());
                 }
               }
-            } catch (err) {
+      } catch (err) {
               console.error("Error setting up file drop handlers:", err);
             }
           }, 600);
@@ -669,7 +676,6 @@ export default function EsriMap({
     };
   }, [
     mode,
-    polygon,
     onPolygonChange,
     enableWorkAreaDrawing,
     enableWorkAreaSelection,
@@ -688,6 +694,29 @@ export default function EsriMap({
     zoom,
   ]);
 
+  // Separate effect to handle polygon updates without re-initializing the map
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Remove existing polygon layer if it exists
+    if (currentPolygonLayerRef.current) {
+      map.removeLayer(currentPolygonLayerRef.current);
+      currentPolygonLayerRef.current = null;
+    }
+
+    // Add new polygon if provided
+    if (polygon && polygon.length >= 3) {
+      const latlngs = polygon.map((p) => [p.lat, p.lng] as [number, number]);
+      const poly = L.polygon(latlngs, {
+        color: "#0077ff",
+        weight: 2,
+        fillOpacity: 0.15,
+      }).addTo(map);
+      currentPolygonLayerRef.current = poly;
+    }
+  }, [polygon]);
+
   // Update drawing controls when georefMode changes (without re-initializing map)
   useEffect(() => {
     const map = mapRef.current;
@@ -703,23 +732,27 @@ export default function EsriMap({
 
     // Enable drawing controls based on mode
     if (enableWorkAreaDrawing) {
-      // Add controls and enable polygon drawing for work area
+      // Add controls and enable polygon/rectangle drawing for work area
       map.pm.addControls({
         position: "topleft",
-        drawMarker: false,
-        drawPolyline: false,
-        drawPolygon: true,
+        drawMarker: false, // Work areas are only polygons/rectangles
+        drawCircle: false, // Work areas are only polygons/rectangles
+        drawRectangle: true, // Enable rectangle drawing
+        drawPolyline: false, // Work areas are only polygons/rectangles
+        drawPolygon: true, // Enable polygon drawing
         editMode: true,
         dragMode: false,
         cutPolygon: false,
         removalMode: true,
       });
-      map.pm.enableDraw("Polygon");
+      map.pm.enableDraw("Polygon"); // Enable polygon drawing mode by default
     } else if (georefMode !== "none") {
       // Enable drawing controls for records based on geometry type
       map.pm.addControls({
         position: "topleft",
         drawMarker: georefMode === "point",
+        drawCircle: false, // Records are only point, line, or polygon
+        drawRectangle: false, // Records are only point, line, or polygon
         drawPolyline: georefMode === "line",
         drawPolygon: georefMode === "polygon",
         editMode: true,
@@ -794,6 +827,6 @@ export default function EsriMap({
     <div
       id="map"
       className="w-full h-full rounded-2xl overflow-hidden shadow-md border border-gray-200"
-    />
+      />
   );
 }

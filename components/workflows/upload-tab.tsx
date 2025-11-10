@@ -244,6 +244,17 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
       return
     }
 
+    // Verify all files have been uploaded to Supabase
+    const missingUrls = uploadedFiles.filter((f) => !fileUrls.has(f))
+    if (missingUrls.length > 0) {
+      toast({
+        title: "Files not uploaded",
+        description: `Please wait for ${missingUrls.length} file(s) to finish uploading to storage before drawing.`,
+        variant: "destructive",
+      })
+      return
+    }
+
     // Set up the selected type
     setSelectedType({
       utilityType: selectedUtilityType,
@@ -383,6 +394,9 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
                       lng: result.point.lng,
                       georefAt: now,
                       georefBy: uploader,
+                      // Preserve existing fileUrl and filePath if they exist
+                      fileUrl: file.fileUrl,
+                      filePath: file.filePath,
                     }
                   } else {
                     return {
@@ -393,6 +407,9 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
                       lng: result.path[0]?.lng,
                       georefAt: now,
                       georefBy: uploader,
+                      // Preserve existing fileUrl and filePath if they exist
+                      fileUrl: file.fileUrl,
+                      filePath: file.filePath,
                     }
                   }
                 }
@@ -435,6 +452,11 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
         notes: pendingDropMeta.notes.trim() || undefined,
         files: pendingDropMeta.files.map((f) => {
           const fileUrlData = fileUrls.get(f)
+          if (!fileUrlData) {
+            console.warn(`⚠️ File ${f.name} does not have a Supabase URL. It may not have been uploaded.`)
+          } else {
+            console.log(`✅ File ${f.name} uploaded to Supabase:`, fileUrlData.url)
+          }
           return {
             id: crypto.randomUUID(),
             name: f.name,
@@ -486,6 +508,9 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
                     lng: result.point.lng,
                     georefAt: now,
                     georefBy: by,
+                    // Preserve existing fileUrl and filePath if they exist
+                    fileUrl: f.fileUrl,
+                    filePath: f.filePath,
                   }
                 : f,
             ),
@@ -517,6 +542,11 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
         notes: pendingDropMeta.notes.trim() || undefined,
         files: pendingDropMeta.files.map((f) => {
           const fileUrlData = fileUrls.get(f)
+          if (!fileUrlData) {
+            console.warn(`⚠️ File ${f.name} does not have a Supabase URL. It may not have been uploaded.`)
+          } else {
+            console.log(`✅ File ${f.name} uploaded to Supabase:`, fileUrlData.url)
+          }
           return {
             id: crypto.randomUUID(),
             name: f.name,
@@ -567,6 +597,9 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
                   lng: centroid.lng,
                   georefAt: now,
                   georefBy: by,
+                  // Preserve existing fileUrl and filePath if they exist
+                  fileUrl: f.fileUrl,
+                  filePath: f.filePath,
                 }
               : f,
           ),

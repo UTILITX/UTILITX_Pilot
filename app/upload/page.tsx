@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
-import { MapWithDrawing, type MapMarker } from "@/components/map-with-drawing"
+import MapWithDrawing, { type MapBubble } from "@/components/map-with-drawing"
 import { RecordSelectorTable } from "@/components/record-selector-table"
 import { UploadFilesTable } from "@/components/upload-files-table"
 import { type LatLng, type RequestRecord } from "@/lib/record-types"
@@ -48,8 +48,8 @@ export default function UploadPage() {
     saveStagedRecords(records)
   }, [records])
 
-  const markers: MapMarker[] = useMemo(() => {
-    const list: MapMarker[] = []
+  const markers: MapBubble[] = useMemo(() => {
+    const list: MapBubble[] = []
     for (const rec of records) {
       for (const f of rec.files) {
         if (f.status === "Georeferenced" && typeof f.lat === "number" && typeof f.lng === "number") {

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
-import { MapWithDrawing, type MapBubble, type GeorefShape } from "@/components/map-with-drawing"
+import MapWithDrawing, { type MapBubble, type GeorefShape } from "@/components/map-with-drawing"
 import { GuidanceChecklist } from "@/components/guidance-checklist"
 import type { ShareRequest, LatLng } from "@/lib/record-types"
 import { loadRequest } from "@/lib/storage"
@@ -69,13 +69,17 @@ function getPolygonBounds(polygon: LatLng[]) {
   return { center, zoom }
 }
 
-export default function ContributePage() {
+export default function ContributePageClient() {
   const [request, setRequest] = useState<ShareRequest | null>(null)
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    const id = window.location.pathname.split("/").pop() || ""
-    const req = loadRequest(id)
-    setRequest(req)
+    setMounted(true)
+    if (typeof window !== 'undefined') {
+      const id = window.location.pathname.split("/").pop() || ""
+      const req = loadRequest(id)
+      setRequest(req)
+    }
   }, [])
 
   const { bubbles, shapes } = useMemo(() => {
@@ -139,6 +143,10 @@ Uploaded by ${rec.uploaderName} ${formatDistanceToNow(new Date(rec.uploadedAt))}
     if (!request?.polygon) return { center: { lat: 43.6532, lng: -79.3832 }, zoom: 10 }
     return getPolygonBounds(request.polygon)
   }, [request?.polygon])
+
+  if (!mounted) {
+    return null
+  }
 
   if (!request) {
     return (
@@ -278,3 +286,4 @@ Uploaded by ${rec.uploaderName} ${formatDistanceToNow(new Date(rec.uploadedAt))}
     </main>
   )
 }
+

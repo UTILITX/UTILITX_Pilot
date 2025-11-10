@@ -4,18 +4,22 @@ import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
-import { MapWithDrawing, type MapBubble, type GeorefShape } from "@/components/map-with-drawing"
+import MapWithDrawing, { type MapBubble, type GeorefShape } from "@/components/map-with-drawing"
 import type { ShareRequest, LatLng } from "@/lib/record-types"
 import { loadRequest } from "@/lib/storage"
 import { formatDistanceToNow } from "date-fns"
 
-export default function SharePage() {
+export default function SharePageClient() {
   const [request, setRequest] = useState<ShareRequest | null>(null)
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    const id = window.location.pathname.split("/").pop() || ""
-    const req = loadRequest(id)
-    setRequest(req)
+    setMounted(true)
+    if (typeof window !== 'undefined') {
+      const id = window.location.pathname.split("/").pop() || ""
+      const req = loadRequest(id)
+      setRequest(req)
+    }
   }, [])
 
   const { bubbles, shapes } = useMemo(() => {
@@ -74,6 +78,10 @@ Uploaded by ${rec.uploaderName} ${formatDistanceToNow(new Date(rec.uploadedAt), 
     }
     return { bubbles: b, shapes: s }
   }, [request])
+
+  if (!mounted) {
+    return null
+  }
 
   if (!request) {
     return (
@@ -152,3 +160,4 @@ function centroidOfPath(path: LatLng[]): LatLng {
   const sum = path.reduce((acc, p) => ({ lat: acc.lat + p.lat, lng: acc.lng + p.lng }), { lat: 0, lng: 0 })
   return { lat: sum.lat / path.length, lng: sum.lng / path.length }
 }
+

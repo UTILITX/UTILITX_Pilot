@@ -4,6 +4,7 @@ const KEY_PREFIX = "utilitx:request:"
 const STAGED_KEY = "utilitx:staged:records"
 
 export function saveRequest(data: ShareRequest) {
+  if (typeof window === 'undefined') return
   try {
     localStorage.setItem(KEY_PREFIX + data.id, JSON.stringify(data))
   } catch (e) {
@@ -12,6 +13,7 @@ export function saveRequest(data: ShareRequest) {
 }
 
 export function loadRequest(id: string): ShareRequest | null {
+  if (typeof window === 'undefined') return null
   try {
     const raw = localStorage.getItem(KEY_PREFIX + id)
     if (!raw) return null
@@ -23,6 +25,7 @@ export function loadRequest(id: string): ShareRequest | null {
 }
 
 export function saveStagedRecords(records: RequestRecord[]) {
+  if (typeof window === 'undefined') return
   try {
     sessionStorage.setItem(STAGED_KEY, JSON.stringify(records))
   } catch (e) {
@@ -31,6 +34,7 @@ export function saveStagedRecords(records: RequestRecord[]) {
 }
 
 export function loadStagedRecords(): RequestRecord[] {
+  if (typeof window === 'undefined') return []
   try {
     const raw = sessionStorage.getItem(STAGED_KEY)
     if (!raw) return []
@@ -43,6 +47,7 @@ export function loadStagedRecords(): RequestRecord[] {
 }
 
 export function clearStagedRecords() {
+  if (typeof window === 'undefined') return
   try {
     sessionStorage.removeItem(STAGED_KEY)
   } catch (e) {
