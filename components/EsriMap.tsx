@@ -10,9 +10,19 @@ import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import * as EL from "esri-leaflet";
 import { useToast } from "@/hooks/use-toast";
 import { addFeatureToLayer } from "@/lib/esriUtils";
+import { getSignedUrl, supabase } from "@/lib/supabase";
 import type { LatLng } from "@/lib/record-types";
 import type { GeorefMode } from "@/lib/types";
 import type { MapBubble, GeorefShape } from "@/components/map-with-drawing";
+
+// Test Supabase initialization
+if (typeof window !== "undefined") {
+  console.log("✅ Supabase test:", supabase ? "Initialized" : "Not initialized");
+  if (supabase) {
+    console.log("   - Has auth:", !!supabase.auth);
+    console.log("   - Has storage:", !!supabase.storage);
+  }
+}
 
 declare module "leaflet" {
   interface Map {
@@ -30,7 +40,8 @@ type EsriMapProps = {
   georefMode?: GeorefMode;
   georefColor?: string;
   onGeorefComplete?: (
-    result: { type: "Point"; point: LatLng } | { type: "LineString" | "Polygon"; path: LatLng[] }
+    result: { type: "Point"; point: LatLng } | { type: "LineString" | "Polygon"; path: LatLng[] },
+    metadata?: { fileUrl?: string; filePath?: string; notes?: string; utilityType?: string }
   ) => void;
   pickPointActive?: boolean;
   pickZoom?: number;
@@ -191,6 +202,38 @@ export default function EsriMap({
       url: process.env.NEXT_PUBLIC_WORKAREA_LAYER_URL!,
       apikey: process.env.NEXT_PUBLIC_ARCGIS_API_KEY!,
       style: () => ({ color: "#0077ff", weight: 2, fillOpacity: 0.15 }),
+      onEachFeature: (feature: any, layer: L.Layer) => {
+        const props = feature.properties || {};
+        
+        // Format timestamp if available
+        let timestampStr = "—";
+        if (props.timestamp) {
+          try {
+            const date = new Date(props.timestamp);
+            timestampStr = date.toLocaleString();
+          } catch (e) {
+            timestampStr = props.timestamp;
+          }
+        }
+        
+        const content = `
+          <div style="min-width: 200px; font-family: system-ui, -apple-system, sans-serif;">
+            <strong style="font-size: 14px; color: #0077ff;">Work Area</strong>
+            <hr style="margin: 8px 0; border: none; border-top: 1px solid #e0e0e0;">
+            <div style="font-size: 12px; line-height: 1.6;">
+              ${props.OBJECTID ? `<b>ID:</b> ${props.OBJECTID}<br>` : ""}
+              ${props.name ? `<b>Name:</b> ${props.name}<br>` : ""}
+              ${props.created_by ? `<b>Created By:</b> ${props.created_by}<br>` : ""}
+              ${props.utility_type ? `<b>Utility Type:</b> ${props.utility_type}<br>` : ""}
+              ${props.record_count !== undefined ? `<b>Record Count:</b> ${props.record_count}<br>` : ""}
+              ${timestampStr !== "—" ? `<b>Created:</b> ${timestampStr}<br>` : ""}
+              ${props.notes ? `<b>Notes:</b> ${props.notes}<br>` : ""}
+            </div>
+          </div>
+        `;
+        
+        layer.bindPopup(content);
+      },
     }).addTo(map);
 
                 workAreasLayerRef.current = workAreas;
@@ -201,22 +244,128 @@ export default function EsriMap({
           }, 200);
 
           // Add hosted Records layer - "records" layer
+          // Wait longer to ensure map is fully stable
           setTimeout(() => {
             try {
-              if (map.getPane('overlayPane') && map.getContainer()) {
+              // Ensure map is fully ready and not in a transition
+              if (!map.getPane('overlayPane') || !map.getContainer()) {
+                console.warn("Map not ready for records layer");
+                return;
+              }
+              
+              // Wait for map to be fully loaded and stable
+              // Check if map is in a transition state (if available)
+              const isTransitioning = (map as any)._zoomTransitioning || false;
+              
+              if (isTransitioning) {
+                // Wait for zoom to complete
+                map.once('zoomend', () => {
+                  setTimeout(() => addRecordsLayer(), 200);
+                });
+                return;
+              }
+              
+              // Add a delay to ensure map is stable before adding layer
+              setTimeout(() => addRecordsLayer(), 100);
+              
+              function addRecordsLayer() {
+                try {
+                  if (!map.getPane('overlayPane') || !map.getContainer()) {
+                    console.warn("Map not ready for records layer (retry)");
+                    return;
+                  }
+                  
     const records = EL.featureLayer({
       url: process.env.NEXT_PUBLIC_RECORDS_LAYER_URL!,
       apikey: process.env.NEXT_PUBLIC_ARCGIS_API_KEY!,
       pointToLayer: (_feature, latlng) =>
         L.circleMarker(latlng, { radius: 6, color: "#ff6600", fillOpacity: 0.8 }),
-    }).addTo(map);
-
-                recordsLayerRefInternal.current = records;
+                    onEachFeature: (feature: any, layer: L.Layer) => {
+                      const props = feature.properties || {};
+                      
+                      // Format timestamp if available
+                      let timestampStr = "—";
+                      if (props.timestamp) {
+                        try {
+                          const date = new Date(props.timestamp);
+                          timestampStr = date.toLocaleString();
+                        } catch (e) {
+                          timestampStr = props.timestamp;
+                        }
+                      }
+                      
+                      // Format file URL link if available
+                      // For private buckets, generate fresh signed URL on click
+                      let fileLink = "—";
+                      const filePath = props.file_path || props.filePath;
+                      const fileUrl = props.file_url || props.fileUrl;
+                      
+                      if (filePath) {
+                        // Generate fresh signed URL on click for private buckets
+                        const filePathEscaped = filePath.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                        fileLink = `<a href="#" onclick="window.generateSignedUrl('${filePathEscaped}', this); return false;" data-file-path="${filePathEscaped}" style="color: #ff6600; text-decoration: underline; cursor: pointer;">Open File</a>`;
+                      } else if (fileUrl) {
+                        // Fallback to direct URL if filePath not available
+                        fileLink = `<a href="${fileUrl}" target="_blank" rel="noopener noreferrer" style="color: #ff6600; text-decoration: underline;">Open File</a>`;
+                      }
+                      
+                      // Debug: log all properties to see what's available
+                      console.log("Record popup properties:", props);
+                      
+                      const content = `
+                        <div style="min-width: 200px; font-family: system-ui, -apple-system, sans-serif;">
+                          <strong style="font-size: 14px; color: #ff6600;">Record</strong>
+                          <hr style="margin: 8px 0; border: none; border-top: 1px solid #e0e0e0;">
+                          <div style="font-size: 12px; line-height: 1.6;">
+                            ${props.OBJECTID ? `<b>ID:</b> ${props.OBJECTID}<br>` : ""}
+                            ${props.geometry_type || props.geomType ? `<b>Type:</b> ${props.geometry_type || props.geomType}<br>` : ""}
+                            ${props.utility_type ? `<b>Utility:</b> ${props.utility_type}<br>` : ""}
+                            ${props.created_by ? `<b>Created By:</b> ${props.created_by}<br>` : ""}
+                            ${timestampStr !== "—" ? `<b>Created:</b> ${timestampStr}<br>` : ""}
+                            ${fileLink !== "—" ? `<b>File:</b> ${fileLink}<br>` : ""}
+                            ${props.notes ? `<b>Notes:</b> ${props.notes}<br>` : ""}
+                          </div>
+                        </div>
+                      `;
+                      
+                      layer.bindPopup(content);
+                    },
+                  });
+                  
+                  // Add layer with error handling
+                  try {
+                    // Ensure map is still valid before adding
+                    if (!map.getContainer() || !map.getPane('overlayPane')) {
+                      console.warn("Map not ready, skipping records layer addition");
+                      return;
+                    }
+                    
+                    records.addTo(map);
+                    recordsLayerRefInternal.current = records;
+                    
+                    // Add error handler for zoom transitions
+                    map.on('zoomstart', () => {
+                      // Prevent layer updates during zoom
+                      if (recordsLayerRefInternal.current) {
+                        try {
+                          (recordsLayerRefInternal.current as any).disableEventPropagation?.();
+                        } catch (e) {
+                          // Ignore if method doesn't exist
+                        }
+                      }
+                    });
+                    
+                  } catch (addErr) {
+                    console.error("Error adding records layer to map:", addErr);
+                  }
+                } catch (layerErr) {
+                  console.error("Error creating records layer:", layerErr);
+                }
               }
             } catch (err) {
               console.error("Error adding records layer:", err);
             }
-          }, 250);
+          }, 300);
 
           // Create groups for bubbles and shapes - wait for map to be fully ready
           setTimeout(() => {
@@ -256,18 +405,18 @@ export default function EsriMap({
                   map.pm.enableDraw("Polygon");
                 } else if (georefMode !== "none") {
                   // Enable drawing controls for records based on geometry type
-                  map.pm.addControls({
-                    position: "topleft",
+    map.pm.addControls({
+        position: "topleft",
                     drawMarker: georefMode === "point",
                     drawCircle: false, // Records are only point, line, or polygon
                     drawRectangle: false, // Records are only point, line, or polygon
                     drawPolyline: georefMode === "line",
                     drawPolygon: georefMode === "polygon",
-                    editMode: true,
-                    dragMode: false,
-                    cutPolygon: false,
-                    removalMode: true,
-                  });
+        editMode: true,
+        dragMode: false,
+        cutPolygon: false,
+        removalMode: true,
+        });
 
                   // Enable the appropriate drawing mode
                   if (georefMode === "point") {
@@ -297,9 +446,9 @@ export default function EsriMap({
           const handleWorkAreaDrawing = async (e: any) => {
             if (isDrawingRecordRef.current) return; // Don't handle if we're drawing a record
 
-            const layer = e.layer;
-            const geojson = layer.toGeoJSON();
-            const geometry = geojson.geometry;
+      const layer = e.layer;
+      const geojson = layer.toGeoJSON();
+      const geometry = geojson.geometry;
 
             // Work areas are only polygons (rectangles are also polygons in GeoJSON)
             if (geometry.type !== "Polygon") {
@@ -324,17 +473,17 @@ export default function EsriMap({
             area = Math.abs(area / 2) * 111000 * 111000; // Convert to square meters (rough)
 
             // Save to workarea layer
-            const attributes = {
-              created_by: "PilotUser",
-              timestamp: new Date().toISOString(),
-            };
+      const attributes = {
+        created_by: "PilotUser",
+        timestamp: new Date().toISOString(),
+      };
 
-            try {
-              await addFeatureToLayer(
-                process.env.NEXT_PUBLIC_WORKAREA_LAYER_URL!,
-                geometry,
-                attributes
-              );
+      try {
+          await addFeatureToLayer(
+            process.env.NEXT_PUBLIC_WORKAREA_LAYER_URL!,
+            geometry,
+            attributes
+          );
               if (workAreasLayerRef.current) {
                 workAreasLayerRef.current.refresh();
               }
@@ -424,38 +573,10 @@ export default function EsriMap({
               };
               result = { type: "Point", point };
 
-              // Save to records layer
-              const attributes = {
-                created_by: "PilotUser",
-                timestamp: new Date().toISOString(),
-                geometry_type: "Point",
-              };
-
-              try {
-                await addFeatureToLayer(
-                  process.env.NEXT_PUBLIC_RECORDS_LAYER_URL!,
-                  geometry,
-                  attributes
-                );
-                if (recordsLayerRefInternal.current) {
-                  recordsLayerRefInternal.current.refresh();
-                }
-
-                if (onGeorefComplete) {
-                  onGeorefComplete(result);
-                }
-
-                showToast({
-                  title: "Record saved",
-                  description: "Point saved to records layer",
-                });
-              } catch (err) {
-                console.error("Error saving record:", err);
-                showToast({
-                  title: "Failed to save record",
-                  description: "Could not save to records layer",
-                  variant: "destructive",
-                });
+              // Don't save here - let upload-tab.tsx save with file URLs
+              // Just call the callback to update the UI
+              if (onGeorefComplete) {
+                onGeorefComplete(result);
               }
             } else if (type === "LineString" || type === "Polygon") {
               const coordinates = type === "LineString" 
@@ -468,38 +589,10 @@ export default function EsriMap({
 
               result = { type: type as "LineString" | "Polygon", path };
 
-              // Save to records layer
-              const attributes = {
-                created_by: "PilotUser",
-                timestamp: new Date().toISOString(),
-                geometry_type: type,
-              };
-
-              try {
-          await addFeatureToLayer(
-            process.env.NEXT_PUBLIC_RECORDS_LAYER_URL!,
-            geometry,
-            attributes
-          );
-                if (recordsLayerRefInternal.current) {
-                  recordsLayerRefInternal.current.refresh();
-                }
-
-                if (onGeorefComplete) {
-                  onGeorefComplete(result);
-                }
-
-                showToast({
-                  title: "Record saved",
-                  description: `${type} saved to records layer`,
-                });
-              } catch (err) {
-                console.error("Error saving record:", err);
-                showToast({
-                  title: "Failed to save record",
-                  description: "Could not save to records layer",
-                  variant: "destructive",
-                });
+              // Don't save here - let upload-tab.tsx save with file URLs
+              // Just call the callback to update the UI
+              if (onGeorefComplete) {
+                onGeorefComplete(result);
               }
             }
 
@@ -516,50 +609,45 @@ export default function EsriMap({
               const point: LatLng = { lat: e.latlng.lat, lng: e.latlng.lng };
               const result = { type: "Point" as const, point };
 
-              // Create geometry for saving
-              const geometry = {
-                type: "Point",
-                coordinates: [e.latlng.lng, e.latlng.lat],
-              };
-
-              // Save to records layer
-              const attributes = {
-                created_by: "PilotUser",
-                timestamp: new Date().toISOString(),
-                geometry_type: "Point",
-              };
-
-              addFeatureToLayer(
-                process.env.NEXT_PUBLIC_RECORDS_LAYER_URL!,
-                geometry,
-                attributes
-              )
-                .then(() => {
-                  if (recordsLayerRefInternal.current) {
-                  recordsLayerRefInternal.current.refresh();
-                }
-                  if (onGeorefComplete) {
-                    onGeorefComplete(result);
-                  }
-                  showToast({
-                    title: "Record saved",
-                    description: "Point saved to records layer",
-                  });
-                })
-                .catch((err) => {
-                  console.error("Error saving record:", err);
-                  showToast({
-                    title: "Failed to save record",
-                    description: "Could not save to records layer",
-                    variant: "destructive",
-                  });
-                });
+              // Don't save here - let upload-tab.tsx save with file URLs
+              // Just call the callback to update the UI
+              if (onGeorefComplete) {
+                onGeorefComplete(result);
+              }
             }
           };
 
           // Set up event listeners and draw features - wait for everything to be ready
           setTimeout(() => {
             try {
+              // Set up global function to generate signed URLs for file links
+              // This is called when user clicks "Open PDF" link in popup
+              (window as any).generateSignedUrl = async (filePath: string, linkElement: HTMLElement) => {
+                try {
+                  // Show loading state
+                  linkElement.textContent = "⏳ Generating link...";
+                  linkElement.style.pointerEvents = "none";
+                  
+                  // Generate fresh signed URL
+                  const signedUrl = await getSignedUrl(filePath, 3600); // Valid for 1 hour
+                  
+                  // Update link to open the signed URL
+                  linkElement.setAttribute("href", signedUrl);
+                  linkElement.setAttribute("target", "_blank");
+                  linkElement.setAttribute("rel", "noopener noreferrer");
+                  linkElement.textContent = "📄 Open PDF";
+                  linkElement.style.pointerEvents = "auto";
+                  
+                  // Open in new tab
+                  window.open(signedUrl, "_blank");
+                } catch (error: any) {
+                  console.error("Error generating signed URL:", error);
+                  linkElement.textContent = "❌ Error loading file";
+                  linkElement.style.color = "#ff0000";
+                  alert(`Failed to generate file link: ${error.message}`);
+                }
+              };
+
               // Set up event listeners
               if (mode === "draw") {
                 // Listen for polygon creation (work area)

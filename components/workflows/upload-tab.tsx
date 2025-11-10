@@ -28,6 +28,7 @@ import type { MapBubble, GeorefShape } from "@/components/map-with-drawing";
 
 import { UtilityOverviewPanel } from "@/components/utility-overview-panel"
 import type { UtilityType, RecordType } from "@/components/dual-record-selector"
+import { addFeatureToLayer } from "@/lib/esriUtils"
 import { getUtilityColorsFromPath, getUtilityColorsFromUtilityType } from "@/lib/utility-colors"
 import { formatDistanceToNow } from "date-fns"
 import { cn } from "@/lib/utils"
@@ -121,8 +122,20 @@ export default function UploadTab({ records, setRecords, preloadedPolygon, prelo
       for (const f of rec.files) {
         if (f.status !== "Georeferenced") continue
 
+        // Generate file link - store filePath for generating fresh signed URLs
+        // For private buckets, we'll generate a fresh signed URL when the popup opens
+        let fileLink = ""
+        if (f.filePath) {
+          // Store filePath in data attribute so we can generate fresh signed URL on click
+          const filePathEscaped = f.filePath.replace(/"/g, '&quot;')
+          fileLink = `<br><a href="#" onclick="window.generateSignedUrl('${filePathEscaped}', this); return false;" data-file-path="${filePathEscaped}" style="color: #ff6600; text-decoration: underline; font-weight: 500; cursor: pointer;">📄 Open PDF</a>`
+        } else if (f.fileUrl) {
+          // Fallback to direct URL if filePath not available
+          fileLink = `<br><a href="${f.fileUrl}" target="_blank" rel="noopener noreferrer" style="color: #ff6600; text-decoration: underline; font-weight: 500;">📄 Open PDF</a>`
+        }
+        
         const baseDesc = `${rec.recordTypePath} • P${rec.priority}
-${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(new Date(rec.uploadedAt), { addSuffix: true })}`
+${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(new Date(rec.uploadedAt), { addSuffix: true })}${fileLink}`
 
         if (f.geomType === "Point" || (!f.geomType && typeof f.lat === "number" && typeof f.lng === "number")) {
           const pos = f.geomType === "Point" && f.path?.[0] ? f.path[0] : { lat: f.lat as number, lng: f.lng as number }
@@ -371,7 +384,7 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
     }
   }
 
-  function handleGeorefComplete(
+  async function handleGeorefComplete(
     result: { type: "Point"; point: LatLng } | { type: "LineString" | "Polygon"; path: LatLng[] },
   ) {
     if (redrawTarget) {
@@ -441,6 +454,52 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
     if (!target && pendingDropMeta && result.type === "Point") {
       const now = new Date().toISOString()
       const uploader = pendingDropMeta.name.trim() || "Uploader"
+      
+      // Get file URLs for all files
+      const filesWithUrls = pendingDropMeta.files.map((f) => {
+        const fileUrlData = fileUrls.get(f)
+        if (!fileUrlData) {
+          console.warn(`⚠️ File ${f.name} does not have a Supabase URL. It may not have been uploaded.`)
+        } else {
+          console.log(`✅ File ${f.name} uploaded to Supabase:`, fileUrlData.url)
+        }
+        return {
+          file: f,
+          urlData: fileUrlData,
+        }
+      })
+      
+      // Save each file as a separate record to ArcGIS with file URL
+      for (const { file, urlData } of filesWithUrls) {
+        if (urlData?.url) {
+          const geometry = {
+            type: "Point",
+            coordinates: [result.point.lng, result.point.lat],
+          }
+          const attributes = {
+            created_by: uploader,
+            timestamp: now,
+            geometry_type: "Point",
+            file_url: urlData.url,
+            file_path: urlData.path || "",
+            notes: pendingDropMeta.notes.trim() || undefined,
+            utility_type: pendingDropMeta.type.utilityType || undefined,
+            record_type: pendingDropMeta.type.recordType || undefined,
+          }
+          
+          try {
+            await addFeatureToLayer(
+              process.env.NEXT_PUBLIC_RECORDS_LAYER_URL!,
+              geometry,
+              attributes
+            )
+            console.log(`✅ Record saved to ArcGIS with file URL: ${urlData.url}`)
+          } catch (err) {
+            console.error("Error saving record to ArcGIS:", err)
+          }
+        }
+      }
+      
       const newRecord: RequestRecord = {
         id: crypto.randomUUID(),
         uploaderName: uploader,
@@ -450,29 +509,21 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
         priority: pendingDropMeta.type.priority,
         orgName: pendingDropMeta.org.trim(),
         notes: pendingDropMeta.notes.trim() || undefined,
-        files: pendingDropMeta.files.map((f) => {
-          const fileUrlData = fileUrls.get(f)
-          if (!fileUrlData) {
-            console.warn(`⚠️ File ${f.name} does not have a Supabase URL. It may not have been uploaded.`)
-          } else {
-            console.log(`✅ File ${f.name} uploaded to Supabase:`, fileUrlData.url)
-          }
-          return {
-            id: crypto.randomUUID(),
-            name: f.name,
-            size: f.size,
-            type: f.type,
-            status: "Georeferenced",
-            geomType: "Point",
-            path: [result.point], // Store point as single-item path array
-            lat: result.point.lat,
-            lng: result.point.lng,
-            georefAt: now,
-            georefBy: uploader,
-            fileUrl: fileUrlData?.url,
-            filePath: fileUrlData?.path,
-          }
-        }),
+        files: filesWithUrls.map(({ file, urlData }) => ({
+          id: crypto.randomUUID(),
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          status: "Georeferenced",
+          geomType: "Point",
+          path: [result.point], // Store point as single-item path array
+          lat: result.point.lat,
+          lng: result.point.lng,
+          georefAt: now,
+          georefBy: uploader,
+          fileUrl: urlData?.url,
+          filePath: urlData?.path,
+        })),
       }
       setRecords((prev) => [newRecord, ...prev])
       setFocusPoint(result.point)
@@ -531,6 +582,54 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
       const centroid = centroidOfPath(result.path)
       const now = new Date().toISOString()
       const uploader = pendingDropMeta.name.trim() || "Uploader"
+      
+      // Get file URLs for all files
+      const filesWithUrls = pendingDropMeta.files.map((f) => {
+        const fileUrlData = fileUrls.get(f)
+        if (!fileUrlData) {
+          console.warn(`⚠️ File ${f.name} does not have a Supabase URL. It may not have been uploaded.`)
+        } else {
+          console.log(`✅ File ${f.name} uploaded to Supabase:`, fileUrlData.url)
+        }
+        return {
+          file: f,
+          urlData: fileUrlData,
+        }
+      })
+      
+      // Save each file as a separate record to ArcGIS with file URL
+      for (const { file, urlData } of filesWithUrls) {
+        if (urlData?.url) {
+          const geometry = {
+            type: result.type,
+            coordinates: result.type === "LineString" 
+              ? result.path.map((p) => [p.lng, p.lat])
+              : [result.path.map((p) => [p.lng, p.lat])], // Polygon needs nested array
+          }
+          const attributes = {
+            created_by: uploader,
+            timestamp: now,
+            geometry_type: result.type,
+            file_url: urlData.url,
+            file_path: urlData.path || "",
+            notes: pendingDropMeta.notes.trim() || undefined,
+            utility_type: pendingDropMeta.type.utilityType || undefined,
+            record_type: pendingDropMeta.type.recordType || undefined,
+          }
+          
+          try {
+            await addFeatureToLayer(
+              process.env.NEXT_PUBLIC_RECORDS_LAYER_URL!,
+              geometry,
+              attributes
+            )
+            console.log(`✅ Record saved to ArcGIS with file URL: ${urlData.url}`)
+          } catch (err) {
+            console.error("Error saving record to ArcGIS:", err)
+          }
+        }
+      }
+      
       const newRecord: RequestRecord = {
         id: crypto.randomUUID(),
         uploaderName: uploader,
@@ -540,29 +639,21 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
         priority: pendingDropMeta.type.priority,
         orgName: pendingDropMeta.org.trim(),
         notes: pendingDropMeta.notes.trim() || undefined,
-        files: pendingDropMeta.files.map((f) => {
-          const fileUrlData = fileUrls.get(f)
-          if (!fileUrlData) {
-            console.warn(`⚠️ File ${f.name} does not have a Supabase URL. It may not have been uploaded.`)
-          } else {
-            console.log(`✅ File ${f.name} uploaded to Supabase:`, fileUrlData.url)
-          }
-          return {
-            id: crypto.randomUUID(),
-            name: f.name,
-            size: f.size,
-            type: f.type,
-            status: "Georeferenced",
-            geomType: result.type,
-            path: result.path,
-            lat: centroid.lat,
-            lng: centroid.lng,
-            georefAt: now,
-            georefBy: uploader,
-            fileUrl: fileUrlData?.url,
-            filePath: fileUrlData?.path,
-          }
-        }),
+        files: filesWithUrls.map(({ file, urlData }) => ({
+          id: crypto.randomUUID(),
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          status: "Georeferenced",
+          geomType: result.type,
+          path: result.path,
+          lat: centroid.lat,
+          lng: centroid.lng,
+          georefAt: now,
+          georefBy: uploader,
+          fileUrl: urlData?.url,
+          filePath: urlData?.path,
+        })),
       }
       setRecords((prev) => [newRecord, ...prev])
       setFocusPoint(centroid)
