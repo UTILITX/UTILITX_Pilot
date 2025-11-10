@@ -80,6 +80,10 @@ export type FileStub = {
   type: string
   status: FileStatus
 
+  // File storage URL (Supabase)
+  fileUrl?: string
+  filePath?: string // Supabase storage path
+
   // Point geometry (legacy support)
   lat?: number
   lng?: number

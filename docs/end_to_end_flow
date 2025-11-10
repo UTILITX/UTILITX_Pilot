@@ -1,0 +1,196 @@
+Absolutely — this will become your single source of truth for you, Matt, and any future devs.
+Here’s a clean, self-contained overview of the **UTILITX Pilot App End-to-End Flow** — written so you can drop it directly into `/docs/END_TO_END_FLOW.md`.
+
+---
+
+# UTILITX Pilot App — End-to-End Flow Overview
+
+*(ArcGIS + Leaflet + Geoman Stack — Pilot Build, November 2025)*
+
+## 🎯 Purpose
+
+The UTILITX Pilot App demonstrates the **core workflow** municipalities will use to define work areas, upload utility records, and visualize them spatially on ArcGIS layers.
+This is the backbone of the UTILITX MVP pilot with Kingston and Lacombe — focused on **ArcGIS Online integration**, **light persistence**, and **clean UX flow**, with AI automation deferred to R1.
+
+---
+
+## 🧭 1. System Architecture Overview
+
+### Frontend
+
+* **Framework:** Next.js 14
+* **Mapping:** Leaflet + Geoman (drawing tools)
+* **Basemap:** Esri Vector Basemap (`L.esri.Vector.vectorBasemapLayer()`)
+* **Data Layers:** Esri FeatureLayers hosted in ArcGIS Online
+
+  * `WorkAreas` layer (polygon geometries)
+  * `Records_Point`, `Records_Line`, `Records_Polygon` layers
+* **UI Components:** Sidebar workflow (Define → Upload → View → Share), toasts, modals, progress indicators
+
+### Backend
+
+* **APIs:** FastAPI (deployed separately, handles file ingestion and geoprocessing)
+* **Storage:** Supabase (for session persistence and share link metadata)
+* **Object Storage:** Supabase bucket or temporary cloud bucket for file uploads
+* **Authentication:** Basic API key/token-based for now (Supabase / ArcGIS key)
+
+---
+
+## ⚙️ 2. Core End-to-End Flow
+
+### Step 1 — Define Work Area
+
+1. User opens app → selects basemap (Imagery / Streets / Topographic).
+2. Clicks **“Draw Work Area”** → draws a polygon using Leaflet-Geoman.
+3. Polygon is immediately written to the **`WorkAreas` FeatureLayer** in ArcGIS Online using `addFeatureToLayer()`.
+4. Attributes captured:
+
+   * `name` (optional user input)
+   * `createdBy` (session user)
+   * `timestamp` (auto)
+5. On success → toast notification (“Work Area saved”) → map refreshes layer view.
+
+**Files involved:**
+`map-with-drawing.tsx`, `esriUtils.ts`, `.env.local` (ArcGIS layer URLs)
+
+---
+
+### Step 2 — Attach Record
+
+1. User selects the Work Area polygon (click event or sidebar list).
+2. Clicks **“Upload Record”** → file picker opens.
+3. User fills metadata form:
+
+   * `utilityType` (dropdown: water, gas, telecom, etc.)
+   * `geometryType` (point, line, polygon)
+   * `notes` (free text)
+4. On submission:
+
+   * File is uploaded to Supabase or object storage.
+   * File URL + metadata are sent to backend API (optional).
+   * A new feature is added to the appropriate **`Records_*` FeatureLayer** based on geometry type.
+
+**Attributes stored in ArcGIS:**
+
+* `workAreaId` (foreign key / reference to WorkAreas layer ID)
+* `utilityType`
+* `geometryType`
+* `notes`
+* `fileUrl`
+* `createdBy`
+* `timestamp`
+
+On success → toast notification (“Record uploaded and mapped”).
+
+---
+
+### Step 3 — View Records
+
+1. All records from the three Record layers are dynamically loaded into the map via Esri FeatureLayer requests.
+2. Users can toggle layer visibility (Points / Lines / Polygons).
+3. Clicking a feature opens a popup with its metadata and file link.
+4. WorkAreas remain visible as context boundaries.
+
+**Files involved:**
+`map-with-drawing.tsx`, `esriUtils.ts`, `recordUtils.ts`
+
+---
+
+### Step 4 — Session Persistence & Sharing
+
+1. When a user defines a Work Area and uploads Records, the session state is saved to Supabase.
+2. A **unique hashed link** (UUID) is generated and associated with the WorkArea ID.
+3. Clicking “Share Work Area” copies this link to clipboard.
+4. When another user opens the link:
+
+   * App loads the relevant WorkArea and Records via Supabase + ArcGIS queries.
+   * User sees the same spatial context, ready for collaboration or review.
+
+**Attributes stored in Supabase:**
+
+* `sessionId`
+* `workAreaId`
+* `createdBy`
+* `region`
+* `timestamp`
+
+---
+
+### Step 5 — QA & Pilot Testing
+
+1. Internal testing ensures each step runs without errors or undefined states.
+2. Pilot users (municipal staff) will:
+
+   * Draw work areas for real projects.
+   * Upload 1–3 sample utility drawings.
+   * Confirm they appear spatially correct and retrievable later.
+3. Feedback captured on:
+
+   * Ease of use
+   * Map responsiveness
+   * Record visibility
+   * Metadata clarity
+
+---
+
+## 🔒 3. Authentication & Permissions
+
+* **Frontend:** Uses a single `NEXT_PUBLIC_ARCGIS_API_KEY` with editing rights for pilot layers.
+* **Backend:** API key for Supabase writes and retrieval.
+* **ArcGIS Layers:** Configured with `AddFeatures` + `Query` enabled for public access (or tokenized during pilot).
+
+---
+
+## 🧩 4. Key Environment Variables
+
+| Variable                                | Description                               |
+| --------------------------------------- | ----------------------------------------- |
+| `NEXT_PUBLIC_ARCGIS_API_KEY`            | Auth key for Esri FeatureLayer operations |
+| `NEXT_PUBLIC_WORKAREA_LAYER_URL`        | ArcGIS Online FeatureLayer for work areas |
+| `NEXT_PUBLIC_RECORDS_POINT_LAYER_URL`   | ArcGIS FeatureLayer for point records     |
+| `NEXT_PUBLIC_RECORDS_LINE_LAYER_URL`    | ArcGIS FeatureLayer for line records      |
+| `NEXT_PUBLIC_RECORDS_POLYGON_LAYER_URL` | ArcGIS FeatureLayer for polygon records   |
+| `NEXT_PUBLIC_SUPABASE_URL`              | Supabase instance URL                     |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`         | Supabase API key                          |
+
+---
+
+## 🧠 5. Future Integration (R1 / AI Phase)
+
+*Deferred until post-pilot.*
+
+Will include:
+
+* Automatic georeferencing and metadata extraction from uploaded PDFs (OpenAI + GPT-4o Vision pipeline).
+* Trust score generation and provenance metadata.
+* PostGIS backend sync for analytics.
+* ArcGIS integration enhancements (feature versioning, sync edits).
+
+---
+
+## ✅ 6. Success Criteria for Pilot Readiness
+
+| Step              | Success Indicator                            |
+| ----------------- | -------------------------------------------- |
+| WorkArea creation | Polygon saves & persists in ArcGIS layer     |
+| Record upload     | File + metadata save to correct FeatureLayer |
+| Record visibility | Records appear and refresh without errors    |
+| Sharing           | Hashed link loads correct map state          |
+| UX polish         | No `alert()` calls, clear toasts + loaders   |
+| Stability         | App runs reliably for multiple test users    |
+
+---
+
+## 🗓️ Pilot Flow Timeline (High-Level)
+
+| Phase           | Duration           | Outcome                                |
+| --------------- | ------------------ | -------------------------------------- |
+| Phase 1         | 2 weeks            | Esri write & basemap stable            |
+| Phase 2         | 1 week             | Metadata + upload flow complete        |
+| Phase 3         | 1 week             | Persistence + share links functional   |
+| Phase 4         | 1 week             | UI polish + QA                         |
+| **Pilot Ready** | **~6 weeks total** | Live demo-ready for Kingston & Lacombe |
+
+---
+
+Would you like me to generate this in **Markdown table + emoji checklist formatting** so it looks structured and scannable when you drop it into `/docs/END_TO_END_FLOW.md` (like your roadmap file)?

@@ -35,6 +35,7 @@ import type { GeometryType, GeorefMode, PendingDropMeta } from "@/lib/types"
 import { RecordsTable } from "@/components/records-table"
 import { Edit } from "lucide-react"
 import EsriMap from "@/components/EsriMap";
+import { uploadFilesToSupabase } from "@/lib/supabase"
 
 
 type SelectedType = {
@@ -89,6 +90,7 @@ export default function UploadTab({ records, setRecords, preloadedPolygon, prelo
   const [selectedGeometryType, setSelectedGeometryType] = useState<GeometryType | null>(null)
 
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
+  const [fileUrls, setFileUrls] = useState<Map<File, { url: string; path: string }>>(new Map())
   const [notes, setNotes] = useState<string>("")
 
   const [isGeometryComplete, setIsGeometryComplete] = useState(false)
@@ -96,6 +98,10 @@ export default function UploadTab({ records, setRecords, preloadedPolygon, prelo
   const [redrawTarget, setRedrawTarget] = useState<{ recordId: string; fileId: string } | null>(null)
 
   const [showAllRecords, setShowAllRecords] = useState(false)
+
+  // Work area drawing mode
+  const [isDrawingWorkArea, setIsDrawingWorkArea] = useState(false)
+  const [isSelectingWorkArea, setIsSelectingWorkArea] = useState(false)
 
   // Map overlays from records
   const { bubbles, shapes } = useMemo(() => {
@@ -318,13 +324,40 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
     }
   }
 
-  function handleDropFilesAt(latlng: LatLng, droppedFiles: File[]) {
-    setUploadedFiles((prev) => [...prev, ...droppedFiles])
+  async function handleDropFilesAt(latlng: LatLng, droppedFiles: File[]) {
+    // Upload files to Supabase storage
+    try {
+      toast({
+        title: "Uploading files...",
+        description: `Uploading ${droppedFiles.length} file(s) to storage...`,
+      })
 
-    toast({
-      title: "Files uploaded",
-      description: `${droppedFiles.length} file(s) uploaded. Update metadata and click "Draw on Map" to georeference.`,
-    })
+      const uploadResults = await uploadFilesToSupabase(droppedFiles)
+      
+      // Store files with their URLs
+      setUploadedFiles((prev) => [...prev, ...droppedFiles])
+      
+      // Store file URLs in map
+      setFileUrls((prev) => {
+        const newMap = new Map(prev)
+        uploadResults.forEach((result) => {
+          newMap.set(result.file, { url: result.url, path: result.path })
+        })
+        return newMap
+      })
+
+      toast({
+        title: "Files uploaded",
+        description: `${droppedFiles.length} file(s) uploaded to storage. Update metadata and click "Draw on Map" to georeference.`,
+      })
+    } catch (error: any) {
+      console.error("Error uploading files to Supabase:", error)
+      toast({
+        title: "Upload failed",
+        description: error.message || "Failed to upload files to storage. Please try again.",
+        variant: "destructive",
+      })
+    }
   }
 
   function handleGeorefComplete(
@@ -400,19 +433,24 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
         priority: pendingDropMeta.type.priority,
         orgName: pendingDropMeta.org.trim(),
         notes: pendingDropMeta.notes.trim() || undefined,
-        files: pendingDropMeta.files.map((f) => ({
-          id: crypto.randomUUID(),
-          name: f.name,
-          size: f.size,
-          type: f.type,
-          status: "Georeferenced",
-          geomType: "Point",
-          path: [result.point], // Store point as single-item path array
-          lat: result.point.lat,
-          lng: result.point.lng,
-          georefAt: now,
-          georefBy: uploader,
-        })),
+        files: pendingDropMeta.files.map((f) => {
+          const fileUrlData = fileUrls.get(f)
+          return {
+            id: crypto.randomUUID(),
+            name: f.name,
+            size: f.size,
+            type: f.type,
+            status: "Georeferenced",
+            geomType: "Point",
+            path: [result.point], // Store point as single-item path array
+            lat: result.point.lat,
+            lng: result.point.lng,
+            georefAt: now,
+            georefBy: uploader,
+            fileUrl: fileUrlData?.url,
+            filePath: fileUrlData?.path,
+          }
+        }),
       }
       setRecords((prev) => [newRecord, ...prev])
       setFocusPoint(result.point)
@@ -477,19 +515,24 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
         priority: pendingDropMeta.type.priority,
         orgName: pendingDropMeta.org.trim(),
         notes: pendingDropMeta.notes.trim() || undefined,
-        files: pendingDropMeta.files.map((f) => ({
-          id: crypto.randomUUID(),
-          name: f.name,
-          size: f.size,
-          type: f.type,
-          status: "Georeferenced",
-          geomType: result.type,
-          path: result.path,
-          lat: centroid.lat,
-          lng: centroid.lng,
-          georefAt: now,
-          georefBy: uploader,
-        })),
+        files: pendingDropMeta.files.map((f) => {
+          const fileUrlData = fileUrls.get(f)
+          return {
+            id: crypto.randomUUID(),
+            name: f.name,
+            size: f.size,
+            type: f.type,
+            status: "Georeferenced",
+            geomType: result.type,
+            path: result.path,
+            lat: centroid.lat,
+            lng: centroid.lng,
+            georefAt: now,
+            georefBy: uploader,
+            fileUrl: fileUrlData?.url,
+            filePath: fileUrlData?.path,
+          }
+        }),
       }
       setRecords((prev) => [newRecord, ...prev])
       setFocusPoint(centroid)
@@ -539,19 +582,46 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
     })
   }
 
-  function onAttachDrop(e: React.DragEvent<HTMLDivElement>) {
+  async function onAttachDrop(e: React.DragEvent<HTMLDivElement>) {
     e.preventDefault()
     setIsDraggingAttach(false)
     const droppedFiles = extractFiles(e.dataTransfer)
 
-    setUploadedFiles((prev) => [...prev, ...droppedFiles])
-    setFiles(e.dataTransfer.files)
+    // Upload files to Supabase storage
+    try {
+      toast({
+        title: "Uploading files...",
+        description: `Uploading ${droppedFiles.length} file(s) to storage...`,
+      })
 
-    toast({
-      title: "Files uploaded",
-      description: `${droppedFiles.length} file(s) uploaded. Update metadata and click "Draw on Map" to georeference.`,
-      variant: "default",
-    })
+      const uploadResults = await uploadFilesToSupabase(droppedFiles)
+      
+      // Store files with their URLs
+      setUploadedFiles((prev) => [...prev, ...droppedFiles])
+      setFiles(e.dataTransfer.files)
+      
+      // Store file URLs in map
+      setFileUrls((prev) => {
+        const newMap = new Map(prev)
+        uploadResults.forEach((result) => {
+          newMap.set(result.file, { url: result.url, path: result.path })
+        })
+        return newMap
+      })
+
+      toast({
+        title: "Files uploaded",
+        description: `${droppedFiles.length} file(s) uploaded to storage. Update metadata and click "Draw on Map" to georeference.`,
+        variant: "default",
+      })
+    } catch (error: any) {
+      console.error("Error uploading files to Supabase:", error)
+      toast({
+        title: "Upload failed",
+        description: error.message || "Failed to upload files to storage. Please try again.",
+        variant: "destructive",
+      })
+    }
   }
 
   function completeUpload() {
@@ -560,6 +630,7 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
     setSelectedRecordType(null)
     setSelectedGeometryType(null)
     setUploadedFiles([])
+    setFileUrls(new Map())
     setFiles(null)
     setOrgName("")
     setNotes("")
@@ -685,21 +756,69 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
                     </svg>
                     <span className="font-medium text-sm">Draw work area on map</span>
                   </div>
-                  <div className="mt-1 text-xs">Click on the map to start drawing your polygon boundary</div>
+                  <div className="mt-1 text-xs">Click the button below to start drawing your polygon boundary</div>
                 </div>
               )}
 
-              {polygon && polygon.length >= 3 && (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setPolygon(null)
-                    setAreaSqMeters(null)
-                  }}
-                  className="w-full"
-                >
-                  Clear Work Area
-                </Button>
+              {!polygon || polygon.length < 3 ? (
+                <div className="space-y-2">
+                  <Button
+                    onClick={() => {
+                      setIsDrawingWorkArea(true)
+                      setIsSelectingWorkArea(false)
+                      toast({
+                        title: "Drawing mode activated",
+                        description: "Click on the map to start drawing your work area polygon. Double-click to finish.",
+                      })
+                    }}
+                    className="w-full"
+                    disabled={isDrawingWorkArea}
+                  >
+                    {isDrawingWorkArea ? "Drawing... Click on map" : "Draw Work Area"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsSelectingWorkArea(true)
+                      setIsDrawingWorkArea(false)
+                      toast({
+                        title: "Selection mode activated",
+                        description: "Click on an existing work area polygon on the map to select it.",
+                      })
+                    }}
+                    className="w-full"
+                    disabled={isSelectingWorkArea}
+                  >
+                    {isSelectingWorkArea ? "Selecting... Click on map" : "Select Existing Work Area"}
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setPolygon(null)
+                      setAreaSqMeters(null)
+                      setIsDrawingWorkArea(false)
+                    }}
+                    className="flex-1"
+                  >
+                    Clear Work Area
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsDrawingWorkArea(true)
+                      toast({
+                        title: "Redraw mode activated",
+                        description: "Click on the map to draw a new work area polygon.",
+                      })
+                    }}
+                    className="flex-1"
+                  >
+                    Redraw
+                  </Button>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -884,16 +1003,45 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
                     type="file"
                     accept="application/pdf,image/png,image/jpeg,.dwg,.dxf,.tiff,.tif"
                     multiple
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       if (e.target.files) {
                         const newFiles = Array.from(e.target.files)
-                        setUploadedFiles((prev) => [...prev, ...newFiles])
-                        setFiles(e.target.files)
-                        toast({
-                          title: "Files uploaded",
-                          description: `${newFiles.length} file(s) uploaded. Update metadata and click "Draw on Map" to georeference.`,
-                          variant: "default",
-                        })
+                        
+                        // Upload files to Supabase storage
+                        try {
+                          toast({
+                            title: "Uploading files...",
+                            description: `Uploading ${newFiles.length} file(s) to storage...`,
+                          })
+
+                          const uploadResults = await uploadFilesToSupabase(newFiles)
+                          
+                          // Store files with their URLs
+                          setUploadedFiles((prev) => [...prev, ...newFiles])
+                          setFiles(e.target.files)
+                          
+                          // Store file URLs in map
+                          setFileUrls((prev) => {
+                            const newMap = new Map(prev)
+                            uploadResults.forEach((result) => {
+                              newMap.set(result.file, { url: result.url, path: result.path })
+                            })
+                            return newMap
+                          })
+
+                          toast({
+                            title: "Files uploaded",
+                            description: `${newFiles.length} file(s) uploaded to storage. Update metadata and click "Draw on Map" to georeference.`,
+                            variant: "default",
+                          })
+                        } catch (error: any) {
+                          console.error("Error uploading files to Supabase:", error)
+                          toast({
+                            title: "Upload failed",
+                            description: error.message || "Failed to upload files to storage. Please try again.",
+                            variant: "destructive",
+                          })
+                        }
                       }
                     }}
                   />
@@ -1032,6 +1180,18 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
                 onPolygonChange={(path, area) => {
                   setPolygon(path)
                   setAreaSqMeters(area ?? null)
+                  setIsDrawingWorkArea(false) // Disable drawing mode after polygon is drawn
+                }}
+                enableWorkAreaDrawing={isDrawingWorkArea}
+                enableWorkAreaSelection={isSelectingWorkArea}
+                onWorkAreaSelected={(path, area) => {
+                  setPolygon(path)
+                  setAreaSqMeters(area ?? null)
+                  setIsSelectingWorkArea(false) // Disable selection mode after work area is selected
+                  toast({
+                    title: "Work area selected",
+                    description: "Selected work area from the map. You can now upload records.",
+                  })
                 }}
                 georefMode={georefMode}
                 georefColor={georefColor}

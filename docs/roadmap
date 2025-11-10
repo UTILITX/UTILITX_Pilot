@@ -1,0 +1,211 @@
+UTILITX Pilot Readiness Plan
+Phase 1: Fix & Stabilize Esri Integration (Week 1-2)
+Tasks
+1.1 Fix spatial reference handling
+
+Update lib/esriUtils.ts to detect and match layer's spatial reference (WKID)
+Query layer metadata to get spatialReference before adding features
+Ensure geometry coordinates match layer's expected format (4326 vs 3857)
+1.2 Handle dynamic geometry types
+
+Extend addFeatureToLayer() to support Polygon, Polyline, and Point
+Update components/EsriMap.tsx to route LineString geometries to appropriate layer
+Add geometry type validation before submission
+1.3 Replace deprecated basemap API
+
+Replace EL.basemapLayer() with L.esri.Vector.vectorBasemapLayer() in components/EsriMap.tsx
+Update basemap layer initialization (lines 26-34)
+Test all basemap options (Imagery, Streets, Topographic)
+1.4 Add error handling and toast feedback
+
+Replace alert() calls with toast notifications in components/EsriMap.tsx
+Add try/catch blocks with detailed error messages
+Show success/error toasts for feature creation
+Import and use useToast hook
+1.5 Test end-to-end flow
+
+Draw WorkArea polygon → verify saved to AGOL
+Draw Record point → verify saved to Records layer
+Refresh page → verify features persist and display
+Test with different geometry types
+Files to modify:
+
+lib/esriUtils.ts - Add spatial reference detection, geometry type handling
+components/EsriMap.tsx - Replace basemap API, add toasts, improve error handling
+---
+
+Phase 2: Metadata & Upload Flow (Week 2-3)
+Tasks
+2.1 Connect upload flow to Esri layers
+
+Update components/workflows/upload-tab.tsx to call addFeatureToLayer() when records are georeferenced
+Save WorkArea polygon to Esri WorkAreas layer when drawn
+Save Record geometries (Point/Line/Polygon) to Esri Records layer after georeferencing
+Store Esri feature IDs in record metadata for future updates
+2.2 Add metadata form fields
+
+Ensure utility type, record type, geometry type, and notes are captured
+Wire metadata into Esri feature attributes when saving
+Map record metadata to Esri attribute fields (created_by, timestamp, utility_type, record_type, notes, etc.)
+2.3 Implement file upload to storage
+
+Set up file storage backend (Supabase Storage or alternative)
+Create API route for file uploads (app/api/upload/route.ts)
+Upload files when records are created
+Store file URLs in Esri feature attributes
+Update components/workflows/upload-tab.tsx to call upload API
+2.4 Add visual confirmation
+
+Show toast when feature is saved to Esri
+Display feature popup on map showing metadata
+Update Records table to show "Saved to Esri" status
+Files to modify:
+
+components/workflows/upload-tab.tsx - Integrate Esri save calls, file upload
+lib/esriUtils.ts - Add helper to map record metadata to Esri attributes
+app/api/upload/route.ts - New file upload API endpoint
+Add Supabase client setup if using Supabase Storage
+---
+
+Phase 3: Persistence & Share Links (Week 3-4)
+Tasks
+3.1 Set up Supabase for session persistence
+
+Install Supabase client library
+Create Supabase project and configure environment variables
+Create database schema: sessions table (id, work_area_id, records, created_at, created_by)
+
+
+Perfect — that’s exactly the right call. You’ve already done the hardest lift (getting the Esri + Leaflet foundation stable), so now it’s about tightening the flow and polishing it enough for real users.
+
+Here’s your **updated UTILITX Pilot Readiness Roadmap (Cursor-enabled edition)** — focused purely on the *core Esri flow*, with AI integration deferred to R1.
+
+---
+
+## 🧭 UTILITX Pilot Readiness Roadmap (Nov–Jan)
+
+### 🎯 Objective
+
+Get the **end-to-end ArcGIS flow** working so users can:
+
+1. Define a **Work Area** (polygon)
+2. Upload **Records** (PDFs, CAD, etc.)
+3. View those records on Esri layers (point/line/polygon)
+4. Share or revisit saved sessions
+5. Demo reliably to Kingston / Lacombe
+
+---
+
+## 🧩 Phase 1 — Fix & Stabilize Esri Integration (Week 1–2)
+
+**Goal:** Make `addFeatureToLayer()` fully operational and ensure features persist visually.
+
+**Tasks:**
+
+* ✅ Confirm layer permissions (edit + addFeatures enabled in AGOL)
+* ✅ Validate correct `spatialReference` (WKID 4326 or same as layer)
+* ✅ Handle geometry types dynamically (polygon, polyline, point)
+* ✅ Add try/catch + toast feedback for success/error
+* ⚙️ Replace deprecated `L.esri.BasemapLayer` → `L.esri.Vector.vectorBasemapLayer()`
+* ⚙️ Test end-to-end adding WorkArea → record → verify feature saved
+
+**Success =** You can draw, save, refresh page, and see features persist in AGOL.
+
+**ETA:** ~1–1.5 weeks (solo with Cursor help)
+
+---
+
+## 🧩 Phase 2 — Metadata & Upload Flow (Week 2–3)
+
+**Goal:** Make the upload + metadata capture flow usable and intuitive.
+
+**Tasks:**
+
+* Add metadata form: utility type, geometry type, notes
+* Wire that data into feature attributes in Esri layer
+* Connect upload button → upload file to object storage (Supabase or temp bucket)
+* Store file URL or filename in feature attributes
+* Add visual confirmation (toast + feature popup showing metadata)
+
+**Success =** User uploads a file + metadata and sees it reflected on map + in AGOL table.
+
+**ETA:** ~1 week
+
+---
+
+## 🧩 Phase 3 — Persistence & Share Links (Week 3–4)
+
+**Goal:** Allow sessions and shared views.
+
+**Tasks:**
+
+* Implement Supabase session persistence (optional lightweight version first)
+* Add “Share Work Area” → generate hashed link
+* When opening a shared link, auto-load corresponding WorkArea + Records
+* Add small audit fields (createdBy, timestamp) in attributes
+
+**Success =** You can send a URL and another user sees the same map context.
+
+**ETA:** ~1 week
+
+---
+
+## 🧩 Phase 4 — UI Polish & Testing (Week 5)
+
+**Goal:** Smooth user experience and prepare for demo.
+
+**Tasks:**
+
+* Replace `alert()`s with toasts / modals
+* Add simple progress states (loading spinner, success check)
+* Ensure clean sidebar flow:
+  → Define → Upload → View → Share
+* Light branding (UTILITX logo, footer)
+* Internal QA with 2–3 test records
+
+**Success =** Feels cohesive, no crashes, consistent state handling.
+
+**ETA:** ~1 week
+
+---
+
+## 🧩 Phase 5 — Pilot-Ready Validation (Week 6)
+
+**Goal:** Confirm live demo reliability and pilot data load.
+
+**Tasks:**
+
+* Run dry-run with Kingston or Lacombe sample data
+* Validate Esri layer permissions on municipal AGOL
+* Collect feedback on workflow clarity
+* Fix minor bugs / UI copy polish
+
+**ETA:** ~1 week
+
+---
+
+## 🗓️ Overall Timeline (Solo, 10–15 hrs/wk)
+
+| Phase                          | Duration | Target           |
+| ------------------------------ | -------- | ---------------- |
+| Phase 1: Esri fix              | 1–1.5 wk | **Nov 15–25**    |
+| Phase 2: Metadata + upload     | 1 wk     | **Nov 25–Dec 1** |
+| Phase 3: Persistence + sharing | 1 wk     | **Dec 1–8**      |
+| Phase 4: UI polish             | 1 wk     | **Dec 8–15**     |
+| Phase 5: Pilot validation      | 1 wk     | **Dec 15–22**    |
+
+✅ **Internal test-ready:** late November
+🚀 **Pilot-ready for user group:** mid December
+
+---
+
+## 🔮 Deferred to R1 (Post-Pilot)
+
+* AI georeferencing / metadata extraction pipeline integration
+* Trust scoring + provenance logic
+* Advanced record-query API (FastAPI + Supabase/PostGIS)
+* Analytics dashboards / ROI layer
+
+---
+
+Would you like me to turn this into a **lightweight project tracker** (e.g., a Notion or Excel-style table with columns: “Task / Owner / Status / ETA”) so you can use it directly with Matt or your Cursor workspace?
