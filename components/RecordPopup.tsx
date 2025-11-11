@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { FileText, Calendar, User, Eye, Download } from "lucide-react";
+import { FileText, Calendar, User, Eye, Download, Tag, FileEdit, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +12,10 @@ type RecordPopupProps = {
   uploadedBy?: string;
   filePath?: string;
   fileUrl?: string;
+  utilityType?: string;
+  recordType?: string;
+  organization?: string;
+  notes?: string;
   onViewFile?: () => void;
   onDownload?: () => void;
   onUploadedByClick?: (name: string) => void;
@@ -24,6 +28,10 @@ export function RecordPopup({
   uploadedBy,
   filePath,
   fileUrl,
+  utilityType,
+  recordType,
+  organization,
+  notes,
   onViewFile,
   onDownload,
   onUploadedByClick,
@@ -54,9 +62,22 @@ export function RecordPopup({
 
       {/* Details */}
       <div className="space-y-2.5 mb-4 text-sm">
-        {source && (
-          <div className="text-gray-700">
-            <span className="font-medium">Source:</span> {source}
+        {utilityType && (
+          <div className="flex items-center gap-1.5 text-gray-700">
+            <Tag className="h-3.5 w-3.5 text-gray-500" />
+            <span className="font-medium">Utility Type:</span> {utilityType}
+          </div>
+        )}
+        {recordType && (
+          <div className="flex items-center gap-1.5 text-gray-700">
+            <FileEdit className="h-3.5 w-3.5 text-gray-500" />
+            <span className="font-medium">Record Type:</span> {recordType}
+          </div>
+        )}
+        {(organization || source) && (
+          <div className="flex items-center gap-1.5 text-gray-700">
+            <Building2 className="h-3.5 w-3.5 text-gray-500" />
+            <span className="font-medium">Organization:</span> {organization || source}
           </div>
         )}
         {processedDate && (
@@ -79,6 +100,12 @@ export function RecordPopup({
             ) : (
               <span>{uploadedBy}</span>
             )}
+          </div>
+        )}
+        {notes && (
+          <div className="pt-2.5 border-t border-gray-200 text-gray-700">
+            <span className="font-medium">Notes:</span>
+            <p className="mt-1 text-gray-600 whitespace-pre-wrap">{notes}</p>
           </div>
         )}
       </div>
