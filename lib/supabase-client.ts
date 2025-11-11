@@ -1,5 +1,5 @@
 /**
- * Supabase Client Factory
+ * Supabase Client Factory (Singleton Pattern)
  * 
  * This module provides a factory function to create Supabase clients that work in:
  * - Client-side (browser): Reads from NEXT_PUBLIC_* env vars
@@ -7,7 +7,8 @@
  * - Firebase Functions: Reads from NEXT_PUBLIC_* env vars (set via Firebase environment variables)
  * 
  * IMPORTANT: 
- * - This creates the client at runtime, not at module load time
+ * - Uses singleton pattern to prevent multiple GoTrueClient instances
+ * - Creates the client at runtime, not at module load time
  * - Uses only environment variables (no firebase-functions dependency)
  * - Works in all environments without build warnings
  * 
@@ -18,6 +19,17 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+
+// Global singleton storage for Supabase client instances
+// Prevents multiple GoTrueClient instances in Next.js hot-reload scenarios
+declare global {
+  // eslint-disable-next-line no-var
+  var _supabaseClient: SupabaseClient | undefined
+  // eslint-disable-next-line no-var
+  var _supabaseClientUrl: string | undefined
+  // eslint-disable-next-line no-var
+  var _supabaseClientKey: string | undefined
+}
 
 /**
  * Get Supabase configuration from environment variables.
@@ -42,8 +54,9 @@ function getSupabaseConfig(): { url: string; anonKey: string } {
 }
 
 /**
- * Get or create a Supabase client instance.
+ * Get or create a Supabase client instance (singleton pattern).
  * Creates the client at runtime, ensuring environment variables are resolved correctly.
+ * Reuses existing client instance if configuration hasn't changed.
  * 
  * @returns Supabase client instance
  * @throws Error if Supabase configuration is missing
@@ -73,13 +86,28 @@ export function getSupabaseClient(): SupabaseClient {
     throw new Error(errorMsg)
   }
   
-  // Create client at runtime (not module load time)
+  // Singleton pattern: Reuse existing client if config hasn't changed
+  const globalObj = typeof window !== 'undefined' ? window : global
+  if (
+    globalObj._supabaseClient &&
+    globalObj._supabaseClientUrl === url &&
+    globalObj._supabaseClientKey === anonKey
+  ) {
+    return globalObj._supabaseClient
+  }
+  
+  // Create new client instance
   const client = createClient(url, anonKey)
   
-  // Debug logging (only in development)
+  // Store in global for reuse (prevents multiple GoTrueClient instances)
+  globalObj._supabaseClient = client
+  globalObj._supabaseClientUrl = url
+  globalObj._supabaseClientKey = anonKey
+  
+  // Debug logging (only in development, and only on first creation)
   if (process.env.NODE_ENV !== 'production') {
     const env = typeof window === 'undefined' ? 'server' : 'client'
-    console.log(`✅ Supabase client initialized on ${env}`)
+    console.log(`✅ Supabase client initialized on ${env} (singleton)`)
     console.log(`   URL: ${url.substring(0, 30)}...`)
     console.log(`   Key: ${anonKey.substring(0, 20)}...`)
   }

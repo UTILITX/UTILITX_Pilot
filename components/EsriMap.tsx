@@ -18,20 +18,8 @@ import type { MapBubble, GeorefShape } from "@/components/map-with-drawing";
 import { WorkAreaPopup } from "@/components/WorkAreaPopup";
 import { RecordPopup } from "@/components/RecordPopup";
 
-// Test Supabase initialization
-if (typeof window !== "undefined") {
-  const isConfigured = isSupabaseConfigured();
-  console.log("✅ Supabase test:", isConfigured ? "Configured" : "Not configured");
-  if (isConfigured) {
-    try {
-      const supabase = getSupabaseClient();
-      console.log("   - Has auth:", !!supabase.auth);
-      console.log("   - Has storage:", !!supabase.storage);
-    } catch (error) {
-      console.error("   - Error getting client:", error);
-    }
-  }
-}
+// Note: Supabase client initialization is handled via singleton pattern in lib/supabase-client.ts
+// This prevents multiple GoTrueClient instances and eliminates duplication warnings
 
 declare module "leaflet" {
   interface Map {
@@ -168,18 +156,24 @@ export default function EsriMap({
             return;
           }
 
-          // Define basemap layers (using basemapLayer for now - deprecation warning is acceptable)
-    const basemaps: Record<string, L.TileLayer> = {
-        Imagery: EL.basemapLayer("Imagery", {
-        apikey: process.env.NEXT_PUBLIC_ARCGIS_API_KEY!,
-        }),
-        Streets: EL.basemapLayer("Streets", {
-        apikey: process.env.NEXT_PUBLIC_ARCGIS_API_KEY!,
-        }),
-        Topographic: EL.basemapLayer("Topographic", {
-        apikey: process.env.NEXT_PUBLIC_ARCGIS_API_KEY!,
-        }),
-    };
+          // Define basemap layers using ArcGIS basemapLayer
+          // Note: basemapLayer shows a deprecation warning but is fully functional.
+          // The warning is safe to ignore - basemaps load correctly and work as expected.
+          // Future: Migrate to vector basemaps when esri-leaflet adds full Vector module support.
+          // See docs/BASEMAP_VECTOR_MIGRATION.md for migration guide.
+          const apiKey = process.env.NEXT_PUBLIC_ARCGIS_API_KEY!
+          
+          const basemaps: Record<string, L.TileLayer> = {
+            Imagery: EL.basemapLayer("Imagery", {
+              apikey: apiKey,
+            }),
+            Streets: EL.basemapLayer("Streets", {
+              apikey: apiKey,
+            }),
+            Topographic: EL.basemapLayer("Topographic", {
+              apikey: apiKey,
+            }),
+          };
   
           // Add default basemap - wait a bit more to ensure panes are ready
           setTimeout(() => {
@@ -317,8 +311,20 @@ export default function EsriMap({
                       const processedDate = props.timestamp || props.processed_date || props.created_date || props.date;
                       
                       // Get file path/URL for download/view
-                      const filePath = props.file_path || props.filePath;
+                      // file_url may contain: full signed URL (legacy) OR storage path (new)
+                      // file_path may contain: just the filename/path within bucket
+                      let filePath = props.file_path || props.filePath;
                       const fileUrl = props.file_url || props.fileUrl;
+                      
+                      // If file_url is a storage path (contains "Records_Private/"), extract the path
+                      // Otherwise, it might be a legacy full URL or just a path
+                      if (fileUrl && fileUrl.includes("Records_Private/")) {
+                        // Extract path from storage path format: "Records_Private/filename.pdf"
+                        filePath = fileUrl.replace("Records_Private/", "");
+                      } else if (fileUrl && !fileUrl.startsWith("http")) {
+                        // file_url is a path (not a URL)
+                        filePath = fileUrl;
+                      }
                       
                       // Create popup content using React component
                       const popupContent = renderReactPopup(
@@ -328,24 +334,29 @@ export default function EsriMap({
                           processedDate={processedDate}
                           uploadedBy={props.created_by || props.uploaded_by || props.createdBy}
                           filePath={filePath}
-                          fileUrl={fileUrl}
+                          fileUrl={fileUrl && fileUrl.startsWith("http") ? fileUrl : undefined} // Only pass if it's a full URL
                           onViewFile={async () => {
                             if (filePath) {
                               try {
+                                // Reconstruct signed URL from storage path
                                 const signedUrl = await getSignedUrl(filePath, 3600);
+                                console.log("🔗 Signed URL (runtime):", signedUrl.substring(0, 50) + "...");
                                 window.open(signedUrl, "_blank");
                               } catch (error: any) {
                                 console.error("Error generating signed URL:", error);
                                 alert(`Failed to open file: ${error.message}`);
                               }
-                            } else if (fileUrl) {
+                            } else if (fileUrl && fileUrl.startsWith("http")) {
+                              // Legacy: full URL stored directly
                               window.open(fileUrl, "_blank");
                             }
                           }}
                           onDownload={async () => {
                             if (filePath) {
                               try {
+                                // Reconstruct signed URL from storage path
                                 const signedUrl = await getSignedUrl(filePath, 3600);
+                                console.log("🔗 Signed URL (runtime):", signedUrl.substring(0, 50) + "...");
                                 const link = document.createElement("a");
                                 link.href = signedUrl;
                                 link.download = props.file_name || "download";
@@ -356,7 +367,8 @@ export default function EsriMap({
                                 console.error("Error generating signed URL:", error);
                                 alert(`Failed to download file: ${error.message}`);
                               }
-                            } else if (fileUrl) {
+                            } else if (fileUrl && fileUrl.startsWith("http")) {
+                              // Legacy: full URL stored directly
                               const link = document.createElement("a");
                               link.href = fileUrl;
                               link.download = props.file_name || "download";
@@ -734,6 +746,20 @@ export default function EsriMap({
                   const recordIdMatch = bubble.id.match(/\d+/);
                   const recordId = recordIdMatch ? `R-${String(recordIdMatch[0]).padStart(5, '0')}` : bubble.id;
                   
+                  // Handle file path/URL for bubbles (similar to ArcGIS records)
+                  // fileUrl may contain: full signed URL (legacy) OR storage path (new)
+                  // filePath may contain: just the filename/path within bucket
+                  let bubbleFilePath = bubble.filePath;
+                  const bubbleFileUrl = bubble.fileUrl;
+                  
+                  // If fileUrl is a storage path (contains "Records_Private/"), extract the path
+                  if (bubbleFileUrl && bubbleFileUrl.includes("Records_Private/")) {
+                    bubbleFilePath = bubbleFileUrl.replace("Records_Private/", "");
+                  } else if (bubbleFileUrl && !bubbleFileUrl.startsWith("http")) {
+                    // fileUrl is a path (not a URL)
+                    bubbleFilePath = bubbleFileUrl;
+                  }
+                  
                   // Create popup using React component with the same logic as existing records
                   const popupContent = renderReactPopup(
                     <RecordPopup
@@ -741,25 +767,30 @@ export default function EsriMap({
                       source={bubble.source || bubble.recordTypePath}
                       processedDate={bubble.processedDate || bubble.uploadedAt}
                       uploadedBy={bubble.uploadedBy}
-                      filePath={bubble.filePath}
-                      fileUrl={bubble.fileUrl}
+                      filePath={bubbleFilePath}
+                      fileUrl={bubbleFileUrl && bubbleFileUrl.startsWith("http") ? bubbleFileUrl : undefined}
                       onViewFile={async () => {
-                        if (bubble.filePath) {
+                        if (bubbleFilePath) {
                           try {
-                            const signedUrl = await getSignedUrl(bubble.filePath, 3600);
+                            // Reconstruct signed URL from storage path
+                            const signedUrl = await getSignedUrl(bubbleFilePath, 3600);
+                            console.log("🔗 Signed URL (runtime):", signedUrl.substring(0, 50) + "...");
                             window.open(signedUrl, "_blank");
                           } catch (error: any) {
                             console.error("Error generating signed URL:", error);
                             alert(`Failed to open file: ${error.message}`);
                           }
-                        } else if (bubble.fileUrl) {
-                          window.open(bubble.fileUrl, "_blank");
+                        } else if (bubbleFileUrl && bubbleFileUrl.startsWith("http")) {
+                          // Legacy: full URL stored directly
+                          window.open(bubbleFileUrl, "_blank");
                         }
                       }}
                       onDownload={async () => {
-                        if (bubble.filePath) {
+                        if (bubbleFilePath) {
                           try {
-                            const signedUrl = await getSignedUrl(bubble.filePath, 3600);
+                            // Reconstruct signed URL from storage path
+                            const signedUrl = await getSignedUrl(bubbleFilePath, 3600);
+                            console.log("🔗 Signed URL (runtime):", signedUrl.substring(0, 50) + "...");
                             const link = document.createElement("a");
                             link.href = signedUrl;
                             link.download = bubble.fileName || "download";
@@ -770,9 +801,10 @@ export default function EsriMap({
                             console.error("Error generating signed URL:", error);
                             alert(`Failed to download file: ${error.message}`);
                           }
-                        } else if (bubble.fileUrl) {
+                        } else if (bubbleFileUrl && bubbleFileUrl.startsWith("http")) {
+                          // Legacy: full URL stored directly
                           const link = document.createElement("a");
-                          link.href = bubble.fileUrl;
+                          link.href = bubbleFileUrl;
                           link.download = bubble.fileName || "download";
                           document.body.appendChild(link);
                           link.click();

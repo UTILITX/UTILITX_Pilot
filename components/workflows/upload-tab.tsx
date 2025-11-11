@@ -496,31 +496,35 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
         }
       })
       
-      // Save each file as a separate record to ArcGIS with file URL
+      // Save each file as a separate record to ArcGIS with file path (not full URL)
       for (const { file, urlData } of filesWithUrls) {
-        if (urlData?.url) {
+        if (urlData?.path) {
           const geometry = {
             type: "Point",
             coordinates: [result.point.lng, result.point.lat],
           }
+          // Store only the relative path (e.g., "Records_Private/filename.pdf")
+          // This avoids ArcGIS field truncation errors with long signed URLs
+          const storagePath = `Records_Private/${urlData.path}`
           const attributes = {
             created_by: uploader,
             timestamp: now,
             geometry_type: "Point",
-            file_url: urlData.url,
-            file_path: urlData.path || "",
+            file_url: storagePath, // Store short path instead of full signed URL
+            file_path: urlData.path, // Also store just the filename/path
             notes: pendingDropMeta.notes.trim() || undefined,
             utility_type: pendingDropMeta.type.utilityType || undefined,
             record_type: pendingDropMeta.type.recordType || undefined,
           }
           
           try {
-            await addFeatureToLayer(
+            const addResult = await addFeatureToLayer(
               process.env.NEXT_PUBLIC_RECORDS_LAYER_URL!,
               geometry,
               attributes
             )
-            console.log(`✅ Record saved to ArcGIS with file URL: ${urlData.url}`)
+            console.log(`✅ Feature added successfully:`, addResult)
+            console.log(`📎 Saved short file_url:`, storagePath)
           } catch (err) {
             console.error("Error saving record to ArcGIS:", err)
           }
@@ -624,33 +628,37 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
         }
       })
       
-      // Save each file as a separate record to ArcGIS with file URL
+      // Save each file as a separate record to ArcGIS with file path (not full URL)
       for (const { file, urlData } of filesWithUrls) {
-        if (urlData?.url) {
+        if (urlData?.path) {
           const geometry = {
             type: result.type,
             coordinates: result.type === "LineString" 
               ? result.path.map((p) => [p.lng, p.lat])
               : [result.path.map((p) => [p.lng, p.lat])], // Polygon needs nested array
           }
+          // Store only the relative path (e.g., "Records_Private/filename.pdf")
+          // This avoids ArcGIS field truncation errors with long signed URLs
+          const storagePath = `Records_Private/${urlData.path}`
           const attributes = {
             created_by: uploader,
             timestamp: now,
             geometry_type: result.type,
-            file_url: urlData.url,
-            file_path: urlData.path || "",
+            file_url: storagePath, // Store short path instead of full signed URL
+            file_path: urlData.path, // Also store just the filename/path
             notes: pendingDropMeta.notes.trim() || undefined,
             utility_type: pendingDropMeta.type.utilityType || undefined,
             record_type: pendingDropMeta.type.recordType || undefined,
           }
           
           try {
-            await addFeatureToLayer(
+            const saveResult = await addFeatureToLayer(
               process.env.NEXT_PUBLIC_RECORDS_LAYER_URL!,
               geometry,
               attributes
             )
-            console.log(`✅ Record saved to ArcGIS with file URL: ${urlData.url}`)
+            console.log(`✅ Feature added successfully:`, saveResult)
+            console.log(`📎 Saved short file_url:`, storagePath)
           } catch (err) {
             console.error("Error saving record to ArcGIS:", err)
           }
