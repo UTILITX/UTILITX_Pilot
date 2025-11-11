@@ -42,13 +42,17 @@ if (supabaseUrl && supabaseAnonKey) {
 
 export { supabase }
 
-// Get bucket name from environment variable, default to Records_Private
-const BUCKET_NAME = env.SUPABASE_BUCKET || 'Records_Private'
+// Bucket name is hardcoded to match Supabase bucket name exactly (case-sensitive)
+const BUCKET_NAME = 'Records_Private'
+
+// Debug: Log bucket name on client-side
+if (typeof window !== "undefined") {
+  console.log('🔍 Supabase Storage Bucket:', BUCKET_NAME)
+}
 
 /**
  * Upload a file to Supabase Storage bucket
- * Bucket name is configured via NEXT_PUBLIC_SUPABASE_BUCKET environment variable
- * Defaults to "Records_Private" if not set
+ * Bucket name is hardcoded to "Records_Private" (case-sensitive)
  * @param file - The file to upload
  * @param path - Optional custom path (defaults to timestamped filename)
  * @returns The signed URL (for private buckets) or public URL of the uploaded file

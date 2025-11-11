@@ -147,6 +147,15 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
             description: baseDesc,
             recordLabel,
             size: 28,
+            filePath: f.filePath,
+            fileUrl: f.fileUrl,
+            fileName: f.name,
+            recordTypePath: rec.recordTypePath,
+            source: rec.recordTypePath,
+            orgName: rec.orgName,
+            uploadedBy: rec.uploaderName,
+            uploadedAt: rec.uploadedAt,
+            processedDate: f.georefAt || rec.uploadedAt,
           })
         } else if (f.geomType === "LineString" && f.path && f.path.length >= 2) {
           s.push({
@@ -165,6 +174,15 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
             description: baseDesc,
             recordLabel,
             size: 28,
+            filePath: f.filePath,
+            fileUrl: f.fileUrl,
+            fileName: f.name,
+            recordTypePath: rec.recordTypePath,
+            source: rec.recordTypePath,
+            orgName: rec.orgName,
+            uploadedBy: rec.uploaderName,
+            uploadedAt: rec.uploadedAt,
+            processedDate: f.georefAt || rec.uploadedAt,
           })
         } else if (f.geomType === "Polygon" && f.path && f.path.length >= 3) {
           s.push({
@@ -184,6 +202,15 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
             description: baseDesc,
             recordLabel,
             size: 28,
+            filePath: f.filePath,
+            fileUrl: f.fileUrl,
+            fileName: f.name,
+            recordTypePath: rec.recordTypePath,
+            source: rec.recordTypePath,
+            orgName: rec.orgName,
+            uploadedBy: rec.uploaderName,
+            uploadedAt: rec.uploadedAt,
+            processedDate: f.georefAt || rec.uploadedAt,
           })
         }
       }

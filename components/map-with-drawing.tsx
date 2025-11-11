@@ -11,6 +11,17 @@ export type MapBubble = {
   description: string;
   recordLabel?: string;
   size?: number;
+  // File data for popup
+  filePath?: string;
+  fileUrl?: string;
+  fileName?: string;
+  // Record metadata for popup
+  recordTypePath?: string;
+  source?: string;
+  orgName?: string;
+  uploadedBy?: string;
+  uploadedAt?: string;
+  processedDate?: string;
 };
 
 export type GeorefShape = {

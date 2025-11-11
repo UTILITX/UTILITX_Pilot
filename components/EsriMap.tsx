@@ -723,7 +723,67 @@ export default function EsriMap({
                       iconSize: [bubble.size || 20, bubble.size || 20],
                     }),
                   });
-                  marker.bindPopup(`<b>${bubble.title}</b><br>${bubble.description}`);
+                  
+                  // Format record ID from bubble ID (extract numeric part if available)
+                  const recordIdMatch = bubble.id.match(/\d+/);
+                  const recordId = recordIdMatch ? `R-${String(recordIdMatch[0]).padStart(5, '0')}` : bubble.id;
+                  
+                  // Create popup using React component with the same logic as existing records
+                  const popupContent = renderReactPopup(
+                    <RecordPopup
+                      recordId={recordId}
+                      source={bubble.source || bubble.recordTypePath}
+                      processedDate={bubble.processedDate || bubble.uploadedAt}
+                      uploadedBy={bubble.uploadedBy}
+                      filePath={bubble.filePath}
+                      fileUrl={bubble.fileUrl}
+                      onViewFile={async () => {
+                        if (bubble.filePath) {
+                          try {
+                            const signedUrl = await getSignedUrl(bubble.filePath, 3600);
+                            window.open(signedUrl, "_blank");
+                          } catch (error: any) {
+                            console.error("Error generating signed URL:", error);
+                            alert(`Failed to open file: ${error.message}`);
+                          }
+                        } else if (bubble.fileUrl) {
+                          window.open(bubble.fileUrl, "_blank");
+                        }
+                      }}
+                      onDownload={async () => {
+                        if (bubble.filePath) {
+                          try {
+                            const signedUrl = await getSignedUrl(bubble.filePath, 3600);
+                            const link = document.createElement("a");
+                            link.href = signedUrl;
+                            link.download = bubble.fileName || "download";
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                          } catch (error: any) {
+                            console.error("Error generating signed URL:", error);
+                            alert(`Failed to download file: ${error.message}`);
+                          }
+                        } else if (bubble.fileUrl) {
+                          const link = document.createElement("a");
+                          link.href = bubble.fileUrl;
+                          link.download = bubble.fileName || "download";
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                        }
+                      }}
+                      onUploadedByClick={(name) => {
+                        // TODO: Implement user profile/view functionality
+                        console.log("View profile for:", name);
+                      }}
+                    />
+                  );
+                  
+                  marker.bindPopup(popupContent, {
+                    className: "custom-popup",
+                    maxWidth: 400,
+                  });
                   markersGroupRef.current.addLayer(marker);
                 });
               }
