@@ -249,6 +249,7 @@ git commit -m "Describe your update"
 
 # 3. Build + test production
 npm run build && npm run export
+OR npx serve@latest output
 
 # 4. Deploy live
 firebase deploy

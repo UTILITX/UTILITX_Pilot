@@ -1,7 +1,12 @@
+// IMPORTANT: UTILITX requires SSR. Do NOT re-add output: 'export' or static export config.
+// This app runs in SSR mode on Firebase Functions for dynamic routes and server-side rendering.
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Only use static export for production builds, not dev mode
-  ...(process.env.NODE_ENV === 'production' ? { output: 'export' } : {}),
+  reactStrictMode: true,
+  swcMinify: true,
+  // UTILITX runs in SSR mode on Firebase Functions.
+  // Do NOT use output: 'export' (breaks next start and dynamic routes).
   typescript: {
     ignoreBuildErrors: true,
   },
