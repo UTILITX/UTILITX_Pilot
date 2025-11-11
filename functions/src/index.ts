@@ -13,6 +13,8 @@
 
 import * as functions from "firebase-functions";
 import * as express from "express";
+import * as fs from "fs";
+import * as path from "path";
 import next from "next";
 
 // Region configuration - us-central1 for optimal performance
@@ -23,11 +25,21 @@ const region = "us-central1";
 const dev = process.env.NODE_ENV !== "production";
 
 // Initialize Next.js app
-// distDir points to .next directory in project root
+// distDir points to .next directory (copied to functions/.next during deployment)
+// The copy-next-build.js script copies .next from project root to functions/.next
+// After TypeScript compilation, __dirname is functions/lib, so we go up to functions/.next
+// In deployed Functions: functions/.next (copied during predeploy)
+// In local development: functions/.next (if copied) or ../.next (project root)
+const functionsNextDir = path.join(__dirname, '..', '.next'); // functions/.next
+const parentNextDir = path.join(__dirname, '..', '..', '.next'); // ../.next (project root)
+const distDir = fs.existsSync(functionsNextDir) 
+  ? functionsNextDir
+  : parentNextDir;
+
 const app = next({ 
   dev, 
   conf: { 
-    distDir: ".next",
+    distDir: distDir,
   } 
 });
 
