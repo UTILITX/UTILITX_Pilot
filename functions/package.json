@@ -8,8 +8,9 @@
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log"
   },
+  "_comment": "IMPORTANT: Node 20 is required for Firebase Functions. Node 18 was decommissioned.",
   "engines": {
-    "node": "18"
+    "node": "20"
   },
   "main": "lib/index.js",
   "dependencies": {
@@ -21,7 +22,8 @@
   },
   "devDependencies": {
     "typescript": "^5.0.0",
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.0.0",
+    "@types/express": "^4.17.21"
   },
   "private": true
 }
