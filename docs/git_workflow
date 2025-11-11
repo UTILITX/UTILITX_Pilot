@@ -1,0 +1,149 @@
+Perfect 👏 — here’s your **UTILITX Dev Hygiene Checklist** in clean Markdown format, ready to paste into your Git Workflow or OneNote.
+It’s concise, production-grade, and tuned specifically for your UTILITX stack (Next.js + Supabase + Esri + Vercel).
+
+---
+
+# 🧼 UTILITX Dev Hygiene Checklist
+
+## 🧭 1. Branch & Version Control
+
+**Goal:** Keep local, staging, and deployed versions perfectly aligned.
+
+✅ **Workflow**
+
+```bash
+# Always start fresh
+git checkout main
+git pull origin main
+
+# Create a new branch for each feature or fix
+git checkout -b feature/<short-descriptive-name>
+
+# Commit small, clear chunks
+git add .
+git commit -m "feat: add Esri popout modal"
+
+# Merge cleanly back into main
+git checkout main
+git merge feature/<short-descriptive-name>
+git push origin main
+```
+
+✅ **Best Practices**
+
+* Keep branches short-lived (<1 week)
+* Pull from `main` *before* starting new work
+* Delete branches after merge to avoid drift
+
+---
+
+## ⚙️ 2. Environment Variables
+
+**Goal:** Match Vercel → Local → Git template exactly.
+
+✅ **Checklist**
+
+* Copy all live variables from **Vercel → Settings → Environment Variables**
+* Paste into `.env.local`
+* Keep a public `.env.template` in Git (no secrets):
+
+  ```
+  NEXT_PUBLIC_SUPABASE_URL=
+  NEXT_PUBLIC_SUPABASE_ANON_KEY=
+  NEXT_PUBLIC_SUPABASE_BUCKET=
+  NEXT_PUBLIC_WORKAREA_LAYER_URL=
+  NEXT_PUBLIC_RECORDS_LAYER_URL=
+  NEXT_PUBLIC_ARCGIS_API_KEY=
+  ```
+
+✅ **Tip:**
+Restart VS Code / terminal after editing `.env.local` — cached values can linger.
+
+---
+
+## 🧪 3. Build & Test in Production Mode
+
+**Goal:** Catch “works in dev, fails in deploy” issues early.
+
+✅ **Commands**
+
+```bash
+# Clean build cache
+Remove-Item -Recurse -Force .next, node_modules
+npm install
+
+# Production build test
+npm run build
+npx serve out
+```
+
+✅ **Confirm**
+
+* ✅ Esri map and popouts load
+* ✅ Upload → Supabase works
+* ✅ No console errors in browser
+
+---
+
+## 🧰 4. Pre-Commit Health Check
+
+| Check                                    | Why                                   |
+| ---------------------------------------- | ------------------------------------- |
+| ✅ Local build succeeds (`npm run build`) | Prevent broken deploys                |
+| ✅ Env vars match Vercel                  | Avoid silent 403s / undefined errors  |
+| ✅ Upload flow works end-to-end           | Confirm Supabase + ArcGIS integration |
+| ✅ Esri basemap + layers visible          | Confirm API keys + URLs               |
+| ✅ Commit is descriptive                  | Clean Git history                     |
+| ✅ Merged into main                       | Syncs with deployment                 |
+
+---
+
+## 🌐 5. Deployment Hygiene
+
+**Goal:** Keep deployment behavior predictable.
+
+✅ **Rules**
+
+* Vercel should deploy **only from `main`**
+* (Optional) Create a `staging` branch for preview deploys
+* Don’t hot-fix in Vercel UI — always commit → push → redeploy
+
+---
+
+## 🧱 6. Quick Recovery (If Things Desync)
+
+If local behaves differently from deployment:
+
+```bash
+git fetch origin
+git checkout main
+git pull origin main
+Remove-Item -Recurse -Force .next, node_modules
+npm install
+npm run build
+npx serve out
+```
+
+→ This rebuilds from the exact same commit as production.
+
+---
+
+## 🧠 7. Optional Add-Ons
+
+* Add `.env.template` and `README.md` to repo root
+* Enable **Vercel → GitHub Deploy Hooks** to auto-trigger deploys on `main`
+* Add Mixpanel or Sentry tags for deployment tracking
+
+---
+
+### ✅ TL;DR
+
+**Stable flow =**
+
+```
+pull → branch → code → build → test → merge → deploy
+```
+
+---
+
+Would you like me to add a short **“Git Commit Message Convention”** section (so your history reads like a changelog: `feat:`, `fix:`, `chore:` etc.) at the end of this checklist? It pairs perfectly with this doc.

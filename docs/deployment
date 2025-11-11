@@ -1,0 +1,335 @@
+Excellent question — and this is exactly where most teams trip up between “it works locally” and “it’s live.” You’re thinking like a production-ready founder now 👏
+
+Here’s your **clean UTILITX pilot workflow** for Firebase + Git + local dev — so you can confidently make changes, test, and redeploy without confusion or broken builds.
+
+---
+
+## 🧭 OVERVIEW: Your Deployment Flow
+
+| Step                  | Environment                     | Command                            | Purpose                              |
+| --------------------- | ------------------------------- | ---------------------------------- | ------------------------------------ |
+| **1. Develop**        | Local (`localhost:3000`)        | `npm run dev`                      | Fast feedback, hot reload            |
+| **2. Commit**         | Local → Git                     | `git add . && git commit -m "msg"` | Save version history                 |
+| **3. Build / Export** | Local (optional)                | `npm run build && npm run export`  | Generate static site for preview     |
+| **4. Deploy**         | Firebase Hosting                | `firebase deploy`                  | Publish latest `/out` folder         |
+| **5. Verify**         | `https://utilitx-pilot.web.app` | —                                  | Ensure live site matches local build |
+
+---
+
+## 🧱 1️⃣ Local Development (Fast Iteration)
+
+You always start here:
+
+```bash
+npm run dev
+```
+
+* Runs Next.js in dev mode
+* Live reloads any code or CSS change
+* No need to build or deploy during iteration
+
+Use this for all coding, UI tweaks, map tests, etc.
+
+---
+
+## 🚧 2️⃣ Build for Production Preview
+
+When your changes look good locally, do a “production build check”:
+
+```bash
+npm run build && npm run export
+```
+
+This creates a static folder (`/out`) that’s *exactly* what Firebase will host.
+You can even preview it locally:
+
+```bash
+npx serve out
+```
+
+→ open `http://localhost:5000` to see what your deployed app will look like.
+
+---
+
+## 🚀 3️⃣ Deploy to Firebase
+
+Once you’ve verified everything:
+
+```bash
+firebase deploy
+```
+
+That pushes the `/out` folder to Firebase Hosting.
+
+Firebase will show:
+
+```
+✔ Deploy complete!
+Hosting URL: https://utilitx-pilot.web.app
+```
+
+> 🔹 Tip: No need to re-init Firebase or login again each time.
+> 🔹 It will only upload changed files.
+
+---
+
+## 🔄 4️⃣ Continuous Flow (daily work)
+
+Here’s your **standard loop**:
+
+```bash
+# 1. Work locally
+npm run dev
+
+# 2. Commit changes
+git add .
+git commit -m "Fix popup UI and file upload"
+
+# 3. Test production build
+npm run build && npm run export
+
+# 4. Deploy to Firebase
+firebase deploy
+```
+
+That’s it — same 4 steps every time.
+
+---
+
+## 🧩 5️⃣ Optional Automation (when ready)
+
+If you want Firebase to auto-deploy on `git push main`:
+
+```bash
+firebase hosting:github
+```
+
+It sets up a GitHub Action like this:
+
+```yaml
+on:
+  push:
+    branches:
+      - main
+```
+
+So any push triggers:
+
+```
+npm ci
+npm run build && npm run export
+firebase deploy --token $FIREBASE_TOKEN
+```
+
+This way, you just `git push`, and Firebase updates automatically 🎯
+
+---
+
+## 🧠 Common Gotchas
+
+| Issue                         | Fix                                                                         |
+| ----------------------------- | --------------------------------------------------------------------------- |
+| Changes not showing live      | Run `npm run build && firebase deploy` — the dev server doesn’t auto-deploy |
+| Wrong env vars                | Make sure only `NEXT_PUBLIC_` vars go into `.env.production`                |
+| Cached site                   | Refresh with `Ctrl+Shift+R` or append `?v=2` to the URL                     |
+| “Permission denied” on deploy | Run `firebase login` again (auth tokens expire)                             |
+
+---
+
+## ✅ TL;DR (UTILITX Firebase Flow)
+
+```bash
+# Dev locally
+npm run dev
+
+# Build for production
+npm run build && npm run export
+
+# Deploy to Firebase
+firebase deploy
+
+# Commit + push to GitHub
+git add .
+git commit -m "Your message"
+git push
+```
+
+That’s your clean, repeatable flow — used by real teams building production apps.
+
+---
+
+Would you like me to make you a **short “Deploy.md”** file (1-pager) you can drop in your repo so anyone on your team can follow the exact same flow?
+
+
+
+Perfect 👏 — here’s your **`DEPLOY.md`** — a concise, professional 1-pager you can drop straight into your UTILITX repo.
+It explains exactly how to develop, build, and deploy using Firebase, Git, and your existing Next.js setup.
+
+---
+
+# 🚀 UTILITX Deployment Guide (Firebase + Next.js)
+
+### 📦 Overview
+
+This project uses **Next.js** for the frontend and **Firebase Hosting** for deployment.
+Supabase, ArcGIS, and other services remain external — Firebase hosts only the **web client**.
+
+---
+
+## 🧭 1. Environments
+
+| Environment               | Purpose                  | URL / Command                                                  |
+| ------------------------- | ------------------------ | -------------------------------------------------------------- |
+| **Local Dev**             | Fast iteration & testing | `npm run dev` → [http://localhost:3000](http://localhost:3000) |
+| **Production (Firebase)** | Pilot-ready live site    | [https://utilitx-pilot.web.app](https://utilitx-pilot.web.app) |
+
+---
+
+## 🛠️ 2. Local Development
+
+Start the development server:
+
+```bash
+npm run dev
+```
+
+This enables hot reloading for code and style changes.
+Use this mode for building new components, UI flows, or debugging the map.
+
+---
+
+## 🧱 3. Build for Production Preview
+
+Before deployment, verify your build locally:
+
+```bash
+npm run build && npm run export
+```
+
+Preview it:
+
+```bash
+npx serve out
+```
+
+→ open [http://localhost:5000](http://localhost:5000) to confirm the static export looks correct.
+
+This `/out` folder is exactly what Firebase will host.
+
+---
+
+## 🚀 4. Deploy to Firebase
+
+Push the latest version live:
+
+```bash
+firebase deploy
+```
+
+You’ll see:
+
+```
+✔  Deploy complete!
+Hosting URL: https://utilitx-pilot.web.app
+```
+
+---
+
+## 🔁 5. Standard Workflow
+
+Repeat this loop for all updates:
+
+```bash
+# 1. Work locally
+npm run dev
+
+# 2. Commit changes
+git add .
+git commit -m "Describe your update"
+
+# 3. Build + test production
+npm run build && npm run export
+OR npx serve@latest output
+
+# 4. Deploy live
+firebase deploy
+```
+
+---
+
+## ⚙️ 6. GitHub Integration (Optional)
+
+To enable **auto-deploy on every push to `main`**:
+
+```bash
+firebase hosting:github
+```
+
+This creates a GitHub Action that automatically builds and deploys when code is pushed.
+
+
+🧠 Stability tip going forward
+
+Before working on a new feature branch:
+
+git pull origin main
+git checkout -b feature/new-feature
+
+
+That way every branch starts from the same baseline as production — fewer “why is mine different?” moments.
+---
+
+## 🔒 7. Environment Variables
+
+* Keep `.env` in your local machine only (never commit it).
+* Only expose keys prefixed with `NEXT_PUBLIC_` to the frontend.
+* Example:
+
+  ```
+  NEXT_PUBLIC_ARCGIS_API_KEY=...
+  NEXT_PUBLIC_SUPABASE_URL=...
+  NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+  ```
+
+---
+
+## 🧹 8. Common Issues
+
+| Issue                         | Fix                                                                   |
+| ----------------------------- | --------------------------------------------------------------------- |
+| Changes not appearing live    | Run `npm run build && firebase deploy` (dev mode doesn’t auto-deploy) |
+| “Permission denied” on deploy | Run `firebase login` again                                            |
+| Cached UI                     | Force refresh with **Ctrl + Shift + R**                               |
+| Wrong .env vars               | Check `.env.production` matches Firebase live keys                    |
+
+---
+
+## 🧩 Folder Summary
+
+| Folder           | Purpose                              |
+| ---------------- | ------------------------------------ |
+| `/pages`         | Next.js routes                       |
+| `/components`    | React components (UI, map, etc.)     |
+| `/public`        | Static assets                        |
+| `/out`           | Built static export (auto-generated) |
+| `/firebase.json` | Firebase hosting config              |
+
+---
+
+## ✅ Deployment Checklist
+
+* [ ] App runs locally (`npm run dev`)
+* [ ] `next build && next export` succeeds
+* [ ] Firebase deploys without errors
+* [ ] Live URL matches local behavior
+* [ ] GitHub is updated (`git push origin main`)
+
+---
+
+**Maintainer:** UTILITX Product Team
+**Last Updated:** November 2025
+
+---
+
+Would you like me to also generate a matching **`.github/workflows/firebase-hosting.yml`** (for automatic deploys when you push to `main`)?
+It’s a 10-line workflow file you can drop in immediately.
