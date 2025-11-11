@@ -2,3 +2,8 @@ node_modules/
 lib/
 *.log
 
+# Next.js build files (copied during deployment)
+.next/
+next.config.mjs
+package.json.next
+

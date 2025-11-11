@@ -11,7 +11,7 @@ import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import * as EL from "esri-leaflet";
 import { useToast } from "@/hooks/use-toast";
 import { addFeatureToLayer } from "@/lib/esriUtils";
-import { getSignedUrl, supabase } from "@/lib/supabase";
+import { getSignedUrl, getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
 import type { LatLng } from "@/lib/record-types";
 import type { GeorefMode } from "@/lib/types";
 import type { MapBubble, GeorefShape } from "@/components/map-with-drawing";
@@ -20,10 +20,16 @@ import { RecordPopup } from "@/components/RecordPopup";
 
 // Test Supabase initialization
 if (typeof window !== "undefined") {
-  console.log("✅ Supabase test:", supabase ? "Initialized" : "Not initialized");
-  if (supabase) {
-    console.log("   - Has auth:", !!supabase.auth);
-    console.log("   - Has storage:", !!supabase.storage);
+  const isConfigured = isSupabaseConfigured();
+  console.log("✅ Supabase test:", isConfigured ? "Configured" : "Not configured");
+  if (isConfigured) {
+    try {
+      const supabase = getSupabaseClient();
+      console.log("   - Has auth:", !!supabase.auth);
+      console.log("   - Has storage:", !!supabase.storage);
+    } catch (error) {
+      console.error("   - Error getting client:", error);
+    }
   }
 }
 
