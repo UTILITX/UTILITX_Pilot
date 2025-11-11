@@ -507,14 +507,14 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
           // This avoids ArcGIS field truncation errors with long signed URLs
           const storagePath = `Records_Private/${urlData.path}`
           const attributes = {
-            created_by: uploader,
-            timestamp: now,
-            geometry_type: "Point",
+            Creator: uploader,
+            processed_date: now,
+            source: pendingDropMeta.org?.trim() || null,
             file_url: storagePath, // Store short path instead of full signed URL
-            file_path: urlData.path, // Also store just the filename/path
-            notes: pendingDropMeta.notes.trim() || undefined,
-            utility_type: pendingDropMeta.type.utilityType || undefined,
-            record_type: pendingDropMeta.type.recordType || undefined,
+            notes: pendingDropMeta.notes?.trim() || null,
+            utility_type: pendingDropMeta.type?.utilityType || null,
+            record_type: pendingDropMeta.type?.recordType || null,
+            geometry_type: "Point",
           }
           
           try {
@@ -524,7 +524,16 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
               attributes
             )
             console.log(`✅ Feature added successfully:`, addResult)
-            console.log(`📎 Saved short file_url:`, storagePath)
+            console.log(`📎 Saved attributes:`, {
+              Creator: uploader,
+              processed_date: now,
+              source: pendingDropMeta.org?.trim() || null,
+              utility_type: pendingDropMeta.type?.utilityType || null,
+              record_type: pendingDropMeta.type?.recordType || null,
+              notes: pendingDropMeta.notes?.trim() || null,
+              file_url: storagePath,
+              geometry_type: "Point",
+            })
           } catch (err) {
             console.error("Error saving record to ArcGIS:", err)
           }
@@ -641,14 +650,14 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
           // This avoids ArcGIS field truncation errors with long signed URLs
           const storagePath = `Records_Private/${urlData.path}`
           const attributes = {
-            created_by: uploader,
-            timestamp: now,
-            geometry_type: result.type,
+            Creator: uploader,
+            processed_date: now,
+            source: pendingDropMeta.org?.trim() || null,
             file_url: storagePath, // Store short path instead of full signed URL
-            file_path: urlData.path, // Also store just the filename/path
-            notes: pendingDropMeta.notes.trim() || undefined,
-            utility_type: pendingDropMeta.type.utilityType || undefined,
-            record_type: pendingDropMeta.type.recordType || undefined,
+            notes: pendingDropMeta.notes?.trim() || null,
+            utility_type: pendingDropMeta.type?.utilityType || null,
+            record_type: pendingDropMeta.type?.recordType || null,
+            geometry_type: result.type,
           }
           
           try {
@@ -658,7 +667,16 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
               attributes
             )
             console.log(`✅ Feature added successfully:`, saveResult)
-            console.log(`📎 Saved short file_url:`, storagePath)
+            console.log(`📎 Saved attributes:`, {
+              Creator: uploader,
+              processed_date: now,
+              source: pendingDropMeta.org?.trim() || null,
+              utility_type: pendingDropMeta.type?.utilityType || null,
+              record_type: pendingDropMeta.type?.recordType || null,
+              notes: pendingDropMeta.notes?.trim() || null,
+              file_url: storagePath,
+              geometry_type: result.type,
+            })
           } catch (err) {
             console.error("Error saving record to ArcGIS:", err)
           }

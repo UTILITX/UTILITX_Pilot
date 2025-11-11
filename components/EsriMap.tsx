@@ -307,8 +307,8 @@ export default function EsriMap({
                         ? `R-${String(props.OBJECTID).padStart(5, '0')}` 
                         : undefined;
                       
-                      // Format processed date
-                      const processedDate = props.timestamp || props.processed_date || props.created_date || props.date;
+                      // Format processed date (prioritize processed_date as that's what we save)
+                      const processedDate = props.processed_date || props.timestamp || props.created_date || props.date;
                       
                       // Get file path/URL for download/view
                       // file_url may contain: full signed URL (legacy) OR storage path (new)
@@ -330,9 +330,13 @@ export default function EsriMap({
                       const popupContent = renderReactPopup(
                         <RecordPopup
                           recordId={recordId}
-                          source={props.source || props.utility_type || props.record_type}
+                          source={props.source}
                           processedDate={processedDate}
-                          uploadedBy={props.created_by || props.uploaded_by || props.createdBy}
+                          uploadedBy={props.Creator || props.created_by || props.uploaded_by || props.createdBy}
+                          utilityType={props.utility_type}
+                          recordType={props.record_type}
+                          organization={props.source}
+                          notes={props.notes}
                           filePath={filePath}
                           fileUrl={fileUrl && fileUrl.startsWith("http") ? fileUrl : undefined} // Only pass if it's a full URL
                           onViewFile={async () => {
