@@ -1,8 +1,11 @@
 /**
- * UTILITX Logger Utility
+ * UTILITX Logger Utility (Frontend-Safe)
  * 
  * Provides structured logging for Supabase, Esri, GPT, and Flask API calls.
- * Works in both client-side and server-side (Firebase Functions) environments.
+ * Works in both client-side and server-side environments.
+ * 
+ * IMPORTANT: This is a frontend-safe logger with NO firebase-functions dependency.
+ * For Firebase Functions structured logging, see functions/src/logger.ts
  * 
  * Usage:
  *   import { logger } from '@/lib/logger';
@@ -11,6 +14,9 @@
  *   logger.esri('query', { layer: 'WorkAreas', features: 10 });
  *   logger.gpt('completion', { tokens: 150, model: 'gpt-4' });
  *   logger.flask('api_call', { endpoint: '/process', duration: 250 });
+ * 
+ * Note: In Firebase Functions, console.log is automatically captured and structured.
+ * This logger formats logs consistently for easy filtering in Firebase Console.
  */
 
 type LogLevel = 'info' | 'warn' | 'error' | 'debug';
@@ -20,9 +26,6 @@ interface LogContext {
 }
 
 class UTILITXLogger {
-  private isServer = typeof window === 'undefined';
-  private isFirebaseFunctions = this.isServer && typeof process !== 'undefined' && !!process.env.FUNCTION_TARGET;
-
   /**
    * Log Supabase operations
    */
@@ -53,66 +56,34 @@ class UTILITXLogger {
 
   /**
    * Generic log method
+   * Uses console logging which works everywhere and is automatically structured in Firebase Functions
    */
   private log(service: string, operation: string, context?: LogContext, level: LogLevel = 'info') {
     const logEntry = {
-      service,
+      service: service.toUpperCase(),
       operation,
       timestamp: new Date().toISOString(),
       ...context,
     };
 
-    // Firebase Functions: Use structured logging
-    // Note: Next.js will show a warning about firebase-functions during build
-    // This is harmless - the require is wrapped in try-catch and only runs in Functions runtime
-    if (this.isFirebaseFunctions) {
-      try {
-        // Use eval to prevent Next.js from trying to resolve firebase-functions at build time
-        // This is safe because we're in a try-catch and only runs server-side in Functions
-        const requireFunc = typeof require !== 'undefined' ? require : (() => { throw new Error('require not available'); });
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const functions = requireFunc('firebase-functions');
-        if (functions && functions.logger) {
-          const logger = functions.logger;
-          switch (level) {
-            case 'error':
-              logger.error(`${service.toUpperCase()} ${operation}`, logEntry);
-              break;
-            case 'warn':
-              logger.warn(`${service.toUpperCase()} ${operation}`, logEntry);
-              break;
-            case 'debug':
-              logger.debug(`${service.toUpperCase()} ${operation}`, logEntry);
-              break;
-            default:
-              logger.info(`${service.toUpperCase()} ${operation}`, logEntry);
-          }
-          return;
-        }
-      } catch (e) {
-        // firebase-functions not available (expected during Next.js build)
-        // Fall through to console logging
-      }
-    }
-
-    // Client-side or server-side (non-Firebase): Use console
-    const prefix = `[${service.toUpperCase()}] ${operation}`;
-    const message = context ? `${prefix}:` : prefix;
+    // Format: [UTILITX] [SERVICE] operation
+    // This format makes it easy to filter logs in Firebase Console
+    const prefix = `[UTILITX] [${service.toUpperCase()}] ${operation}`;
 
     switch (level) {
       case 'error':
-        console.error(message, logEntry);
+        console.error(prefix, logEntry);
         break;
       case 'warn':
-        console.warn(message, logEntry);
+        console.warn(prefix, logEntry);
         break;
       case 'debug':
         if (process.env.NODE_ENV !== 'production') {
-          console.debug(message, logEntry);
+          console.debug(prefix, logEntry);
         }
         break;
       default:
-        console.log(message, logEntry);
+        console.info(prefix, logEntry);
     }
   }
 
