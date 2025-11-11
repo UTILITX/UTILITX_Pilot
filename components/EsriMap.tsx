@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
+import { createRoot } from "react-dom/client";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -14,6 +15,8 @@ import { getSignedUrl, supabase } from "@/lib/supabase";
 import type { LatLng } from "@/lib/record-types";
 import type { GeorefMode } from "@/lib/types";
 import type { MapBubble, GeorefShape } from "@/components/map-with-drawing";
+import { WorkAreaPopup } from "@/components/WorkAreaPopup";
+import { RecordPopup } from "@/components/RecordPopup";
 
 // Test Supabase initialization
 if (typeof window !== "undefined") {
@@ -28,6 +31,14 @@ declare module "leaflet" {
   interface Map {
     pm: any;
   }
+}
+
+// Helper function to render React component to DOM element for Leaflet popup
+function renderReactPopup(component: React.ReactElement): HTMLElement {
+  const div = document.createElement("div");
+  const root = createRoot(div);
+  root.render(component);
+  return div;
 }
 
 type EsriMapProps = {
@@ -205,34 +216,40 @@ export default function EsriMap({
       onEachFeature: (feature: any, layer: L.Layer) => {
         const props = feature.properties || {};
         
-        // Format timestamp if available
-        let timestampStr = "—";
-        if (props.timestamp) {
-          try {
-            const date = new Date(props.timestamp);
-            timestampStr = date.toLocaleString();
-          } catch (e) {
-            timestampStr = props.timestamp;
-          }
-        }
+        // Format work area ID (use OBJECTID or work_area_id, format as WA-XXXX)
+        const workAreaId = props.work_area_id 
+          ? `WA-${String(props.work_area_id).padStart(4, '0')}` 
+          : props.OBJECTID 
+          ? `WA-${String(props.OBJECTID).padStart(4, '0')}` 
+          : undefined;
         
-        const content = `
-          <div style="min-width: 200px; font-family: system-ui, -apple-system, sans-serif;">
-            <strong style="font-size: 14px; color: #0077ff;">Work Area</strong>
-            <hr style="margin: 8px 0; border: none; border-top: 1px solid #e0e0e0;">
-            <div style="font-size: 12px; line-height: 1.6;">
-              ${props.OBJECTID ? `<b>ID:</b> ${props.OBJECTID}<br>` : ""}
-              ${props.name ? `<b>Name:</b> ${props.name}<br>` : ""}
-              ${props.created_by ? `<b>Created By:</b> ${props.created_by}<br>` : ""}
-              ${props.utility_type ? `<b>Utility Type:</b> ${props.utility_type}<br>` : ""}
-              ${props.record_count !== undefined ? `<b>Record Count:</b> ${props.record_count}<br>` : ""}
-              ${timestampStr !== "—" ? `<b>Created:</b> ${timestampStr}<br>` : ""}
-              ${props.notes ? `<b>Notes:</b> ${props.notes}<br>` : ""}
-            </div>
-          </div>
-        `;
+        // Format date
+        const date = props.timestamp || props.created_date || props.date;
         
-        layer.bindPopup(content);
+        // Create popup content using React component
+        const popupContent = renderReactPopup(
+          <WorkAreaPopup
+            workAreaId={workAreaId}
+            region={props.region}
+            owner={props.owner}
+            createdBy={props.created_by || props.createdBy}
+            date={date}
+            notes={props.notes}
+            onViewRecords={() => {
+              // TODO: Implement view records functionality
+              console.log("View records for work area:", workAreaId);
+            }}
+            onCreatedByClick={(name) => {
+              // TODO: Implement user profile/view functionality
+              console.log("View profile for:", name);
+            }}
+          />
+        );
+        
+        layer.bindPopup(popupContent, {
+          className: "custom-popup",
+          maxWidth: 400,
+        });
       },
     }).addTo(map);
 
@@ -283,52 +300,76 @@ export default function EsriMap({
                     onEachFeature: (feature: any, layer: L.Layer) => {
                       const props = feature.properties || {};
                       
-                      // Format timestamp if available
-                      let timestampStr = "—";
-                      if (props.timestamp) {
-                        try {
-                          const date = new Date(props.timestamp);
-                          timestampStr = date.toLocaleString();
-                        } catch (e) {
-                          timestampStr = props.timestamp;
-                        }
-                      }
+                      // Format record ID (use OBJECTID or record_id, format as R-XXXXX)
+                      const recordId = props.record_id 
+                        ? `R-${String(props.record_id).padStart(5, '0')}` 
+                        : props.OBJECTID 
+                        ? `R-${String(props.OBJECTID).padStart(5, '0')}` 
+                        : undefined;
                       
-                      // Format file URL link if available
-                      // For private buckets, generate fresh signed URL on click
-                      let fileLink = "—";
+                      // Format processed date
+                      const processedDate = props.timestamp || props.processed_date || props.created_date || props.date;
+                      
+                      // Get file path/URL for download/view
                       const filePath = props.file_path || props.filePath;
                       const fileUrl = props.file_url || props.fileUrl;
                       
-                      if (filePath) {
-                        // Generate fresh signed URL on click for private buckets
-                        const filePathEscaped = filePath.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-                        fileLink = `<a href="#" onclick="window.generateSignedUrl('${filePathEscaped}', this); return false;" data-file-path="${filePathEscaped}" style="color: #ff6600; text-decoration: underline; cursor: pointer;">Open File</a>`;
-                      } else if (fileUrl) {
-                        // Fallback to direct URL if filePath not available
-                        fileLink = `<a href="${fileUrl}" target="_blank" rel="noopener noreferrer" style="color: #ff6600; text-decoration: underline;">Open File</a>`;
-                      }
+                      // Create popup content using React component
+                      const popupContent = renderReactPopup(
+                        <RecordPopup
+                          recordId={recordId}
+                          source={props.source || props.utility_type || props.record_type}
+                          processedDate={processedDate}
+                          uploadedBy={props.created_by || props.uploaded_by || props.createdBy}
+                          filePath={filePath}
+                          fileUrl={fileUrl}
+                          onViewFile={async () => {
+                            if (filePath) {
+                              try {
+                                const signedUrl = await getSignedUrl(filePath, 3600);
+                                window.open(signedUrl, "_blank");
+                              } catch (error: any) {
+                                console.error("Error generating signed URL:", error);
+                                alert(`Failed to open file: ${error.message}`);
+                              }
+                            } else if (fileUrl) {
+                              window.open(fileUrl, "_blank");
+                            }
+                          }}
+                          onDownload={async () => {
+                            if (filePath) {
+                              try {
+                                const signedUrl = await getSignedUrl(filePath, 3600);
+                                const link = document.createElement("a");
+                                link.href = signedUrl;
+                                link.download = props.file_name || "download";
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                              } catch (error: any) {
+                                console.error("Error generating signed URL:", error);
+                                alert(`Failed to download file: ${error.message}`);
+                              }
+                            } else if (fileUrl) {
+                              const link = document.createElement("a");
+                              link.href = fileUrl;
+                              link.download = props.file_name || "download";
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                            }
+                          }}
+                          onUploadedByClick={(name) => {
+                            // TODO: Implement user profile/view functionality
+                            console.log("View profile for:", name);
+                          }}
+                        />
+                      );
                       
-                      // Debug: log all properties to see what's available
-                      console.log("Record popup properties:", props);
-                      
-                      const content = `
-                        <div style="min-width: 200px; font-family: system-ui, -apple-system, sans-serif;">
-                          <strong style="font-size: 14px; color: #ff6600;">Record</strong>
-                          <hr style="margin: 8px 0; border: none; border-top: 1px solid #e0e0e0;">
-                          <div style="font-size: 12px; line-height: 1.6;">
-                            ${props.OBJECTID ? `<b>ID:</b> ${props.OBJECTID}<br>` : ""}
-                            ${props.geometry_type || props.geomType ? `<b>Type:</b> ${props.geometry_type || props.geomType}<br>` : ""}
-                            ${props.utility_type ? `<b>Utility:</b> ${props.utility_type}<br>` : ""}
-                            ${props.created_by ? `<b>Created By:</b> ${props.created_by}<br>` : ""}
-                            ${timestampStr !== "—" ? `<b>Created:</b> ${timestampStr}<br>` : ""}
-                            ${fileLink !== "—" ? `<b>File:</b> ${fileLink}<br>` : ""}
-                            ${props.notes ? `<b>Notes:</b> ${props.notes}<br>` : ""}
-                          </div>
-                        </div>
-                      `;
-                      
-                      layer.bindPopup(content);
+                      layer.bindPopup(popupContent, {
+          className: "custom-popup",
+          maxWidth: 400,
+        });
                     },
                   });
                   
