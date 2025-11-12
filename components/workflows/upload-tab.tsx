@@ -31,6 +31,7 @@ import type { UtilityType, RecordType } from "@/components/dual-record-selector"
 import { addFeatureToLayer } from "@/lib/esriUtils"
 import { getUtilityColorsFromPath, getUtilityColorsFromUtilityType } from "@/lib/utility-colors"
 import { getApwaColor } from "@/lib/apwaColors"
+import { getRecordsLayerUrl } from "@/lib/getRecordsLayerUrl"
 import { formatDistanceToNow } from "date-fns"
 import { cn } from "@/lib/utils"
 import type { GeometryType, GeorefMode, PendingDropMeta } from "@/lib/types"
@@ -319,9 +320,14 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
     setGeorefColor(apwaColor)
 
     // Set the georeferencing mode based on selected geometry type
+    // This will enable drawing mode on the map (toolbar stays hidden)
     const geoMode: GeorefMode = selectedGeometryType
     setGeorefMode(geoMode)
 
+    // Drawing will be enabled automatically when georefMode changes
+    // The map component will handle pm:create events and call onGeorefComplete
+    // which will store geometry and trigger reactive refresh with correct colors
+    
     if (geoMode === "point") {
       toast({ title: "Point georeference", description: "Click on the map to place the files." })
     } else if (geoMode === "line") {
@@ -498,50 +504,7 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
         }
       })
       
-      // Save each file as a separate record to ArcGIS with file path (not full URL)
-      for (const { file, urlData } of filesWithUrls) {
-        if (urlData?.path) {
-          const geometry = {
-            type: "Point",
-            coordinates: [result.point.lng, result.point.lat],
-          }
-          // Store only the relative path (e.g., "Records_Private/filename.pdf")
-          // This avoids ArcGIS field truncation errors with long signed URLs
-          const storagePath = `Records_Private/${urlData.path}`
-          const attributes = {
-            Creator: uploader,
-            processed_date: now,
-            source: pendingDropMeta.org?.trim() || null,
-            file_url: storagePath, // Store short path instead of full signed URL
-            notes: pendingDropMeta.notes?.trim() || null,
-            utility_type: pendingDropMeta.type?.utilityType || null,
-            record_type: pendingDropMeta.type?.recordType || null,
-            geometry_type: "Point",
-          }
-          
-          try {
-            const addResult = await addFeatureToLayer(
-              process.env.NEXT_PUBLIC_RECORDS_LAYER_URL!,
-              geometry,
-              attributes
-            )
-            console.log(`✅ Feature added successfully:`, addResult)
-            console.log(`📎 Saved attributes:`, {
-              Creator: uploader,
-              processed_date: now,
-              source: pendingDropMeta.org?.trim() || null,
-              utility_type: pendingDropMeta.type?.utilityType || null,
-              record_type: pendingDropMeta.type?.recordType || null,
-              notes: pendingDropMeta.notes?.trim() || null,
-              file_url: storagePath,
-              geometry_type: "Point",
-            })
-          } catch (err) {
-            console.error("Error saving record to ArcGIS:", err)
-          }
-        }
-      }
-      
+      // Prepare the new record (but don't add to state yet - wait for ArcGIS save)
       const newRecord: RequestRecord = {
         id: crypto.randomUUID(),
         uploaderName: uploader,
@@ -567,7 +530,63 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
           filePath: urlData?.path,
         })),
       }
-      setRecords((prev) => [newRecord, ...prev])
+      
+      // Save to ArcGIS first, then update state after success + delay
+      const savePromises: Promise<any>[] = [];
+      for (const { file, urlData } of filesWithUrls) {
+        if (urlData?.path) {
+          const geometry = {
+            type: "Point",
+            coordinates: [result.point.lng, result.point.lat],
+          }
+          const storagePath = `Records_Private/${urlData.path}`
+          const attributes = {
+            Creator: uploader,
+            processed_date: now,
+            source: pendingDropMeta.org?.trim() || null,
+            file_url: storagePath,
+            notes: pendingDropMeta.notes?.trim() || null,
+            utility_type: pendingDropMeta.type?.utilityType || null,
+            record_type: pendingDropMeta.type?.recordType || null,
+            geometry_type: "Point",
+          }
+          
+          // Save to ArcGIS Point layer
+          const targetUrl = getRecordsLayerUrl("Point");
+          if (targetUrl) {
+            savePromises.push(
+              addFeatureToLayer(targetUrl, geometry, attributes)
+                .then((saveResult) => {
+                  console.log(`✅ Feature added successfully:`, saveResult)
+                  return saveResult
+                })
+                .catch((err) => {
+                  console.error("Error saving record to ArcGIS:", err)
+                  throw err
+                })
+            )
+          } else {
+            console.error("No target layer URL found for geometry: Point");
+          }
+        }
+      }
+      
+      // Wait for all ArcGIS saves to complete, then add 500ms delay for commit, then update state
+      Promise.all(savePromises)
+        .then(() => {
+          // Wait 500ms to ensure ArcGIS response is committed
+          return new Promise(resolve => setTimeout(resolve, 500))
+        })
+        .then(() => {
+          // Now update state - this triggers reactive refresh with stable data
+          setRecords((prev) => [newRecord, ...prev])
+        })
+        .catch((err) => {
+          console.error("Error during ArcGIS save, updating state anyway:", err)
+          // Update state even on error so user sees their drawing
+          setRecords((prev) => [newRecord, ...prev])
+        })
+      
       setFocusPoint(result.point)
       setPendingDropMeta(null)
       setGeorefMode("none")
@@ -639,58 +658,13 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
         }
       })
       
-      // Save each file as a separate record to ArcGIS with file path (not full URL)
-      for (const { file, urlData } of filesWithUrls) {
-        if (urlData?.path) {
-          const geometry = {
-            type: result.type,
-            coordinates: result.type === "LineString" 
-              ? result.path.map((p) => [p.lng, p.lat])
-              : [result.path.map((p) => [p.lng, p.lat])], // Polygon needs nested array
-          }
-          // Store only the relative path (e.g., "Records_Private/filename.pdf")
-          // This avoids ArcGIS field truncation errors with long signed URLs
-          const storagePath = `Records_Private/${urlData.path}`
-          const attributes = {
-            Creator: uploader,
-            processed_date: now,
-            source: pendingDropMeta.org?.trim() || null,
-            file_url: storagePath, // Store short path instead of full signed URL
-            notes: pendingDropMeta.notes?.trim() || null,
-            utility_type: pendingDropMeta.type?.utilityType || null,
-            record_type: pendingDropMeta.type?.recordType || null,
-            geometry_type: result.type,
-          }
-          
-          try {
-            const saveResult = await addFeatureToLayer(
-              process.env.NEXT_PUBLIC_RECORDS_LAYER_URL!,
-              geometry,
-              attributes
-            )
-            console.log(`✅ Feature added successfully:`, saveResult)
-            console.log(`📎 Saved attributes:`, {
-              Creator: uploader,
-              processed_date: now,
-              source: pendingDropMeta.org?.trim() || null,
-              utility_type: pendingDropMeta.type?.utilityType || null,
-              record_type: pendingDropMeta.type?.recordType || null,
-              notes: pendingDropMeta.notes?.trim() || null,
-              file_url: storagePath,
-              geometry_type: result.type,
-            })
-          } catch (err) {
-            console.error("Error saving record to ArcGIS:", err)
-          }
-        }
-      }
-      
+      // Prepare the new record (but don't add to state yet - wait for ArcGIS save)
       const newRecord: RequestRecord = {
         id: crypto.randomUUID(),
         uploaderName: uploader,
         uploadedAt: now,
         recordTypeId: pendingDropMeta.type.id as any,
-        recordTypePath: `${pendingDropMeta.type.utilityType} / ${pendingDropMeta.type.recordType}`, // Store utility type in path
+        recordTypePath: `${pendingDropMeta.type.utilityType} / ${pendingDropMeta.type.recordType}`,
         priority: pendingDropMeta.type.priority,
         orgName: pendingDropMeta.org.trim(),
         notes: pendingDropMeta.notes.trim() || undefined,
@@ -710,7 +684,67 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
           filePath: urlData?.path,
         })),
       }
-      setRecords((prev) => [newRecord, ...prev])
+      
+      // Save to ArcGIS first, then update state after success + delay
+      const savePromises: Promise<any>[] = [];
+      for (const { file, urlData } of filesWithUrls) {
+        if (urlData?.path) {
+          const geometry = {
+            type: result.type,
+            coordinates: result.type === "LineString" 
+              ? result.path.map((p) => [p.lng, p.lat])
+              : result.type === "Point"
+              ? [result.point.lng, result.point.lat]
+              : [result.path.map((p) => [p.lng, p.lat])], // Polygon needs nested array
+          }
+          const storagePath = `Records_Private/${urlData.path}`
+          const attributes = {
+            Creator: uploader,
+            processed_date: now,
+            source: pendingDropMeta.org?.trim() || null,
+            file_url: storagePath,
+            notes: pendingDropMeta.notes?.trim() || null,
+            utility_type: pendingDropMeta.type?.utilityType || null,
+            record_type: pendingDropMeta.type?.recordType || null,
+            geometry_type: result.type,
+          }
+          
+          // Determine geometry type for routing
+          const geometryType = result.type === "LineString" ? "Line" : result.type === "Point" ? "Point" : "Polygon";
+          const targetUrl = getRecordsLayerUrl(geometryType);
+          if (targetUrl) {
+            savePromises.push(
+              addFeatureToLayer(targetUrl, geometry, attributes)
+                .then((saveResult) => {
+                  console.log(`✅ Feature added successfully:`, saveResult)
+                  return saveResult
+                })
+                .catch((err) => {
+                  console.error("Error saving record to ArcGIS:", err)
+                  throw err
+                })
+            )
+          } else {
+            console.error(`No target layer URL found for geometry: ${geometryType}`);
+          }
+        }
+      }
+      
+      // Wait for all ArcGIS saves to complete, then add 500ms delay for commit, then update state
+      Promise.all(savePromises)
+        .then(() => {
+          // Wait 500ms to ensure ArcGIS response is committed
+          return new Promise(resolve => setTimeout(resolve, 500))
+        })
+        .then(() => {
+          // Now update state - this triggers reactive refresh with stable data
+          setRecords((prev) => [newRecord, ...prev])
+        })
+        .catch((err) => {
+          console.error("Error during ArcGIS save, updating state anyway:", err)
+          // Update state even on error so user sees their drawing
+          setRecords((prev) => [newRecord, ...prev])
+        })
       setFocusPoint(centroid)
       setPendingDropMeta(null)
       setGeorefMode("none")

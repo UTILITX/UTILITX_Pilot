@@ -18,6 +18,7 @@ import type { MapBubble, GeorefShape } from "@/components/map-with-drawing";
 import { WorkAreaPopup } from "@/components/WorkAreaPopup";
 import { RecordPopup } from "@/components/RecordPopup";
 import { getApwaColor } from "@/lib/apwaColors";
+import { getFeatureGeometry } from "@/lib/geoUtils";
 
 // Note: Supabase client initialization is handled via singleton pattern in lib/supabase-client.ts
 // This prevents multiple GoTrueClient instances and eliminates duplication warnings
@@ -85,6 +86,9 @@ export default function EsriMap({
   const mapRef = useRef<L.Map | null>(null);
   const workAreasLayerRef = useRef<any>(null);
   const recordsLayerRefInternal = useRef<any>(null);
+  const recordsPointLayerRef = useRef<any>(null);
+  const recordsLineLayerRef = useRef<any>(null);
+  const recordsPolygonLayerRef = useRef<any>(null);
   const currentPolygonLayerRef = useRef<L.Polygon | null>(null);
   const currentGeorefLayerRef = useRef<L.Layer | null>(null);
   const markersGroupRef = useRef<L.LayerGroup | null>(null);
@@ -261,13 +265,13 @@ export default function EsriMap({
             }
           }, 200);
 
-          // Add hosted Records layer - "records" layer
+          // Add hosted Records layers - Point, Line, and Polygon
           // Wait longer to ensure map is fully stable
           setTimeout(() => {
             try {
               // Ensure map is fully ready and not in a transition
               if (!map.getPane('overlayPane') || !map.getContainer()) {
-                console.warn("Map not ready for records layer");
+                console.warn("Map not ready for records layers");
                 return;
               }
               
@@ -278,190 +282,178 @@ export default function EsriMap({
               if (isTransitioning) {
                 // Wait for zoom to complete
                 map.once('zoomend', () => {
-                  setTimeout(() => addRecordsLayer(), 200);
+                  setTimeout(() => addRecordsLayers(), 200);
                 });
                 return;
               }
               
-              // Add a delay to ensure map is stable before adding layer
-              setTimeout(() => addRecordsLayer(), 100);
+              // Add a delay to ensure map is stable before adding layers
+              setTimeout(() => addRecordsLayers(), 100);
               
-              function addRecordsLayer() {
-                try {
-                  if (!map.getPane('overlayPane') || !map.getContainer()) {
-                    console.warn("Map not ready for records layer (retry)");
-                    return;
-                  }
-                  
-    const records = EL.featureLayer({
-      url: process.env.NEXT_PUBLIC_RECORDS_LAYER_URL!,
-      apikey: process.env.NEXT_PUBLIC_ARCGIS_API_KEY!,
-      pointToLayer: (feature, latlng) => {
-        const props = feature.properties || {};
-        const utilityType = props.utility_type;
-        const color = getApwaColor(utilityType);
-        return L.circleMarker(latlng, { 
-          radius: 6, 
-          color: color, 
-          fillColor: color,
-          fillOpacity: 0.8,
-          weight: 2,
-        });
-      },
-      style: (feature: any) => {
-        const props = feature.properties || {};
-        const utilityType = props.utility_type;
-        const color = getApwaColor(utilityType);
-        const geometryType = props.geometry_type || feature.geometry?.type;
-        
-        if (geometryType === "LineString") {
-          return {
-            color: color,
-            weight: 3,
-            opacity: 1,
-          };
-        } else if (geometryType === "Polygon") {
-          return {
-            color: color,
-            fillColor: color,
-            weight: 2,
-            opacity: 1,
-            fillOpacity: 0.5,
-          };
-        }
-        // Default style for points (handled by pointToLayer)
-        return {};
-      },
-                    onEachFeature: (feature: any, layer: L.Layer) => {
-                      const props = feature.properties || {};
-                      
-                      // Format record ID (use OBJECTID or record_id, format as R-XXXXX)
-                      const recordId = props.record_id 
-                        ? `R-${String(props.record_id).padStart(5, '0')}` 
-                        : props.OBJECTID 
-                        ? `R-${String(props.OBJECTID).padStart(5, '0')}` 
-                        : undefined;
-                      
-                      // Format processed date (prioritize processed_date as that's what we save)
-                      const processedDate = props.processed_date || props.timestamp || props.created_date || props.date;
-                      
-                      // Get file path/URL for download/view
-                      // file_url may contain: full signed URL (legacy) OR storage path (new)
-                      // file_path may contain: just the filename/path within bucket
-                      let filePath = props.file_path || props.filePath;
-                      const fileUrl = props.file_url || props.fileUrl;
-                      
-                      // If file_url is a storage path (contains "Records_Private/"), extract the path
-                      // Otherwise, it might be a legacy full URL or just a path
-                      if (fileUrl && fileUrl.includes("Records_Private/")) {
-                        // Extract path from storage path format: "Records_Private/filename.pdf"
-                        filePath = fileUrl.replace("Records_Private/", "");
-                      } else if (fileUrl && !fileUrl.startsWith("http")) {
-                        // file_url is a path (not a URL)
-                        filePath = fileUrl;
-                      }
-                      
-                      // Create popup content using React component
-                      const popupContent = renderReactPopup(
-                        <RecordPopup
-                          recordId={recordId}
-                          source={props.source}
-                          processedDate={processedDate}
-                          uploadedBy={props.Creator || props.created_by || props.uploaded_by || props.createdBy}
-                          utilityType={props.utility_type}
-                          recordType={props.record_type}
-                          organization={props.source}
-                          notes={props.notes}
-                          filePath={filePath}
-                          fileUrl={fileUrl && fileUrl.startsWith("http") ? fileUrl : undefined} // Only pass if it's a full URL
-                          onViewFile={async () => {
-                            if (filePath) {
-                              try {
-                                // Reconstruct signed URL from storage path
-                                const signedUrl = await getSignedUrl(filePath, 3600);
-                                console.log("🔗 Signed URL (runtime):", signedUrl.substring(0, 50) + "...");
-                                window.open(signedUrl, "_blank");
-                              } catch (error: any) {
-                                console.error("Error generating signed URL:", error);
-                                alert(`Failed to open file: ${error.message}`);
-                              }
-                            } else if (fileUrl && fileUrl.startsWith("http")) {
-                              // Legacy: full URL stored directly
-                              window.open(fileUrl, "_blank");
+              // Helper function to create a records layer with consistent styling
+              function createRecordsLayer(url: string, geometryType: "Point" | "Line" | "Polygon") {
+                const layer = EL.featureLayer({
+                  url: url,
+                  apikey: process.env.NEXT_PUBLIC_ARCGIS_API_KEY!,
+                  pointToLayer: geometryType === "Point" ? (feature, latlng) => {
+                    const props = feature.properties || {};
+                    const utilityType = props.utility_type;
+                    const color = getApwaColor(utilityType);
+                    return L.circleMarker(latlng, { 
+                      radius: 6, 
+                      color: color, 
+                      fillColor: color,
+                      fillOpacity: 0.8,
+                      weight: 2,
+                    });
+                  } : undefined,
+                  style: geometryType !== "Point" ? (feature: any) => {
+                    const props = feature.properties || {};
+                    const utilityType = props.utility_type;
+                    const color = getApwaColor(utilityType);
+                    
+                    if (geometryType === "Line") {
+                      return {
+                        color: color,
+                        weight: 3,
+                        opacity: 1,
+                      };
+                    } else if (geometryType === "Polygon") {
+                      return {
+                        color: color,
+                        fillColor: color,
+                        weight: 2,
+                        opacity: 1,
+                        fillOpacity: 0.5,
+                      };
+                    }
+                    return {};
+                  } : undefined,
+                  onEachFeature: (feature: any, layer: L.Layer) => {
+                    const props = feature.properties || {};
+                    
+                    // Format record ID (use OBJECTID or record_id, format as R-XXXXX)
+                    const recordId = props.record_id 
+                      ? `R-${String(props.record_id).padStart(5, '0')}` 
+                      : props.OBJECTID 
+                      ? `R-${String(props.OBJECTID).padStart(5, '0')}` 
+                      : undefined;
+                    
+                    // Format processed date (prioritize processed_date as that's what we save)
+                    const processedDate = props.processed_date || props.timestamp || props.created_date || props.date;
+                    
+                    // Get file path/URL for download/view
+                    let filePath = props.file_path || props.filePath;
+                    const fileUrl = props.file_url || props.fileUrl;
+                    
+                    // If file_url is a storage path (contains "Records_Private/"), extract the path
+                    if (fileUrl && fileUrl.includes("Records_Private/")) {
+                      filePath = fileUrl.replace("Records_Private/", "");
+                    } else if (fileUrl && !fileUrl.startsWith("http")) {
+                      filePath = fileUrl;
+                    }
+                    
+                    // Create popup content using React component
+                    const popupContent = renderReactPopup(
+                      <RecordPopup
+                        recordId={recordId}
+                        source={props.source}
+                        processedDate={processedDate}
+                        uploadedBy={props.Creator || props.created_by || props.uploaded_by || props.createdBy}
+                        utilityType={props.utility_type}
+                        recordType={props.record_type}
+                        organization={props.source}
+                        notes={props.notes}
+                        filePath={filePath}
+                        fileUrl={fileUrl && fileUrl.startsWith("http") ? fileUrl : undefined}
+                        onViewFile={async () => {
+                          if (filePath) {
+                            try {
+                              const signedUrl = await getSignedUrl(filePath, 3600);
+                              window.open(signedUrl, "_blank");
+                            } catch (error: any) {
+                              console.error("Error generating signed URL:", error);
+                              alert(`Failed to open file: ${error.message}`);
                             }
-                          }}
-                          onDownload={async () => {
-                            if (filePath) {
-                              try {
-                                // Reconstruct signed URL from storage path
-                                const signedUrl = await getSignedUrl(filePath, 3600);
-                                console.log("🔗 Signed URL (runtime):", signedUrl.substring(0, 50) + "...");
-                                const link = document.createElement("a");
-                                link.href = signedUrl;
-                                link.download = props.file_name || "download";
-                                document.body.appendChild(link);
-                                link.click();
-                                document.body.removeChild(link);
-                              } catch (error: any) {
-                                console.error("Error generating signed URL:", error);
-                                alert(`Failed to download file: ${error.message}`);
-                              }
-                            } else if (fileUrl && fileUrl.startsWith("http")) {
-                              // Legacy: full URL stored directly
+                          } else if (fileUrl && fileUrl.startsWith("http")) {
+                            window.open(fileUrl, "_blank");
+                          }
+                        }}
+                        onDownload={async () => {
+                          if (filePath) {
+                            try {
+                              const signedUrl = await getSignedUrl(filePath, 3600);
                               const link = document.createElement("a");
-                              link.href = fileUrl;
+                              link.href = signedUrl;
                               link.download = props.file_name || "download";
                               document.body.appendChild(link);
                               link.click();
                               document.body.removeChild(link);
+                            } catch (error: any) {
+                              console.error("Error generating signed URL:", error);
+                              alert(`Failed to download file: ${error.message}`);
                             }
-                          }}
-                          onUploadedByClick={(name) => {
-                            // TODO: Implement user profile/view functionality
-                            console.log("View profile for:", name);
-                          }}
-                        />
-                      );
-                      
-                      layer.bindPopup(popupContent, {
-          className: "custom-popup",
-          maxWidth: 400,
-        });
-                    },
-                  });
-                  
-                  // Add layer with error handling
-                  try {
-                    // Ensure map is still valid before adding
-                    if (!map.getContainer() || !map.getPane('overlayPane')) {
-                      console.warn("Map not ready, skipping records layer addition");
-                      return;
-                    }
+                          } else if (fileUrl && fileUrl.startsWith("http")) {
+                            const link = document.createElement("a");
+                            link.href = fileUrl;
+                            link.download = props.file_name || "download";
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                          }
+                        }}
+                        onUploadedByClick={(name) => {
+                          console.log("View profile for:", name);
+                        }}
+                      />
+                    );
                     
-                    records.addTo(map);
-                    recordsLayerRefInternal.current = records;
-                    
-                    // Add error handler for zoom transitions
-                    map.on('zoomstart', () => {
-                      // Prevent layer updates during zoom
-                      if (recordsLayerRefInternal.current) {
-                        try {
-                          (recordsLayerRefInternal.current as any).disableEventPropagation?.();
-                        } catch (e) {
-                          // Ignore if method doesn't exist
-                        }
-                      }
+                    layer.bindPopup(popupContent, {
+                      className: "custom-popup",
+                      maxWidth: 400,
                     });
-                    
-                  } catch (addErr) {
-                    console.error("Error adding records layer to map:", addErr);
+                  },
+                });
+                return layer;
+              }
+              
+              function addRecordsLayers() {
+                try {
+                  if (!map.getPane('overlayPane') || !map.getContainer()) {
+                    console.warn("Map not ready for records layers (retry)");
+                    return;
                   }
+                  
+                  // Add Point layer
+                  if (process.env.NEXT_PUBLIC_RECORDS_POINT_LAYER_URL) {
+                    const pointLayer = createRecordsLayer(process.env.NEXT_PUBLIC_RECORDS_POINT_LAYER_URL, "Point");
+                    pointLayer.addTo(map);
+                    recordsPointLayerRef.current = pointLayer;
+                  }
+                  
+                  // Add Line layer
+                  if (process.env.NEXT_PUBLIC_RECORDS_LINE_LAYER_URL) {
+                    const lineLayer = createRecordsLayer(process.env.NEXT_PUBLIC_RECORDS_LINE_LAYER_URL, "Line");
+                    lineLayer.addTo(map);
+                    recordsLineLayerRef.current = lineLayer;
+                  }
+                  
+                  // Add Polygon layer
+                  if (process.env.NEXT_PUBLIC_RECORDS_POLYGON_LAYER_URL) {
+                    const polygonLayer = createRecordsLayer(process.env.NEXT_PUBLIC_RECORDS_POLYGON_LAYER_URL, "Polygon");
+                    polygonLayer.addTo(map);
+                    recordsPolygonLayerRef.current = polygonLayer;
+                  }
+                  
+                  // Keep legacy layer reference for backward compatibility
+                  recordsLayerRefInternal.current = recordsPointLayerRef.current || recordsLineLayerRef.current || recordsPolygonLayerRef.current;
+                  
                 } catch (layerErr) {
-                  console.error("Error creating records layer:", layerErr);
+                  console.error("Error creating records layers:", layerErr);
                 }
               }
             } catch (err) {
-              console.error("Error adding records layer:", err);
+              console.error("Error adding records layers:", err);
             }
           }, 300);
 
@@ -485,38 +477,44 @@ export default function EsriMap({
             try {
               if (mode === "draw" && map.getContainer() && map.getPane('mapPane')) {
                 if (enableWorkAreaDrawing) {
-                  // Add controls and enable polygon/rectangle drawing for work area
+                  // Work area drawing: hide draw buttons, only show Edit/Erase
+                  // Drawing is controlled programmatically
                   map.pm.addControls({
                     position: "topleft",
-                    drawMarker: false, // Work areas are only polygons/rectangles
-                    drawCircle: false, // Work areas are only polygons/rectangles
-                    drawRectangle: true, // Enable rectangle drawing
-                    drawPolyline: false, // Work areas are only polygons/rectangles
-                    drawPolygon: true, // Enable polygon drawing
-                    editMode: true,
+                    drawMarker: false,
+                    drawPolyline: false,
+                    drawPolygon: false,
+                    drawRectangle: false,
+                    drawCircle: false,
+                    drawCircleMarker: false,
+                    editMode: true,      // ✏️ enable edit mode (move / edit vertices)
                     dragMode: false,
                     cutPolygon: false,
-                    removalMode: true,
+                    removalMode: true,   // 🗑️ allows erase/delete
+                    oneBlock: true,      // groups icons into one compact block
                   });
                   
-                  // Enable polygon drawing mode by default
+                  // Enable polygon drawing mode programmatically (not via toolbar)
                   map.pm.enableDraw("Polygon");
                 } else if (georefMode !== "none") {
-                  // Enable drawing controls for records based on geometry type
-    map.pm.addControls({
-        position: "topleft",
-                    drawMarker: georefMode === "point",
-                    drawCircle: false, // Records are only point, line, or polygon
-                    drawRectangle: false, // Records are only point, line, or polygon
-                    drawPolyline: georefMode === "line",
-                    drawPolygon: georefMode === "polygon",
-        editMode: true,
-        dragMode: false,
-        cutPolygon: false,
-        removalMode: true,
-        });
+                  // Record drawing: hide draw buttons, only show Edit/Erase
+                  // Drawing is controlled programmatically via "Draw on Map" button
+                  map.pm.addControls({
+                    position: "topleft",
+                    drawMarker: false,
+                    drawPolyline: false,
+                    drawPolygon: false,
+                    drawRectangle: false,
+                    drawCircle: false,
+                    drawCircleMarker: false,
+                    editMode: true,      // ✏️ enable edit mode (move / edit vertices)
+                    dragMode: false,
+                    cutPolygon: false,
+                    removalMode: true,   // 🗑️ allows erase/delete
+                    oneBlock: true,      // groups icons into one compact block
+                  });
 
-                  // Enable the appropriate drawing mode
+                  // Enable the appropriate drawing mode programmatically
                   if (georefMode === "point") {
                     map.pm.enableDraw("Marker");
                   } else if (georefMode === "line") {
@@ -525,15 +523,31 @@ export default function EsriMap({
                     map.pm.enableDraw("Polygon");
                   }
                 } else {
-                  // Disable drawing and remove controls when not in any drawing mode
+                  // Hide all draw buttons - only show Edit and Erase for professional cleanup
+                  map.pm.addControls({
+                    position: "topleft",
+                    drawMarker: false,
+                    drawPolyline: false,
+                    drawPolygon: false,
+                    drawRectangle: false,
+                    drawCircle: false,
+                    drawCircleMarker: false,
+                    editMode: true,      // ✏️ enable edit mode (move / edit vertices)
+                    dragMode: false,
+                    cutPolygon: false,
+                    removalMode: true,   // 🗑️ allows erase/delete
+                    oneBlock: true,      // groups icons into one compact block
+                  });
                   map.pm.disableDraw();
-                  // Only remove controls if they exist (to avoid errors)
-                  try {
-                    map.pm.removeControls();
-                  } catch (e) {
-                    // Controls might not exist, that's fine
-                  }
                 }
+
+                // Disable drawing when edit mode is enabled to prevent overlap
+                const handleEditModeToggle = (e: any) => {
+                  if (e.enabled) {
+                    map.pm.disableDraw();
+                  }
+                };
+                map.on("pm:globaleditmodetoggled", handleEditModeToggle);
               }
             } catch (err) {
               console.error("Error setting up drawing controls:", err);
@@ -898,36 +912,42 @@ export default function EsriMap({
 
     // Enable drawing controls based on mode
     if (enableWorkAreaDrawing) {
-      // Add controls and enable polygon/rectangle drawing for work area
+      // Work area drawing: hide draw buttons, only show Edit/Erase
+      // Drawing is controlled programmatically
       map.pm.addControls({
         position: "topleft",
-        drawMarker: false, // Work areas are only polygons/rectangles
-        drawCircle: false, // Work areas are only polygons/rectangles
-        drawRectangle: true, // Enable rectangle drawing
-        drawPolyline: false, // Work areas are only polygons/rectangles
-        drawPolygon: true, // Enable polygon drawing
-        editMode: true,
+        drawMarker: false,
+        drawPolyline: false,
+        drawPolygon: false,
+        drawRectangle: false,
+        drawCircle: false,
+        drawCircleMarker: false,
+        editMode: true,      // ✏️ enable edit mode (move / edit vertices)
         dragMode: false,
         cutPolygon: false,
-        removalMode: true,
+        removalMode: true,   // 🗑️ allows erase/delete
+        oneBlock: true,      // groups icons into one compact block
       });
-      map.pm.enableDraw("Polygon"); // Enable polygon drawing mode by default
+      map.pm.enableDraw("Polygon"); // Enable polygon drawing mode programmatically
     } else if (georefMode !== "none") {
-      // Enable drawing controls for records based on geometry type
+      // Record drawing: hide draw buttons, only show Edit/Erase
+      // Drawing is controlled programmatically via "Draw on Map" button
       map.pm.addControls({
         position: "topleft",
-        drawMarker: georefMode === "point",
-        drawCircle: false, // Records are only point, line, or polygon
-        drawRectangle: false, // Records are only point, line, or polygon
-        drawPolyline: georefMode === "line",
-        drawPolygon: georefMode === "polygon",
-        editMode: true,
+        drawMarker: false,
+        drawPolyline: false,
+        drawPolygon: false,
+        drawRectangle: false,
+        drawCircle: false,
+        drawCircleMarker: false,
+        editMode: true,      // ✏️ enable edit mode (move / edit vertices)
         dragMode: false,
         cutPolygon: false,
-        removalMode: true,
+        removalMode: true,   // 🗑️ allows erase/delete
+        oneBlock: true,      // groups icons into one compact block
       });
       
-      // Enable the appropriate drawing mode
+      // Enable the appropriate drawing mode programmatically
       if (georefMode === "point") {
         map.pm.enableDraw("Marker");
       } else if (georefMode === "line") {
@@ -935,7 +955,36 @@ export default function EsriMap({
       } else if (georefMode === "polygon") {
         map.pm.enableDraw("Polygon");
       }
+    } else {
+      // Hide all draw buttons - only show Edit and Erase for professional cleanup
+      map.pm.addControls({
+        position: "topleft",
+        drawMarker: false,
+        drawPolyline: false,
+        drawPolygon: false,
+        drawRectangle: false,
+        drawCircle: false,
+        drawCircleMarker: false,
+        editMode: true,      // ✏️ enable edit mode (move / edit vertices)
+        dragMode: false,
+        cutPolygon: false,
+        removalMode: true,   // 🗑️ allows erase/delete
+        oneBlock: true,      // groups icons into one compact block
+      });
     }
+
+    // Disable drawing when edit mode is enabled to prevent overlap
+    const handleEditModeToggle = (e: any) => {
+      if (e.enabled) {
+        map.pm.disableDraw();
+      }
+    };
+    map.on("pm:globaleditmodetoggled", handleEditModeToggle);
+
+    // Cleanup: remove event listener on unmount
+    return () => {
+      map.off("pm:globaleditmodetoggled", handleEditModeToggle);
+    };
   }, [mode, enableWorkAreaDrawing, georefMode]);
 
   // Handle work area selection mode changes
@@ -948,9 +997,8 @@ export default function EsriMap({
       if (!enableWorkAreaSelection || !onWorkAreaSelected) return;
 
       const feature = e.layer.feature;
-      if (!feature || !feature.geometry) return;
-
-      const geometry = feature.geometry;
+      const geometry = getFeatureGeometry(feature);
+      if (!geometry) return;
       if (geometry.type !== "Polygon" || !geometry.rings || !geometry.rings[0]) return;
 
       // Convert ArcGIS rings to LatLng[]
@@ -989,12 +1037,13 @@ export default function EsriMap({
     };
   }, [enableWorkAreaSelection, onWorkAreaSelected]);
 
-  // 🔄 Refresh bubbles and shapes whenever they change (reactive layer refresh)
+  // 🔄 Refresh bubbles and shapes whenever they change (reactive layer refresh with debouncing)
   useEffect(() => {
-    const refreshMapLayers = () => {
-      const map = mapRef.current;
-      if (!map) return;
+    const map = mapRef.current;
+    if (!map) return;
 
+    // Debounce layer refresh to prevent "line disappears" bug and flicker
+    const timer = setTimeout(() => {
       // Clear existing bubbles and shapes
       if (markersGroupRef.current) {
         markersGroupRef.current.clearLayers();
@@ -1148,45 +1197,32 @@ export default function EsriMap({
         }
       });
     }
-    };
-
-    // Run immediately when bubbles/shapes change
-    refreshMapLayers();
-
-    // Also listen for explicit refresh events (for initial load race condition)
-    window.addEventListener("records-refresh", refreshMapLayers);
-
-    return () => {
-      window.removeEventListener("records-refresh", refreshMapLayers);
-    };
-  }, [bubbles, shapes]);
-
-  // 🔄 Fix initial render race condition - debounce until data is loaded
-  useEffect(() => {
-    // Only trigger if we have data to render
-    if ((bubbles.length === 0 && shapes.length === 0) || !mapRef.current) return;
-
-    // Wait until next tick so Leaflet map + layers are ready
-    const timer = setTimeout(() => {
-      // Trigger a forced refresh event for layers and popups
-      const event = new Event("records-refresh");
-      window.dispatchEvent(event);
-    }, 200);
+    }, 250); // Short delay prevents flicker on new draw and "line disappears" bug
 
     return () => clearTimeout(timer);
-  }, [bubbles.length, shapes.length]);
+  }, [bubbles, shapes]);
 
-  // 🔄 Refresh ArcGIS records layer when needed (triggered by external refresh calls)
+  // Note: Initial render race condition is now handled by the debounced effect above
+  // The 250ms delay ensures both React and Leaflet are ready before rendering
+
+  // 🔄 Refresh ArcGIS records layers when needed (triggered by external refresh calls)
   useEffect(() => {
-    const recordsLayer = recordsLayerRefInternal.current;
-    if (recordsLayer) {
-      // Refresh the layer to get latest data from ArcGIS
-      try {
-        recordsLayer.refresh();
-      } catch (err) {
-        console.warn("Could not refresh records layer:", err);
+    // Refresh all three record layers
+    const layers = [
+      recordsPointLayerRef.current,
+      recordsLineLayerRef.current,
+      recordsPolygonLayerRef.current,
+    ].filter(Boolean);
+    
+    layers.forEach((layer) => {
+      if (layer) {
+        try {
+          layer.refresh();
+        } catch (err) {
+          console.warn("Could not refresh records layer:", err);
+        }
       }
-    }
+    });
   }, [bubbles.length, shapes.length]); // Refresh when record count changes
 
   // 🔍 Sanity check: Log when record layers successfully bind (for debugging)

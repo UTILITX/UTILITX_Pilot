@@ -35,7 +35,12 @@ export const env = {
   // Support both NEXT_PUBLIC_ prefixed and non-prefixed versions for flexibility
   ARCGIS_API_KEY: getEnvVar("NEXT_PUBLIC_ARCGIS_API_KEY") || getEnvVar("ARCGIS_API_KEY"),
   WORKAREA_LAYER_URL: getEnvVar("NEXT_PUBLIC_WORKAREA_LAYER_URL") || getEnvVar("WORKAREA_LAYER_URL"),
+  // Legacy: kept for backward compatibility but no longer required
   RECORDS_LAYER_URL: getEnvVar("NEXT_PUBLIC_RECORDS_LAYER_URL") || getEnvVar("RECORDS_LAYER_URL"),
+  // New: Separate layers for Point, Line, and Polygon geometries
+  RECORDS_POINT_LAYER_URL: getEnvVar("NEXT_PUBLIC_RECORDS_POINT_LAYER_URL") || getEnvVar("RECORDS_POINT_LAYER_URL"),
+  RECORDS_LINE_LAYER_URL: getEnvVar("NEXT_PUBLIC_RECORDS_LINE_LAYER_URL") || getEnvVar("RECORDS_LINE_LAYER_URL"),
+  RECORDS_POLYGON_LAYER_URL: getEnvVar("NEXT_PUBLIC_RECORDS_POLYGON_LAYER_URL") || getEnvVar("RECORDS_POLYGON_LAYER_URL"),
   SUPABASE_URL: getEnvVar("NEXT_PUBLIC_SUPABASE_URL") || getEnvVar("SUPABASE_URL"),
   SUPABASE_ANON_KEY: getEnvVar("NEXT_PUBLIC_SUPABASE_ANON_KEY") || getEnvVar("SUPABASE_ANON_KEY"),
   SUPABASE_BUCKET: getEnvVar("NEXT_PUBLIC_SUPABASE_BUCKET") || getEnvVar("SUPABASE_STORAGE_BUCKET", "Records_Private"), // Support both variable names, default to Records_Private
@@ -47,7 +52,11 @@ export function validateEnv() {
   
   if (!env.ARCGIS_API_KEY) missing.push("NEXT_PUBLIC_ARCGIS_API_KEY");
   if (!env.WORKAREA_LAYER_URL) missing.push("NEXT_PUBLIC_WORKAREA_LAYER_URL");
-  if (!env.RECORDS_LAYER_URL) missing.push("NEXT_PUBLIC_RECORDS_LAYER_URL");
+  
+  // Validate the three separate record layers (replaces legacy RECORDS_LAYER_URL)
+  if (!env.RECORDS_POINT_LAYER_URL) missing.push("NEXT_PUBLIC_RECORDS_POINT_LAYER_URL");
+  if (!env.RECORDS_LINE_LAYER_URL) missing.push("NEXT_PUBLIC_RECORDS_LINE_LAYER_URL");
+  if (!env.RECORDS_POLYGON_LAYER_URL) missing.push("NEXT_PUBLIC_RECORDS_POLYGON_LAYER_URL");
   
   if (missing.length > 0) {
     console.error("❌ Missing required environment variables:", missing);
