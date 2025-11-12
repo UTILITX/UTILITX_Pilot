@@ -17,6 +17,7 @@ import type { GeorefMode } from "@/lib/types";
 import type { MapBubble, GeorefShape } from "@/components/map-with-drawing";
 import { WorkAreaPopup } from "@/components/WorkAreaPopup";
 import { RecordPopup } from "@/components/RecordPopup";
+import { getApwaColor } from "@/lib/apwaColors";
 
 // Note: Supabase client initialization is handled via singleton pattern in lib/supabase-client.ts
 // This prevents multiple GoTrueClient instances and eliminates duplication warnings
@@ -295,8 +296,42 @@ export default function EsriMap({
     const records = EL.featureLayer({
       url: process.env.NEXT_PUBLIC_RECORDS_LAYER_URL!,
       apikey: process.env.NEXT_PUBLIC_ARCGIS_API_KEY!,
-      pointToLayer: (_feature, latlng) =>
-        L.circleMarker(latlng, { radius: 6, color: "#ff6600", fillOpacity: 0.8 }),
+      pointToLayer: (feature, latlng) => {
+        const props = feature.properties || {};
+        const utilityType = props.utility_type;
+        const color = getApwaColor(utilityType);
+        return L.circleMarker(latlng, { 
+          radius: 6, 
+          color: color, 
+          fillColor: color,
+          fillOpacity: 0.8,
+          weight: 2,
+        });
+      },
+      style: (feature: any) => {
+        const props = feature.properties || {};
+        const utilityType = props.utility_type;
+        const color = getApwaColor(utilityType);
+        const geometryType = props.geometry_type || feature.geometry?.type;
+        
+        if (geometryType === "LineString") {
+          return {
+            color: color,
+            weight: 3,
+            opacity: 1,
+          };
+        } else if (geometryType === "Polygon") {
+          return {
+            color: color,
+            fillColor: color,
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.5,
+          };
+        }
+        // Default style for points (handled by pointToLayer)
+        return {};
+      },
                     onEachFeature: (feature: any, layer: L.Layer) => {
                       const props = feature.properties || {};
                       
@@ -626,6 +661,26 @@ export default function EsriMap({
               return;
             }
 
+            // Apply APWA color styling based on georefColor or utility type
+            const color = georefColor || getApwaColor(undefined);
+            if (type === "LineString" || type === "Polygon") {
+              (layer as L.Polyline | L.Polygon).setStyle({
+                color: color,
+                fillColor: type === "Polygon" ? color : undefined,
+                weight: type === "LineString" ? 3 : 2,
+                opacity: 1,
+                fillOpacity: type === "Polygon" ? 0.5 : undefined,
+              });
+            } else if (type === "Point") {
+              (layer as L.Marker).setIcon(
+                L.divIcon({
+                  className: "custom-marker",
+                  html: `<div style="background-color: ${color}; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>`,
+                  iconSize: [20, 20],
+                })
+              );
+            }
+
             // Convert to appropriate format
             let result: { type: "Point"; point: LatLng } | { type: "LineString" | "Polygon"; path: LatLng[] };
 
@@ -639,7 +694,7 @@ export default function EsriMap({
               // Don't save here - let upload-tab.tsx save with file URLs
               // Just call the callback to update the UI
               if (onGeorefComplete) {
-                onGeorefComplete(result);
+                onGeorefComplete(result, { utilityType: undefined }); // Will be set by upload-tab
               }
             } else if (type === "LineString" || type === "Polygon") {
               const coordinates = type === "LineString" 
@@ -655,7 +710,7 @@ export default function EsriMap({
               // Don't save here - let upload-tab.tsx save with file URLs
               // Just call the callback to update the UI
               if (onGeorefComplete) {
-                onGeorefComplete(result);
+                onGeorefComplete(result, { utilityType: undefined }); // Will be set by upload-tab
               }
             }
 
@@ -675,7 +730,7 @@ export default function EsriMap({
               // Don't save here - let upload-tab.tsx save with file URLs
               // Just call the callback to update the UI
               if (onGeorefComplete) {
-                onGeorefComplete(result);
+                onGeorefComplete(result, { utilityType: undefined }); // Will be set by upload-tab
               }
             }
           };
@@ -734,127 +789,7 @@ export default function EsriMap({
 
               // Polygon will be handled by separate useEffect to avoid re-initialization
 
-              // Draw bubbles (markers) - only if markersGroup is ready
-              if (markersGroupRef.current) {
-                markersGroupRef.current.clearLayers();
-                bubbles.forEach((bubble) => {
-                  const marker = L.marker([bubble.position.lat, bubble.position.lng], {
-                    icon: L.divIcon({
-                      className: "custom-marker",
-                      html: `<div style="background-color: #ff6600; width: ${bubble.size || 20}px; height: ${bubble.size || 20}px; border-radius: 50%; border: 2px solid white;"></div>`,
-                      iconSize: [bubble.size || 20, bubble.size || 20],
-                    }),
-                  });
-                  
-                  // Format record ID from bubble ID (extract numeric part if available)
-                  const recordIdMatch = bubble.id.match(/\d+/);
-                  const recordId = recordIdMatch ? `R-${String(recordIdMatch[0]).padStart(5, '0')}` : bubble.id;
-                  
-                  // Handle file path/URL for bubbles (similar to ArcGIS records)
-                  // fileUrl may contain: full signed URL (legacy) OR storage path (new)
-                  // filePath may contain: just the filename/path within bucket
-                  let bubbleFilePath = bubble.filePath;
-                  const bubbleFileUrl = bubble.fileUrl;
-                  
-                  // If fileUrl is a storage path (contains "Records_Private/"), extract the path
-                  if (bubbleFileUrl && bubbleFileUrl.includes("Records_Private/")) {
-                    bubbleFilePath = bubbleFileUrl.replace("Records_Private/", "");
-                  } else if (bubbleFileUrl && !bubbleFileUrl.startsWith("http")) {
-                    // fileUrl is a path (not a URL)
-                    bubbleFilePath = bubbleFileUrl;
-                  }
-                  
-                  // Create popup using React component with the same logic as existing records
-                  const popupContent = renderReactPopup(
-                    <RecordPopup
-                      recordId={recordId}
-                      source={bubble.source || bubble.recordTypePath}
-                      processedDate={bubble.processedDate || bubble.uploadedAt}
-                      uploadedBy={bubble.uploadedBy}
-                      filePath={bubbleFilePath}
-                      fileUrl={bubbleFileUrl && bubbleFileUrl.startsWith("http") ? bubbleFileUrl : undefined}
-                      onViewFile={async () => {
-                        if (bubbleFilePath) {
-                          try {
-                            // Reconstruct signed URL from storage path
-                            const signedUrl = await getSignedUrl(bubbleFilePath, 3600);
-                            console.log("🔗 Signed URL (runtime):", signedUrl.substring(0, 50) + "...");
-                            window.open(signedUrl, "_blank");
-                          } catch (error: any) {
-                            console.error("Error generating signed URL:", error);
-                            alert(`Failed to open file: ${error.message}`);
-                          }
-                        } else if (bubbleFileUrl && bubbleFileUrl.startsWith("http")) {
-                          // Legacy: full URL stored directly
-                          window.open(bubbleFileUrl, "_blank");
-                        }
-                      }}
-                      onDownload={async () => {
-                        if (bubbleFilePath) {
-                          try {
-                            // Reconstruct signed URL from storage path
-                            const signedUrl = await getSignedUrl(bubbleFilePath, 3600);
-                            console.log("🔗 Signed URL (runtime):", signedUrl.substring(0, 50) + "...");
-                            const link = document.createElement("a");
-                            link.href = signedUrl;
-                            link.download = bubble.fileName || "download";
-                            document.body.appendChild(link);
-                            link.click();
-                            document.body.removeChild(link);
-                          } catch (error: any) {
-                            console.error("Error generating signed URL:", error);
-                            alert(`Failed to download file: ${error.message}`);
-                          }
-                        } else if (bubbleFileUrl && bubbleFileUrl.startsWith("http")) {
-                          // Legacy: full URL stored directly
-                          const link = document.createElement("a");
-                          link.href = bubbleFileUrl;
-                          link.download = bubble.fileName || "download";
-                          document.body.appendChild(link);
-                          link.click();
-                          document.body.removeChild(link);
-                        }
-                      }}
-                      onUploadedByClick={(name) => {
-                        // TODO: Implement user profile/view functionality
-                        console.log("View profile for:", name);
-                      }}
-                    />
-                  );
-                  
-                  marker.bindPopup(popupContent, {
-                    className: "custom-popup",
-                    maxWidth: 400,
-                  });
-                  markersGroupRef.current.addLayer(marker);
-                });
-              }
-
-              // Draw shapes (lines and polygons) - only if shapesGroup is ready
-              if (shapesGroupRef.current) {
-                shapesGroupRef.current.clearLayers();
-                shapes.forEach((shape) => {
-                  if (shape.type === "LineString") {
-                    const latlngs = shape.path.map((p) => [p.lat, p.lng] as [number, number]);
-                    const line = L.polyline(latlngs, {
-                      color: shape.strokeColor || "#ff6600",
-                      weight: 3,
-                    });
-                    line.bindPopup(`<b>${shape.title}</b><br>${shape.description}`);
-                    shapesGroupRef.current.addLayer(line);
-                  } else if (shape.type === "Polygon") {
-                    const latlngs = shape.path.map((p) => [p.lat, p.lng] as [number, number]);
-                    const poly = L.polygon(latlngs, {
-                      color: shape.strokeColor || "#ff6600",
-                      fillColor: shape.fillColor || "#ff6600",
-                      weight: 2,
-                      fillOpacity: 0.2,
-                    });
-                    poly.bindPopup(`<b>${shape.title}</b><br>${shape.description}`);
-                    shapesGroupRef.current.addLayer(poly);
-                  }
-                });
-              }
+              // Bubbles and shapes will be handled by separate useEffect to react to prop changes
             } catch (err) {
               console.error("Error setting up event listeners and drawing features:", err);
             }
@@ -1053,6 +988,247 @@ export default function EsriMap({
       workAreas.off("click", handleWorkAreaClick);
     };
   }, [enableWorkAreaSelection, onWorkAreaSelected]);
+
+  // 🔄 Refresh bubbles and shapes whenever they change (reactive layer refresh)
+  useEffect(() => {
+    const refreshMapLayers = () => {
+      const map = mapRef.current;
+      if (!map) return;
+
+      // Clear existing bubbles and shapes
+      if (markersGroupRef.current) {
+        markersGroupRef.current.clearLayers();
+      }
+      if (shapesGroupRef.current) {
+        shapesGroupRef.current.clearLayers();
+      }
+
+    // Draw bubbles (markers) with APWA colors
+    if (markersGroupRef.current && bubbles.length > 0) {
+      bubbles.forEach((bubble) => {
+        // Extract utility type from recordTypePath (format: "UtilityType / RecordType")
+        let utilityType: string | undefined;
+        if (bubble.recordTypePath) {
+          const parts = bubble.recordTypePath.split("/").map((p) => p.trim());
+          utilityType = parts[0] || undefined;
+        }
+        const color = getApwaColor(utilityType);
+
+        const marker = L.marker([bubble.position.lat, bubble.position.lng], {
+          icon: L.divIcon({
+            className: "custom-marker",
+            html: `<div style="background-color: ${color}; width: ${bubble.size || 20}px; height: ${bubble.size || 20}px; border-radius: 50%; border: 2px solid white;"></div>`,
+            iconSize: [bubble.size || 20, bubble.size || 20],
+          }),
+        });
+        
+        // Format record ID from bubble ID (extract numeric part if available)
+        const recordIdMatch = bubble.id.match(/\d+/);
+        const recordId = recordIdMatch ? `R-${String(recordIdMatch[0]).padStart(5, '0')}` : bubble.id;
+        
+        // Handle file path/URL for bubbles (similar to ArcGIS records)
+        // fileUrl may contain: full signed URL (legacy) OR storage path (new)
+        // filePath may contain: just the filename/path within bucket
+        let bubbleFilePath = bubble.filePath;
+        const bubbleFileUrl = bubble.fileUrl;
+        
+        // If fileUrl is a storage path (contains "Records_Private/"), extract the path
+        if (bubbleFileUrl && bubbleFileUrl.includes("Records_Private/")) {
+          bubbleFilePath = bubbleFileUrl.replace("Records_Private/", "");
+        } else if (bubbleFileUrl && !bubbleFileUrl.startsWith("http")) {
+          // fileUrl is a path (not a URL)
+          bubbleFilePath = bubbleFileUrl;
+        }
+        
+        // Extract utility type and record type from recordTypePath for popup
+        let utilityTypeForPopup: string | undefined;
+        let recordTypeForPopup: string | undefined;
+        if (bubble.recordTypePath) {
+          const parts = bubble.recordTypePath.split("/").map((p) => p.trim());
+          utilityTypeForPopup = parts[0] || undefined;
+          recordTypeForPopup = parts[1] || undefined;
+        }
+        
+        // Create popup using React component with fresh data
+        const popupContent = renderReactPopup(
+          <RecordPopup
+            recordId={recordId}
+            source={bubble.source || bubble.recordTypePath}
+            processedDate={bubble.processedDate || bubble.uploadedAt}
+            uploadedBy={bubble.uploadedBy}
+            utilityType={utilityTypeForPopup}
+            recordType={recordTypeForPopup}
+            organization={bubble.orgName}
+            filePath={bubbleFilePath}
+            fileUrl={bubbleFileUrl && bubbleFileUrl.startsWith("http") ? bubbleFileUrl : undefined}
+            onViewFile={async () => {
+              if (bubbleFilePath) {
+                try {
+                  // Reconstruct signed URL from storage path
+                  const signedUrl = await getSignedUrl(bubbleFilePath, 3600);
+                  console.log("🔗 Signed URL (runtime):", signedUrl.substring(0, 50) + "...");
+                  window.open(signedUrl, "_blank");
+                } catch (error: any) {
+                  console.error("Error generating signed URL:", error);
+                  alert(`Failed to open file: ${error.message}`);
+                }
+              } else if (bubbleFileUrl && bubbleFileUrl.startsWith("http")) {
+                // Legacy: full URL stored directly
+                window.open(bubbleFileUrl, "_blank");
+              }
+            }}
+            onDownload={async () => {
+              if (bubbleFilePath) {
+                try {
+                  // Reconstruct signed URL from storage path
+                  const signedUrl = await getSignedUrl(bubbleFilePath, 3600);
+                  console.log("🔗 Signed URL (runtime):", signedUrl.substring(0, 50) + "...");
+                  const link = document.createElement("a");
+                  link.href = signedUrl;
+                  link.download = bubble.fileName || "download";
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                } catch (error: any) {
+                  console.error("Error generating signed URL:", error);
+                  alert(`Failed to download file: ${error.message}`);
+                }
+              } else if (bubbleFileUrl && bubbleFileUrl.startsWith("http")) {
+                // Legacy: full URL stored directly
+                const link = document.createElement("a");
+                link.href = bubbleFileUrl;
+                link.download = bubble.fileName || "download";
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+              }
+            }}
+            onUploadedByClick={(name) => {
+              // TODO: Implement user profile/view functionality
+              console.log("View profile for:", name);
+            }}
+          />
+        );
+        
+        marker.bindPopup(popupContent, {
+          className: "custom-popup",
+          maxWidth: 400,
+        });
+        markersGroupRef.current.addLayer(marker);
+      });
+    }
+
+    // Draw shapes (lines and polygons) with APWA colors
+    if (shapesGroupRef.current && shapes.length > 0) {
+      shapes.forEach((shape) => {
+        // Use provided colors or fallback to default
+        const strokeColor = shape.strokeColor || getApwaColor(undefined);
+        const fillColor = shape.fillColor || strokeColor;
+
+        if (shape.type === "LineString") {
+          const latlngs = shape.path.map((p) => [p.lat, p.lng] as [number, number]);
+          const line = L.polyline(latlngs, {
+            color: strokeColor,
+            weight: 3,
+            opacity: 1,
+          });
+          line.bindPopup(`<b>${shape.title}</b><br>${shape.description}`);
+          shapesGroupRef.current.addLayer(line);
+        } else if (shape.type === "Polygon") {
+          const latlngs = shape.path.map((p) => [p.lat, p.lng] as [number, number]);
+          const poly = L.polygon(latlngs, {
+            color: strokeColor,
+            fillColor: fillColor,
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.5,
+          });
+          poly.bindPopup(`<b>${shape.title}</b><br>${shape.description}`);
+          shapesGroupRef.current.addLayer(poly);
+        }
+      });
+    }
+    };
+
+    // Run immediately when bubbles/shapes change
+    refreshMapLayers();
+
+    // Also listen for explicit refresh events (for initial load race condition)
+    window.addEventListener("records-refresh", refreshMapLayers);
+
+    return () => {
+      window.removeEventListener("records-refresh", refreshMapLayers);
+    };
+  }, [bubbles, shapes]);
+
+  // 🔄 Fix initial render race condition - debounce until data is loaded
+  useEffect(() => {
+    // Only trigger if we have data to render
+    if ((bubbles.length === 0 && shapes.length === 0) || !mapRef.current) return;
+
+    // Wait until next tick so Leaflet map + layers are ready
+    const timer = setTimeout(() => {
+      // Trigger a forced refresh event for layers and popups
+      const event = new Event("records-refresh");
+      window.dispatchEvent(event);
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [bubbles.length, shapes.length]);
+
+  // 🔄 Refresh ArcGIS records layer when needed (triggered by external refresh calls)
+  useEffect(() => {
+    const recordsLayer = recordsLayerRefInternal.current;
+    if (recordsLayer) {
+      // Refresh the layer to get latest data from ArcGIS
+      try {
+        recordsLayer.refresh();
+      } catch (err) {
+        console.warn("Could not refresh records layer:", err);
+      }
+    }
+  }, [bubbles.length, shapes.length]); // Refresh when record count changes
+
+  // 🔍 Sanity check: Log when record layers successfully bind (for debugging)
+  useEffect(() => {
+    if (process.env.NODE_ENV === "development") {
+      const bubbleCount = bubbles.length;
+      const shapeCount = shapes.length;
+      
+      if (bubbleCount > 0 || shapeCount > 0) {
+        console.log(`✅ Map layers bound: ${bubbleCount} bubbles, ${shapeCount} shapes`);
+        
+        // Log utility type distribution for debugging
+        const utilityTypes = new Map<string, number>();
+        bubbles.forEach((bubble) => {
+          if (bubble.recordTypePath) {
+            const parts = bubble.recordTypePath.split("/").map((p) => p.trim());
+            const utilityType = parts[0] || "unknown";
+            utilityTypes.set(utilityType, (utilityTypes.get(utilityType) || 0) + 1);
+          }
+        });
+        
+        if (utilityTypes.size > 0) {
+          console.log("📊 Utility type distribution:", Object.fromEntries(utilityTypes));
+        }
+      }
+    }
+  }, [bubbles, shapes]);
+
+  // Cleanup effect for proper map teardown on hot reloads
+  useEffect(() => {
+    return () => {
+      if (mapRef.current) {
+        try {
+          mapRef.current.off();
+          mapRef.current.remove();
+        } catch (err) {
+          console.warn("Error during map cleanup:", err);
+        }
+        mapRef.current = null;
+      }
+    };
+  }, []);
 
   return (
     <div

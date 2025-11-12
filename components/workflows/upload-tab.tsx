@@ -30,6 +30,7 @@ import { UtilityOverviewPanel } from "@/components/utility-overview-panel"
 import type { UtilityType, RecordType } from "@/components/dual-record-selector"
 import { addFeatureToLayer } from "@/lib/esriUtils"
 import { getUtilityColorsFromPath, getUtilityColorsFromUtilityType } from "@/lib/utility-colors"
+import { getApwaColor } from "@/lib/apwaColors"
 import { formatDistanceToNow } from "date-fns"
 import { cn } from "@/lib/utils"
 import type { GeometryType, GeorefMode, PendingDropMeta } from "@/lib/types"
@@ -314,8 +315,8 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
     })
 
     // Use APWA colors based on utility type
-    const c = getUtilityColorsFromUtilityType(selectedUtilityType)
-    setGeorefColor(c.stroke)
+    const apwaColor = getApwaColor(selectedUtilityType)
+    setGeorefColor(apwaColor)
 
     // Set the georeferencing mode based on selected geometry type
     const geoMode: GeorefMode = selectedGeometryType
@@ -334,8 +335,8 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
     setTarget(payload)
     const rec = records.find((r) => r.id === payload.recordId)
     if (rec && selectedType?.utilityType) {
-      const c = getUtilityColorsFromUtilityType(selectedType.utilityType)
-      setGeorefColor(c.stroke)
+      const apwaColor = getApwaColor(selectedType.utilityType)
+      setGeorefColor(apwaColor)
     } else {
       setGeorefColor(undefined)
     }
@@ -351,9 +352,9 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
     setRedrawTarget(payload)
 
     // Set color based on record type
-    const utilityType = record.recordTypePath.split(" / ")[0].toLowerCase()
-    const colors = getUtilityColorsFromUtilityType(utilityType)
-    setGeorefColor(colors.stroke)
+    const utilityType = record.recordTypePath.split(" / ")[0]
+    const apwaColor = getApwaColor(utilityType)
+    setGeorefColor(apwaColor)
 
     // Set geometry mode based on existing geometry
     if (file.geomType === "Point") {
@@ -413,6 +414,7 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
 
   async function handleGeorefComplete(
     result: { type: "Point"; point: LatLng } | { type: "LineString" | "Polygon"; path: LatLng[] },
+    metadata?: { utilityType?: string; fileUrl?: string; filePath?: string; notes?: string }
   ) {
     if (redrawTarget) {
       const now = new Date().toISOString()
