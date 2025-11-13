@@ -7,6 +7,7 @@ import { loadStagedRecords, saveStagedRecords } from "@/lib/storage"
 import BottomDrawer from "@/components/BottomDrawer"
 import { Button } from "@/components/ui/button"
 import { List } from "lucide-react"
+import { fetchAllRecordsFromEsri, fetchAllWorkAreasFromEsri } from "@/lib/fetchAllEsriData"
 
 type PreloadedRequest = {
   createdAt: string
@@ -36,7 +37,7 @@ export default function Page() {
     records?: any[]
   } | null>(null)
 
-  // Temporary data — later will come from Esri + Upload Flow
+  // Esri data for drawer
   const [workAreas, setWorkAreas] = useState<
     Array<{
       id: string
@@ -49,6 +50,31 @@ export default function Page() {
       records?: any[]
     }>
   >([])
+
+  // Load Esri data on mount
+  useEffect(() => {
+    // Don't run during SSR
+    if (typeof window === "undefined") return;
+
+    async function loadData() {
+      try {
+        const [r, wa] = await Promise.all([
+          fetchAllRecordsFromEsri(),
+          fetchAllWorkAreasFromEsri(),
+        ]);
+
+        console.log("📥 Loaded records:", r.length);
+        console.log("📥 Loaded work areas:", wa.length);
+
+        setRecords(r);
+        setWorkAreas(wa);
+      } catch (err) {
+        console.error("❌ Failed to load Esri data:", err);
+      }
+    }
+
+    loadData();
+  }, []);
 
   useEffect(() => {
     const initial = loadStagedRecords()

@@ -109,17 +109,29 @@ export default function UploadTab({ records, setRecords, preloadedPolygon, prelo
     const b: MapBubble[] = []
     const s: GeorefShape[] = []
 
-    const getLabelFromPath = (path: string) => {
-      const parts = path.split("/").map((p) => p.trim())
-      return parts[2] || path
+    const getLabelFromPath = (path?: string) => {
+      if (!path || typeof path !== "string") return "Unnamed Record";
+
+      const parts = path.split("/").map((p) => p.trim());
+      return parts[parts.length - 1] || path;
     }
 
     for (const rec of records) {
-      // Try to extract utility type from record path or use fallback
-      const colors = getUtilityColorsFromPath(rec.recordTypePath)
-      const recordLabel = getLabelFromPath(rec.recordTypePath)
+      // Determine record label - handle both upload records and Esri records
+      const recordLabel = getLabelFromPath(
+        rec.recordTypePath || 
+        rec.file_url || 
+        rec.attributes?.record_type || 
+        "Record"
+      );
 
-      for (const f of rec.files) {
+      // Try to extract utility type from record path or use fallback
+      const colors = getUtilityColorsFromPath(rec.recordTypePath || rec.attributes?.record_type || "")
+
+      // Safely handle records with or without files
+      const fileList = Array.isArray(rec.files) ? rec.files : [];
+
+      for (const f of fileList) {
         if (f.status !== "Georeferenced") continue
 
         // Generate file link - store filePath for generating fresh signed URLs
@@ -218,7 +230,7 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
     return { bubbles: b, shapes: s }
   }, [records])
 
-  const totalFiles = useMemo(() => records.reduce((acc, r) => acc + r.files.length, 0), [records])
+  const totalFiles = useMemo(() => records.reduce((acc, r) => acc + (Array.isArray(r.files) ? r.files.length : 0), 0), [records])
 
   useEffect(() => {
     if (preloadedPolygon && preloadedPolygon.length >= 3) {
@@ -248,7 +260,7 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
       return
     }
 
-    const hasUploadedFiles = records.some((record) => record.files && record.files.length > 0)
+    const hasUploadedFiles = records.some((record) => Array.isArray(record.files) && record.files.length > 0)
     if (!hasUploadedFiles) {
       toast({
         title: "Upload files first",
@@ -349,7 +361,7 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
 
   function startRedrawGeometry(payload: { recordId: string; fileId: string }) {
     const record = records.find((r) => r.id === payload.recordId)
-    const file = record?.files.find((f) => f.id === payload.fileId)
+    const file = Array.isArray(record?.files) ? record.files.find((f) => f.id === payload.fileId) : undefined
 
     if (!record || !file) return
 
@@ -427,9 +439,10 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
       setRecords((prev) =>
         prev.map((record) => {
           if (record.id === redrawTarget.recordId) {
+            const fileList = Array.isArray(record.files) ? record.files : [];
             return {
               ...record,
-              files: record.files.map((file) => {
+              files: fileList.map((file) => {
                 if (file.id === redrawTarget.fileId) {
                   if (result.type === "Point") {
                     return {
@@ -607,7 +620,7 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
             recordTypePath: selectedType
               ? `${selectedType.utilityType} / ${selectedType.recordType}`
               : r.recordTypePath,
-            files: r.files.map((f) =>
+            files: Array.isArray(r.files) ? r.files.map((f) =>
               f.id === target.fileId
                 ? {
                     ...f,
@@ -623,7 +636,7 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
                     filePath: f.filePath,
                   }
                 : f,
-            ),
+            ) : [],
           }
         }),
       )
@@ -764,7 +777,7 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
           ...r,
           // Update the record type path to include utility type if we have selectedType
           recordTypePath: selectedType ? `${selectedType.utilityType} / ${selectedType.recordType}` : r.recordTypePath,
-          files: r.files.map((f) =>
+          files: Array.isArray(r.files) ? r.files.map((f) =>
             f.id === target.fileId
               ? {
                   ...f,
@@ -780,7 +793,7 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
                   filePath: f.filePath,
                 }
               : f,
-          ),
+          ) : [],
         }
       }),
     )
@@ -1350,7 +1363,7 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
             </CardContent>
           </Card>
 
-          {records.some((r) => r.files.some((f) => f.status === "Georeferenced")) && (
+          {records.some((r) => Array.isArray(r.files) && r.files.some((f) => f.status === "Georeferenced")) && (
             <Card className="relative z-10 bg-white">
               <CardHeader>
                 <CardTitle className="text-sm">Quick Actions</CardTitle>
@@ -1359,8 +1372,8 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
                 <Button
                   variant="outline"
                   onClick={() => {
-                    const georefRecord = records.find((r) => r.files.some((f) => f.status === "Georeferenced"))
-                    if (georefRecord) {
+                    const georefRecord = records.find((r) => Array.isArray(r.files) && r.files.some((f) => f.status === "Georeferenced"))
+                    if (georefRecord && Array.isArray(georefRecord.files)) {
                       const georeferencedFile = georefRecord.files.find((f) => f.status === "Georeferenced")
                       if (georeferencedFile) {
                         startRedrawGeometry({ recordId: georefRecord.id, fileId: georeferencedFile.id })

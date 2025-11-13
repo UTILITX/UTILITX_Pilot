@@ -23,18 +23,49 @@ const APWA_UTILITIES = [
 
 export function UtilityOverviewPanel({ records, className }: Props) {
   const utilityCounts = React.useMemo(() => {
-    // Count records by utility type
+    // Initialize counts map
     const counts = new Map<string, number>()
-
-    // Initialize all utilities with 0
     APWA_UTILITIES.forEach((utility) => {
       counts.set(utility.key, 0)
     })
 
+    // Early return if no records
+    if (!records || !Array.isArray(records) || records.length === 0) {
+      return counts
+    }
+
     // Count actual records
     records.forEach((record) => {
-      // Extract utility type from record path (e.g., "Local Municipality / Water / As-Builts" -> "water")
-      const pathParts = record.recordTypePath.split("/").map((p) => p.trim().toLowerCase())
+      // Skip null/undefined records
+      if (!record) return
+
+      // Handle Esri records (no recordTypePath) - extract from attributes
+      if (!record.recordTypePath) {
+        // Try to get utility type from Esri attributes
+        const esriUtilityType = (record as any).attributes?.utility_type
+        if (esriUtilityType && typeof esriUtilityType === "string") {
+          const utilityKey = esriUtilityType.toLowerCase().trim()
+          if (counts.has(utilityKey)) {
+            counts.set(utilityKey, (counts.get(utilityKey) || 0) + 1)
+          }
+        }
+        return // Skip path-based processing for Esri records
+      }
+
+      // Handle upload-session (folder-based) records
+      // SAFELY extract utility type from record path
+      const recordPath = record.recordTypePath
+      
+      // Triple-check that recordPath is a valid string before any operations
+      if (!recordPath || typeof recordPath !== "string") {
+        return // Skip if not a valid string
+      }
+
+      // Now safe to split
+      const safePath = recordPath.trim()
+      if (!safePath) return // Skip empty strings
+
+      const pathParts = safePath.split("/").map((p) => p.trim().toLowerCase()).filter(Boolean)
 
       // Look for utility type in the path
       let utilityKey: string | null = null
@@ -69,8 +100,8 @@ export function UtilityOverviewPanel({ records, className }: Props) {
     return counts
   }, [records])
 
-  const totalRecords = records.length
-  const recordsWithFiles = records.filter((r) => r.files.length > 0).length
+  const totalRecords = records?.length || 0
+  const recordsWithFiles = records?.filter((r) => Array.isArray(r.files) && r.files.length > 0).length || 0
 
   return (
     <Card className={className}>
