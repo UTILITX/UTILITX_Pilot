@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useMemo } from "react";
 import {
   Table,
   TableBody,
@@ -17,6 +18,41 @@ interface RecordsTableProps {
 }
 
 export function RecordsTable({ records, onZoomToRecord }: RecordsTableProps) {
+  // Filter state
+  const [utilityFilter, setUtilityFilter] = useState<string>("");
+  const [typeFilter, setTypeFilter] = useState<string>("");
+  const [geometryFilter, setGeometryFilter] = useState<string>("");
+  const [orgFilter, setOrgFilter] = useState<string>("");
+  const [hasFileFilter, setHasFileFilter] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+
+  // Create a derived filtered list
+  const filteredRecords = useMemo(() => {
+    return records.filter((r) => {
+      if (utilityFilter && r.utilityType !== utilityFilter) return false;
+      if (typeFilter && r.recordType !== typeFilter) return false;
+      if (geometryFilter && r.geometryType !== geometryFilter) return false;
+      if (orgFilter && r.organization !== orgFilter) return false;
+
+      if (hasFileFilter === "yes" && !r.fileUrl) return false;
+      if (hasFileFilter === "no" && r.fileUrl) return false;
+
+      if (searchQuery) {
+        const s = searchQuery.toLowerCase();
+        // Build searchable text from available fields
+        const recordName = r.name || r.fileName || 
+          (r.recordType && r.utilityType 
+            ? `${r.utilityType} / ${r.recordType}` 
+            : "Record");
+        const target = `${recordName} ${r.recordType || ""} ${r.utilityType || ""} ${r.organization || ""}`
+          .toLowerCase();
+        if (!target.includes(s)) return false;
+      }
+
+      return true;
+    });
+  }, [records, utilityFilter, typeFilter, geometryFilter, orgFilter, hasFileFilter, searchQuery]);
+
   if (!records || records.length === 0) {
     return <p className="text-sm text-gray-500">No records yet.</p>;
   }
@@ -69,7 +105,7 @@ export function RecordsTable({ records, onZoomToRecord }: RecordsTableProps) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {records.map((record) => {
+          {filteredRecords.map((record) => {
             // Create a truly unique key: use objectId if available, otherwise use id
             // Combine with geometryType to ensure uniqueness across layers
             const uniqueKey = record.objectId 
