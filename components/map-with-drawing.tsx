@@ -56,6 +56,7 @@ type MapWithDrawingProps = {
   focusZoom?: number;
   center?: LatLng;
   zoom?: number;
+  zoomToFeature?: any | null;
 };
 
 export default function MapWithDrawing({
@@ -78,6 +79,7 @@ export default function MapWithDrawing({
   focusZoom = 16,
   center,
   zoom,
+  zoomToFeature,
 }: MapWithDrawingProps) {
   return (
     <div className="h-full w-full flex flex-col">
@@ -101,6 +103,7 @@ export default function MapWithDrawing({
         focusZoom={focusZoom}
         center={center}
         zoom={zoom}
+        zoomToFeature={zoomToFeature}
       />
     </div>
   );

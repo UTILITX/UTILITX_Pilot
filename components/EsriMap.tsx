@@ -19,6 +19,7 @@ import { WorkAreaPopup } from "@/components/WorkAreaPopup";
 import { RecordPopup } from "@/components/RecordPopup";
 import { getApwaColor } from "@/lib/apwaColors";
 import { getFeatureGeometry } from "@/lib/geoUtils";
+import { zoomToEsriFeature } from "@/lib/zoomToFeature";
 
 // Note: Supabase client initialization is handled via singleton pattern in lib/supabase-client.ts
 // This prevents multiple GoTrueClient instances and eliminates duplication warnings
@@ -60,6 +61,7 @@ type EsriMapProps = {
   focusZoom?: number;
   center?: LatLng;
   zoom?: number;
+  zoomToFeature?: any | null; // Esri feature geometry to zoom to
 };
 
 export default function EsriMap({
@@ -82,6 +84,7 @@ export default function EsriMap({
   focusZoom = 16,
   center,
   zoom,
+  zoomToFeature,
 }: EsriMapProps) {
   const mapRef = useRef<L.Map | null>(null);
   const workAreasLayerRef = useRef<any>(null);
@@ -820,6 +823,17 @@ export default function EsriMap({
             }
           }, 600);
 
+          // Handle zoom to feature geometry
+          setTimeout(() => {
+            try {
+              if (zoomToFeature?.geometry && map.getContainer()) {
+                zoomToEsriFeature(map, zoomToFeature.geometry);
+              }
+            } catch (err) {
+              console.error("Error zooming to feature:", err);
+            }
+          }, 700);
+
           // Handle file drops - wait for map to be ready
           setTimeout(() => {
             try {
@@ -872,7 +886,20 @@ export default function EsriMap({
     focusZoom,
     center,
     zoom,
+    zoomToFeature,
   ]);
+
+  // Separate effect to handle zoom to feature updates without re-initializing the map
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !zoomToFeature?.geometry) return;
+
+    try {
+      zoomToEsriFeature(map, zoomToFeature.geometry);
+    } catch (err) {
+      console.error("Error zooming to feature:", err);
+    }
+  }, [zoomToFeature]);
 
   // Separate effect to handle polygon updates without re-initializing the map
   useEffect(() => {

@@ -51,9 +51,10 @@ type Props = {
   setRecords: React.Dispatch<React.SetStateAction<RequestRecord[]>>
   preloadedPolygon?: LatLng[] | null
   preloadedAreaSqMeters?: number | null
+  zoomToFeature?: any | null
 }
 
-export default function UploadTab({ records, setRecords, preloadedPolygon, preloadedAreaSqMeters }: Props) {
+export default function UploadTab({ records, setRecords, preloadedPolygon, preloadedAreaSqMeters, zoomToFeature }: Props) {
   const { toast } = useToast()
   const [polygon, setPolygon] = useState<LatLng[] | null>(null)
   const [areaSqMeters, setAreaSqMeters] = useState<number | null>(null)
@@ -1428,6 +1429,7 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
                 onDropFilesAt={handleDropFilesAt}
                 focusPoint={focusPoint}
                 focusZoom={16}
+                zoomToFeature={zoomToFeature}
               />
             </div>
 

@@ -25,6 +25,7 @@ export function RecordsTable({ records, onZoomToRecord }: RecordsTableProps) {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead>Geometry</TableHead>
             <TableHead>Record</TableHead>
             <TableHead>Type</TableHead>
             <TableHead>Utility</TableHead>
@@ -33,23 +34,36 @@ export function RecordsTable({ records, onZoomToRecord }: RecordsTableProps) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {records.map((record) => (
+          {records.map((record, index) => (
             <TableRow
-              key={record.id}
+              key={record.id || `record-${index}`}
               className="cursor-pointer hover:bg-gray-100"
               onClick={() => onZoomToRecord(record)}
             >
-              <TableCell>{record.name || record.fileName || "Record"}</TableCell>
-
               <TableCell>
-                <Badge variant="outline">
-                  {record.record_type || "Unknown"}
+                <Badge variant="secondary" className="text-xs">
+                  {record.geometryType || record.geometry?.type || "Point"}
                 </Badge>
               </TableCell>
 
-              <TableCell>{record.utility_type || "-"}</TableCell>
+              <TableCell>
+                {record.name || record.fileName || 
+                 (record.recordType && record.utilityType 
+                   ? `${record.utilityType} / ${record.recordType}` 
+                   : record.fileUrl 
+                     ? `Record ${String(record.id || '').slice(0, 8)}` 
+                     : "Record")}
+              </TableCell>
 
-              <TableCell>{record.organization || "-"}</TableCell>
+              <TableCell>
+                <Badge variant="outline">
+                  {record.recordType ?? record.record_type ?? "–"}
+                </Badge>
+              </TableCell>
+
+              <TableCell>{record.utilityType ?? record.utility_type ?? "–"}</TableCell>
+
+              <TableCell>{record.organization ?? "–"}</TableCell>
 
               <TableCell className="text-right">
                 <button

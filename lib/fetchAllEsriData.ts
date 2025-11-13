@@ -6,33 +6,131 @@ const RECORDS_LINE = process.env.NEXT_PUBLIC_RECORDS_LINE_LAYER_URL!;
 const RECORDS_POLYGON = process.env.NEXT_PUBLIC_RECORDS_POLYGON_LAYER_URL!;
 const WORKAREAS = process.env.NEXT_PUBLIC_WORKAREA_LAYER_URL!;
 
-export async function fetchAllRecordsFromEsri() {
+export interface IndexedRecord {
+  id: string;
+  geometryType: "Point" | "LineString" | "Polygon";
+  geometry: any;
+  recordType: string | null;
+  utilityType: string | null;
+  organization: string | null;
+  notes: string | null;
+  fileUrl: string | null;
+}
+
+export async function fetchAllRecordsFromEsri(): Promise<IndexedRecord[]> {
   const [points, lines, polygons] = await Promise.all([
     queryEsriLayer(RECORDS_POINT),
     queryEsriLayer(RECORDS_LINE),
     queryEsriLayer(RECORDS_POLYGON),
   ]);
 
-  const normalize = (f: any) => ({
-    id: f.attributes?.record_id || f.attributes?.OBJECTID,
-    geometryType: f.geometry?.type,
-    attributes: f.attributes,
-    geometry: f.geometry,
+  // Store original features with attributes for sorting
+  const allFeatures: Array<{ record: IndexedRecord; creationDate?: string }> = [];
+
+  const normalize = (f: any): IndexedRecord => {
+    // Extract attributes - ensure we're reading from the correct location
+    const attrs = f.attributes || {};
+    
+    // Debug: log attributes to verify they exist (only log first few to avoid spam)
+    if (process.env.NODE_ENV === "development" && allFeatures.length < 3) {
+      console.log("🔍 Feature attributes keys:", Object.keys(attrs));
+      console.log("🔍 Sample attribute values:", {
+        record_type: attrs.record_type,
+        utility_type: attrs.utility_type,
+        source: attrs.source,
+        organization: attrs.organization,
+        notes: attrs.notes,
+        file_url: attrs.file_url,
+        Creator: attrs.Creator,
+        processed_date: attrs.processed_date,
+      });
+    }
+    
+    // Get geometry type from feature geometry or geometry_type attribute
+    // ArcGIS REST API returns geometry in ArcGIS format, not GeoJSON
+    let geomType: string | null = null;
+    
+    // First try the geometry_type attribute
+    if (attrs.geometry_type) {
+      geomType = attrs.geometry_type;
+    }
+    // If geometry has a type field (GeoJSON format), use it
+    else if (f.geometry?.type) {
+      geomType = f.geometry.type;
+    }
+    // Otherwise, infer from ArcGIS geometry structure
+    else if (f.geometry) {
+      if (f.geometry.x !== undefined && f.geometry.y !== undefined) {
+        geomType = "Point";
+      } else if (f.geometry.paths !== undefined) {
+        geomType = "LineString";
+      } else if (f.geometry.rings !== undefined) {
+        geomType = "Polygon";
+      }
+    }
+    
+    // Validate and default if needed
+    if (!geomType || !["Point", "LineString", "Polygon"].includes(geomType)) {
+      console.warn(`⚠️ Invalid or missing geometry type: ${geomType}, using Point as default`);
+      geomType = "Point";
+    }
+    
+    const record: IndexedRecord = {
+      id: attrs.Record_ID ?? attrs.record_id ?? attrs.OBJECTID ?? String(f.OBJECTID ?? Date.now()),
+      geometryType: geomType as "Point" | "LineString" | "Polygon",
+      geometry: f.geometry,
+      // Extract attributes correctly - note: organization is saved as "source" in ArcGIS
+      recordType: attrs.record_type ?? attrs.Record_Type ?? null,
+      utilityType: attrs.utility_type ?? attrs.Utility_Type ?? null,
+      organization: attrs.source ?? attrs.organization ?? attrs.Organization ?? null,
+      notes: attrs.notes ?? attrs.Notes ?? null,
+      fileUrl: attrs.file_url ?? attrs.File_URL ?? null,
+    };
+
+    // Store creation date for sorting
+    const creationDate = attrs.CreationDate ?? attrs.created_date ?? attrs.processed_date ?? attrs.timestamp;
+    allFeatures.push({ record, creationDate });
+
+    return record;
+  };
+
+  // Normalize all features
+  points.forEach(normalize);
+  lines.forEach(normalize);
+  polygons.forEach(normalize);
+
+  // Sort by creation date (newest first) if available
+  allFeatures.sort((a, b) => {
+    if (!a.creationDate && !b.creationDate) return 0;
+    if (!a.creationDate) return 1;
+    if (!b.creationDate) return -1;
+    
+    return new Date(b.creationDate).getTime() - new Date(a.creationDate).getTime();
   });
 
-  return [
-    ...points.map(normalize),
-    ...lines.map(normalize),
-    ...polygons.map(normalize),
-  ];
+  // Return sorted records
+  return allFeatures.map(f => f.record);
 }
 
 export async function fetchAllWorkAreasFromEsri() {
   const features = await queryEsriLayer(WORKAREAS);
 
-  return features.map((f: any) => ({
-    id: f.attributes?.workarea_id || f.attributes?.OBJECTID,
-    attributes: f.attributes,
-    geometry: f.geometry,
-  }));
+  return features.map((f: any) => {
+    const attrs = f.attributes || {};
+    
+    return {
+      id: attrs.workarea_id || attrs.OBJECTID || String(f.OBJECTID || Date.now()),
+      // Map Esri attributes to unified work area model
+      name: attrs.name || attrs.work_area_name || attrs.title || `Work Area ${attrs.workarea_id || attrs.OBJECTID || ''}`,
+      region: attrs.region || attrs.area || undefined,
+      owner: attrs.owner || attrs.created_by || undefined,
+      createdBy: attrs.created_by || attrs.creator || attrs.owner || undefined,
+      date: attrs.created_date || attrs.timestamp || attrs.date || undefined,
+      notes: attrs.notes || attrs.description || undefined,
+      // Preserve geometry and raw attributes
+      geometry: f.geometry,
+      attributes: attrs, // Keep raw attributes for reference
+      records: [], // Will be populated if needed
+    };
+  });
 }

@@ -4,7 +4,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { RecordsTable } from "@/components/tables/RecordsTable";
 import { WorkAreasTable } from "@/components/tables/WorkAreasTable";
-import type { RequestRecord } from "@/lib/record-types";
+import type { IndexedRecord } from "@/lib/fetchAllEsriData";
 
 interface WorkArea {
   id: string;
@@ -20,11 +20,11 @@ interface WorkArea {
 interface BottomDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  records: RequestRecord[];
+  records: IndexedRecord[];
   workAreas: WorkArea[];
   selectedWorkArea: WorkArea | null;
   onSelectWorkArea: (id: string | null) => void;
-  onZoomToRecord: (record: RequestRecord) => void;
+  onZoomToRecord: (record: IndexedRecord) => void;
   onZoomToWorkArea: (workArea: WorkArea) => void;
 }
 

@@ -7,7 +7,7 @@ import { loadStagedRecords, saveStagedRecords } from "@/lib/storage"
 import BottomDrawer from "@/components/BottomDrawer"
 import { Button } from "@/components/ui/button"
 import { List } from "lucide-react"
-import { fetchAllRecordsFromEsri, fetchAllWorkAreasFromEsri } from "@/lib/fetchAllEsriData"
+import { fetchAllRecordsFromEsri, fetchAllWorkAreasFromEsri, type IndexedRecord } from "@/lib/fetchAllEsriData"
 
 type PreloadedRequest = {
   createdAt: string
@@ -19,13 +19,14 @@ type PreloadedRequest = {
 }
 
 export default function Page() {
-  // Shared records state for the unified workflow
+  // Shared records state for the unified workflow (used by UploadTab)
   const [records, setRecords] = useState<RequestRecord[]>([])
   const [preloadedPolygon, setPreloadedPolygon] = useState<LatLng[] | null>(null)
   const [preloadedAreaSqMeters, setPreloadedAreaSqMeters] = useState<number | null>(null)
 
   // Bottom drawer state
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [zoomToFeature, setZoomToFeature] = useState<any | null>(null)
   const [selectedWorkArea, setSelectedWorkArea] = useState<{
     id: string
     name: string
@@ -37,7 +38,8 @@ export default function Page() {
     records?: any[]
   } | null>(null)
 
-  // Esri data for drawer
+  // Esri data for drawer (separate from workflow records)
+  const [esriRecords, setEsriRecords] = useState<IndexedRecord[]>([])
   const [workAreas, setWorkAreas] = useState<
     Array<{
       id: string
@@ -51,7 +53,7 @@ export default function Page() {
     }>
   >([])
 
-  // Load Esri data on mount
+  // Load Esri data on mount (for Project Index drawer)
   useEffect(() => {
     // Don't run during SSR
     if (typeof window === "undefined") return;
@@ -63,10 +65,13 @@ export default function Page() {
           fetchAllWorkAreasFromEsri(),
         ]);
 
-        console.log("📥 Loaded records:", r.length);
-        console.log("📥 Loaded work areas:", wa.length);
+        console.log("📥 Loaded records from Esri:", r.length);
+        console.log("📥 Loaded work areas from Esri:", wa.length);
+        if (r.length > 0) {
+          console.log("🔎 Sample Esri record:", r[0]);
+        }
 
-        setRecords(r);
+        setEsriRecords(r);
         setWorkAreas(wa);
       } catch (err) {
         console.error("❌ Failed to load Esri data:", err);
@@ -76,6 +81,7 @@ export default function Page() {
     loadData();
   }, []);
 
+  // Load staged records for workflow (separate from Esri data)
   useEffect(() => {
     const initial = loadStagedRecords()
     if (initial.length) setRecords(initial)
@@ -124,6 +130,7 @@ export default function Page() {
           setRecords={setRecords}
           preloadedPolygon={preloadedPolygon}
           preloadedAreaSqMeters={preloadedAreaSqMeters}
+          zoomToFeature={zoomToFeature}
         />
       </section>
 
@@ -141,14 +148,24 @@ export default function Page() {
       <BottomDrawer
         isOpen={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        records={records}
+        records={esriRecords}
         workAreas={workAreas}
         selectedWorkArea={selectedWorkArea}
         onSelectWorkArea={(id) =>
           setSelectedWorkArea(workAreas.find((w) => w.id === id) || null)
         }
-        onZoomToRecord={(rec) => console.log("Zoom to record:", rec)}
-        onZoomToWorkArea={(wa) => console.log("Zoom to work area:", wa)}
+        onZoomToRecord={(rec) => {
+          // Set the feature to zoom to (with geometry)
+          setZoomToFeature(rec);
+          // Clear after a short delay to allow re-zooming to the same feature
+          setTimeout(() => setZoomToFeature(null), 100);
+        }}
+        onZoomToWorkArea={(wa) => {
+          // Set the work area feature to zoom to (with geometry)
+          setZoomToFeature(wa);
+          // Clear after a short delay to allow re-zooming to the same feature
+          setTimeout(() => setZoomToFeature(null), 100);
+        }}
       />
     </main>
   )
