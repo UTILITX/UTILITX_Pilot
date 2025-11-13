@@ -7,11 +7,57 @@ import type { LatLng } from "@/lib/record-types";
 
 /**
  * Convert Esri geometry to Leaflet LatLng bounds
+ * Handles both GeoJSON format (coordinates) and ArcGIS format (x/y, paths, rings)
  */
 export function getBoundsFromEsriGeometry(geometry: any): L.LatLngBounds | null {
-  if (!geometry) return null;
+  if (!geometry) {
+    console.warn("zoomToFeature: geometry missing or undefined", geometry);
+    return null;
+  }
 
   try {
+    // Handle ArcGIS format (from REST API) - check structure first since it doesn't have a type field
+    if (geometry.x !== undefined && geometry.y !== undefined) {
+      // ArcGIS Point: { x: lng, y: lat }
+      const lat = geometry.y;
+      const lng = geometry.x;
+      return L.latLngBounds(
+        L.latLng(lat - 0.001, lng - 0.001),
+        L.latLng(lat + 0.001, lng + 0.001)
+      );
+    }
+
+    if (geometry.paths !== undefined) {
+      // ArcGIS Polyline: { paths: [[[lng, lat], ...]] }
+      const allLatlngs: L.LatLng[] = [];
+      geometry.paths.forEach((path: number[][]) => {
+        path.forEach(([lng, lat]: number[]) => {
+          allLatlngs.push(L.latLng(lat, lng));
+        });
+      });
+      if (allLatlngs.length === 0) return null;
+      return L.latLngBounds(allLatlngs);
+    }
+
+    if (geometry.rings !== undefined) {
+      // ArcGIS Polygon: { rings: [[[lng, lat], ...]] }
+      const allLatlngs: L.LatLng[] = [];
+      if (geometry.rings.length > 0) {
+        // Use the exterior ring (first ring)
+        geometry.rings[0].forEach(([lng, lat]: number[]) => {
+          allLatlngs.push(L.latLng(lat, lng));
+        });
+      }
+      if (allLatlngs.length === 0) return null;
+      return L.latLngBounds(allLatlngs);
+    }
+
+    // Handle GeoJSON format (has type field)
+    if (!geometry.type) {
+      console.warn("zoomToFeature: geometry has no type and is not ArcGIS format", geometry);
+      return null;
+    }
+
     switch (geometry.type) {
       case "Point": {
         // GeoJSON Point: [lng, lat]
@@ -85,7 +131,7 @@ export function getBoundsFromEsriGeometry(geometry: any): L.LatLngBounds | null 
         return null;
     }
   } catch (error) {
-    console.error("Error calculating bounds from geometry:", error);
+    console.error("Error calculating bounds from geometry:", error, geometry);
     return null;
   }
 }
@@ -126,17 +172,35 @@ export function getCenterFromEsriGeometry(geometry: any): LatLng | null {
 
 /**
  * Zoom map to Esri feature geometry
+ * Accepts either a feature object with geometry property, or a geometry object directly
  */
-export function zoomToEsriFeature(map: L.Map, geometry: any, padding: number = 50): void {
-  if (!map || !geometry) return;
+export function zoomToEsriFeature(map: L.Map, featureOrGeometry: any, padding: number = 50): void {
+  if (!map) {
+    console.warn("zoomToEsriFeature: Map is not available");
+    return;
+  }
+
+  // Handle both feature object and geometry object
+  const geometry = featureOrGeometry?.geometry || featureOrGeometry;
+  
+  if (!geometry) {
+    console.warn("zoomToEsriFeature: Feature has no geometry", featureOrGeometry);
+    return;
+  }
 
   const bounds = getBoundsFromEsriGeometry(geometry);
-  if (bounds) {
+  if (!bounds) {
+    console.warn("zoomToEsriFeature: No bounds returned, skipping zoom.");
+    return;
+  }
+
+  try {
     map.fitBounds(bounds, {
       padding: [padding, padding],
       maxZoom: 18,
     });
-  } else {
+  } catch (error) {
+    console.error("Error fitting bounds:", error);
     // Fallback to center point if bounds calculation fails
     const center = getCenterFromEsriGeometry(geometry);
     if (center) {

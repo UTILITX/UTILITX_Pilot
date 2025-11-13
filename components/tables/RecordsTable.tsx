@@ -34,9 +34,16 @@ export function RecordsTable({ records, onZoomToRecord }: RecordsTableProps) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {records.map((record, index) => (
+          {records.map((record) => {
+            // Create a truly unique key: use objectId if available, otherwise use id
+            // Combine with geometryType to ensure uniqueness across layers
+            const uniqueKey = record.objectId 
+              ? `${record.geometryType}-${record.objectId}` 
+              : record.id || `${record.geometryType}-${record.fileUrl || Date.now()}`;
+            
+            return (
             <TableRow
-              key={record.id || `record-${index}`}
+              key={uniqueKey}
               className="cursor-pointer hover:bg-gray-100"
               onClick={() => onZoomToRecord(record)}
             >
@@ -77,7 +84,8 @@ export function RecordsTable({ records, onZoomToRecord }: RecordsTableProps) {
                 </button>
               </TableCell>
             </TableRow>
-          ))}
+            );
+          })}
         </TableBody>
       </Table>
     </div>

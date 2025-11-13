@@ -166,9 +166,8 @@ export default function EsriMap({
 
           // Define basemap layers using ArcGIS basemapLayer
           // Note: basemapLayer shows a deprecation warning but is fully functional.
-          // The warning is safe to ignore - basemaps load correctly and work as expected.
-          // Future: Migrate to vector basemaps when esri-leaflet adds full Vector module support.
-          // See docs/BASEMAP_VECTOR_MIGRATION.md for migration guide.
+          // Vector.vectorBasemapLayer is not yet available in the current esri-leaflet version.
+          // When upgrading esri-leaflet, migrate to: EL.Vector.vectorBasemapLayer("ArcGIS:Streets", { apiKey })
           const apiKey = process.env.NEXT_PUBLIC_ARCGIS_API_KEY!
           
           const basemaps: Record<string, L.TileLayer> = {
@@ -432,6 +431,35 @@ export default function EsriMap({
                     const pointLayer = createRecordsLayer(process.env.NEXT_PUBLIC_RECORDS_POINT_LAYER_URL, "Point");
                     pointLayer.addTo(map);
                     recordsPointLayerRef.current = pointLayer;
+                    
+                    // Add delayed zoom after layer loads (wait for Map Pane init)
+                    pointLayer.on("load", () => {
+                      console.log("Records Point layer loaded");
+                      setTimeout(() => {
+                        try {
+                          // Ensure map pane is ready
+                          if (!map.getPane('mapPane') || !map.getContainer()) {
+                            console.warn("Map not ready for zoom, retrying...");
+                            return;
+                          }
+                          
+                          const features: any[] = [];
+                          pointLayer.eachFeature((layer: any) => {
+                            if (layer.feature?.geometry) features.push(layer.feature);
+                          });
+                          if (features.length > 0 && zoomToFeature?.geometry) {
+                            console.log("Zooming to feature from Point layer");
+                            if (zoomToFeature?.geometry) {
+                              zoomToEsriFeature(map, zoomToFeature);
+                            } else {
+                              console.warn("Skipping zoom — feature missing geometry:", zoomToFeature);
+                            }
+                          }
+                        } catch (err) {
+                          console.warn("Error zooming after Point layer load:", err);
+                        }
+                      }, 400);
+                    });
                   }
                   
                   // Add Line layer
@@ -439,6 +467,35 @@ export default function EsriMap({
                     const lineLayer = createRecordsLayer(process.env.NEXT_PUBLIC_RECORDS_LINE_LAYER_URL, "Line");
                     lineLayer.addTo(map);
                     recordsLineLayerRef.current = lineLayer;
+                    
+                    // Add delayed zoom after layer loads (wait for Map Pane init)
+                    lineLayer.on("load", () => {
+                      console.log("Records Line layer loaded");
+                      setTimeout(() => {
+                        try {
+                          // Ensure map pane is ready
+                          if (!map.getPane('mapPane') || !map.getContainer()) {
+                            console.warn("Map not ready for zoom, retrying...");
+                            return;
+                          }
+                          
+                          const features: any[] = [];
+                          lineLayer.eachFeature((layer: any) => {
+                            if (layer.feature?.geometry) features.push(layer.feature);
+                          });
+                          if (features.length > 0 && zoomToFeature?.geometry) {
+                            console.log("Zooming to feature from Line layer");
+                            if (zoomToFeature?.geometry) {
+                              zoomToEsriFeature(map, zoomToFeature);
+                            } else {
+                              console.warn("Skipping zoom — feature missing geometry:", zoomToFeature);
+                            }
+                          }
+                        } catch (err) {
+                          console.warn("Error zooming after Line layer load:", err);
+                        }
+                      }, 400);
+                    });
                   }
                   
                   // Add Polygon layer
@@ -446,6 +503,35 @@ export default function EsriMap({
                     const polygonLayer = createRecordsLayer(process.env.NEXT_PUBLIC_RECORDS_POLYGON_LAYER_URL, "Polygon");
                     polygonLayer.addTo(map);
                     recordsPolygonLayerRef.current = polygonLayer;
+                    
+                    // Add delayed zoom after layer loads (wait for Map Pane init)
+                    polygonLayer.on("load", () => {
+                      console.log("Records Polygon layer loaded");
+                      setTimeout(() => {
+                        try {
+                          // Ensure map pane is ready
+                          if (!map.getPane('mapPane') || !map.getContainer()) {
+                            console.warn("Map not ready for zoom, retrying...");
+                            return;
+                          }
+                          
+                          const features: any[] = [];
+                          polygonLayer.eachFeature((layer: any) => {
+                            if (layer.feature?.geometry) features.push(layer.feature);
+                          });
+                          if (features.length > 0 && zoomToFeature?.geometry) {
+                            console.log("Zooming to feature from Polygon layer");
+                            if (zoomToFeature?.geometry) {
+                              zoomToEsriFeature(map, zoomToFeature);
+                            } else {
+                              console.warn("Skipping zoom — feature missing geometry:", zoomToFeature);
+                            }
+                          }
+                        } catch (err) {
+                          console.warn("Error zooming after Polygon layer load:", err);
+                        }
+                      }, 400);
+                    });
                   }
                   
                   // Keep legacy layer reference for backward compatibility
@@ -823,16 +909,24 @@ export default function EsriMap({
             }
           }, 600);
 
-          // Handle zoom to feature geometry
+          // Handle zoom to feature geometry (wait for Map Pane init)
           setTimeout(() => {
             try {
-              if (zoomToFeature?.geometry && map.getContainer()) {
-                zoomToEsriFeature(map, zoomToFeature.geometry);
+              // Ensure map pane is ready
+              if (!map.getPane('mapPane') || !map.getContainer()) {
+                console.warn("Map not ready for zoom, skipping...");
+                return;
+              }
+              
+              if (zoomToFeature?.geometry) {
+                zoomToEsriFeature(map, zoomToFeature);
+              } else if (zoomToFeature && !zoomToFeature.geometry) {
+                console.warn("Skipping zoom — feature missing geometry:", zoomToFeature);
               }
             } catch (err) {
               console.error("Error zooming to feature:", err);
             }
-          }, 700);
+          }, 500);
 
           // Handle file drops - wait for map to be ready
           setTimeout(() => {
@@ -892,13 +986,26 @@ export default function EsriMap({
   // Separate effect to handle zoom to feature updates without re-initializing the map
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !zoomToFeature?.geometry) return;
+    if (!map) return;
 
-    try {
-      zoomToEsriFeature(map, zoomToFeature.geometry);
-    } catch (err) {
-      console.error("Error zooming to feature:", err);
-    }
+    // Add delay to ensure Map Pane is initialized
+    setTimeout(() => {
+      try {
+        // Ensure map pane is ready
+        if (!map.getPane('mapPane') || !map.getContainer()) {
+          console.warn("Map not ready for zoom, skipping...");
+          return;
+        }
+        
+        if (zoomToFeature?.geometry) {
+          zoomToEsriFeature(map, zoomToFeature);
+        } else if (zoomToFeature && !zoomToFeature.geometry) {
+          console.warn("Skipping zoom — feature missing geometry:", zoomToFeature);
+        }
+      } catch (err) {
+        console.error("Error zooming to feature:", err);
+      }
+    }, 400);
   }, [zoomToFeature]);
 
   // Separate effect to handle polygon updates without re-initializing the map

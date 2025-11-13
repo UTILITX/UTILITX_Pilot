@@ -8,6 +8,7 @@ const WORKAREAS = process.env.NEXT_PUBLIC_WORKAREA_LAYER_URL!;
 
 export interface IndexedRecord {
   id: string;
+  objectId: number | string | null; // ArcGIS OBJECTID - guaranteed unique per layer
   geometryType: "Point" | "LineString" | "Polygon";
   geometry: any;
   recordType: string | null;
@@ -75,8 +76,18 @@ export async function fetchAllRecordsFromEsri(): Promise<IndexedRecord[]> {
       geomType = "Point";
     }
     
+    // Get OBJECTID - this is guaranteed unique per layer in ArcGIS
+    const objectId = attrs.OBJECTID ?? f.OBJECTID ?? null;
+    
+    // Create a unique ID by combining geometry type and OBJECTID
+    // This ensures uniqueness across all layers (Point-1, Line-1, Polygon-1 are different)
+    const uniqueId = objectId !== null 
+      ? `${geomType}-${objectId}` 
+      : attrs.Record_ID ?? attrs.record_id ?? String(Date.now() + Math.random());
+    
     const record: IndexedRecord = {
-      id: attrs.Record_ID ?? attrs.record_id ?? attrs.OBJECTID ?? String(f.OBJECTID ?? Date.now()),
+      id: uniqueId,
+      objectId: objectId,
       geometryType: geomType as "Point" | "LineString" | "Polygon",
       geometry: f.geometry,
       // Extract attributes correctly - note: organization is saved as "source" in ArcGIS
