@@ -9,6 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { getSignedUrl } from "@/lib/supabase";
 
 interface RecordsTableProps {
   records: any[];
@@ -20,6 +21,39 @@ export function RecordsTable({ records, onZoomToRecord }: RecordsTableProps) {
     return <p className="text-sm text-gray-500">No records yet.</p>;
   }
 
+  // Helper function to extract file path from fileUrl
+  const getFilePath = (record: any): string | null => {
+    if (record.filePath) return record.filePath;
+    if (record.fileUrl) {
+      // If fileUrl contains "Records_Private/", extract the path part
+      if (record.fileUrl.includes("Records_Private/")) {
+        return record.fileUrl.replace("Records_Private/", "");
+      }
+      // If it's already a path (not a full URL), return it
+      if (!record.fileUrl.startsWith("http")) {
+        return record.fileUrl;
+      }
+    }
+    return null;
+  };
+
+  // Handler to open file with signed URL
+  const handleOpenFile = async (record: any) => {
+    const filePath = getFilePath(record);
+    if (!filePath) {
+      console.warn("No file path available for record:", record);
+      return;
+    }
+
+    try {
+      const signedUrl = await getSignedUrl(filePath, 3600); // 1-hour signed URL
+      window.open(signedUrl, "_blank");
+    } catch (err: any) {
+      console.error("Error opening file:", err);
+      alert(`Failed to open file: ${err.message || "Unknown error"}`);
+    }
+  };
+
   return (
     <div className="rounded-md border bg-white max-h-[28vh] overflow-y-auto">
       <Table>
@@ -30,6 +64,7 @@ export function RecordsTable({ records, onZoomToRecord }: RecordsTableProps) {
             <TableHead>Type</TableHead>
             <TableHead>Utility</TableHead>
             <TableHead>Organization</TableHead>
+            <TableHead>File</TableHead>
             <TableHead className="text-right">Action</TableHead>
           </TableRow>
         </TableHeader>
@@ -71,6 +106,22 @@ export function RecordsTable({ records, onZoomToRecord }: RecordsTableProps) {
               <TableCell>{record.utilityType ?? record.utility_type ?? "–"}</TableCell>
 
               <TableCell>{record.organization ?? "–"}</TableCell>
+
+              <TableCell>
+                {getFilePath(record) ? (
+                  <button
+                    className="text-blue-600 underline hover:text-blue-800 text-sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenFile(record);
+                    }}
+                  >
+                    View File
+                  </button>
+                ) : (
+                  "–"
+                )}
+              </TableCell>
 
               <TableCell className="text-right">
                 <button
