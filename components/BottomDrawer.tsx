@@ -2,16 +2,30 @@
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { RecordsTable } from "@/components/tables/RecordsTable";
+import { WorkAreasTable } from "@/components/tables/WorkAreasTable";
+import type { RequestRecord } from "@/lib/record-types";
+
+interface WorkArea {
+  id: string;
+  name: string;
+  region?: string;
+  owner?: string;
+  createdBy?: string;
+  date?: string;
+  notes?: string;
+  records?: any[];
+}
 
 interface BottomDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  records: any[];
-  workAreas: any[];
-  selectedWorkArea: any | null;
+  records: RequestRecord[];
+  workAreas: WorkArea[];
+  selectedWorkArea: WorkArea | null;
   onSelectWorkArea: (id: string | null) => void;
-  onZoomToRecord: (record: any) => void;
-  onZoomToWorkArea: (workArea: any) => void;
+  onZoomToRecord: (record: RequestRecord) => void;
+  onZoomToWorkArea: (workArea: WorkArea) => void;
 }
 
 export default function BottomDrawer({
@@ -52,58 +66,20 @@ export default function BottomDrawer({
         </TabsList>
 
         {/* RECORDS */}
-        <TabsContent value="records">
-          <div className="text-sm text-gray-600">
-            <p className="mb-2">
-              Showing {records.length} records
-              {selectedWorkArea && (
-                <span className="ml-2 text-blue-600">
-                  (Filtered to: {selectedWorkArea.name})
-                </span>
-              )}
-            </p>
-
-            {/* TEMP basic list - will replace with DataTable */}
-            <div className="border rounded p-3 bg-gray-50 max-h-[28vh] overflow-y-auto">
-              {records.map((rec) => (
-                <div
-                  key={rec.id}
-                  className="flex items-center justify-between py-1 border-b cursor-pointer"
-                  onClick={() => onZoomToRecord(rec)}
-                >
-                  <span>{rec.name || rec.fileName || "Record"}</span>
-                  <span className="text-xs text-gray-500">
-                    {rec.utility_type || ""}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
+        <TabsContent value="records" className="mt-0">
+          <RecordsTable
+            records={records}
+            onZoomToRecord={onZoomToRecord}
+          />
         </TabsContent>
 
         {/* WORK AREAS */}
-        <TabsContent value="workareas">
-          <p className="text-sm text-gray-600 mb-2">
-            Showing {workAreas.length} work areas
-          </p>
-
-          <div className="border rounded p-3 bg-gray-50 max-h-[28vh] overflow-y-auto">
-            {workAreas.map((wa) => (
-              <div
-                key={wa.id}
-                className="flex items-center justify-between py-1 border-b cursor-pointer"
-                onClick={() => {
-                  onSelectWorkArea(wa.id);
-                  onZoomToWorkArea(wa);
-                }}
-              >
-                <span>{wa.name || "Unnamed Work Area"}</span>
-                <span className="text-xs text-gray-500">
-                  {wa.records?.length || 0} records
-                </span>
-              </div>
-            ))}
-          </div>
+        <TabsContent value="workareas" className="mt-0">
+          <WorkAreasTable
+            workAreas={workAreas}
+            onSelectWorkArea={onSelectWorkArea}
+            onZoomToWorkArea={onZoomToWorkArea}
+          />
         </TabsContent>
       </Tabs>
     </div>

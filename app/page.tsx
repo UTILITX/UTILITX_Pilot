@@ -25,10 +25,30 @@ export default function Page() {
 
   // Bottom drawer state
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const [selectedWorkArea, setSelectedWorkArea] = useState<any | null>(null)
+  const [selectedWorkArea, setSelectedWorkArea] = useState<{
+    id: string
+    name: string
+    region?: string
+    owner?: string
+    createdBy?: string
+    date?: string
+    notes?: string
+    records?: any[]
+  } | null>(null)
 
   // Temporary data — later will come from Esri + Upload Flow
-  const [workAreas, setWorkAreas] = useState<any[]>([])
+  const [workAreas, setWorkAreas] = useState<
+    Array<{
+      id: string
+      name: string
+      region?: string
+      owner?: string
+      createdBy?: string
+      date?: string
+      notes?: string
+      records?: any[]
+    }>
+  >([])
 
   useEffect(() => {
     const initial = loadStagedRecords()
