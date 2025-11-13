@@ -100,8 +100,6 @@ export default function UploadTab({ records, setRecords, preloadedPolygon, prelo
 
   const [redrawTarget, setRedrawTarget] = useState<{ recordId: string; fileId: string } | null>(null)
 
-  const [showAllRecords, setShowAllRecords] = useState(false)
-
   // Work area drawing mode
   const [isDrawingWorkArea, setIsDrawingWorkArea] = useState(false)
   const [isSelectingWorkArea, setIsSelectingWorkArea] = useState(false)
@@ -1543,36 +1541,6 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
         </DialogContent>
       </Dialog>
 
-      <div className="mt-6">
-        <div className="border border-gray-200 rounded-lg">
-          <div className="border-b border-gray-200 bg-gray-50 px-4 py-3 rounded-t-lg">
-            <h3 className="text-lg font-semibold">Uploaded Records</h3>
-            <p className="text-sm text-muted-foreground">All files and records uploaded in this session</p>
-          </div>
-
-          <div className="p-4">
-            <RecordsTable
-              records={records.slice(0, showAllRecords ? records.length : 2)}
-              showActions={true}
-              onGeoreference={startGeoreference}
-              onRedrawGeometry={startRedrawGeometry}
-            />
-
-            {records.length > 2 && (
-              <div className="mt-4 text-center">
-                <button
-                  onClick={() => setShowAllRecords(!showAllRecords)}
-                  className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                >
-                  {showAllRecords
-                    ? `Show less (${records.length - 2} hidden)`
-                    : `Show ${records.length - 2} more records`}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
     </div>
   )
 }

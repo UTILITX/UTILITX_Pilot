@@ -4,6 +4,9 @@ import { useEffect, useState } from "react"
 import UploadTab from "@/components/workflows/upload-tab"
 import type { RequestRecord, LatLng } from "@/lib/record-types"
 import { loadStagedRecords, saveStagedRecords } from "@/lib/storage"
+import BottomDrawer from "@/components/BottomDrawer"
+import { Button } from "@/components/ui/button"
+import { List } from "lucide-react"
 
 type PreloadedRequest = {
   createdAt: string
@@ -19,6 +22,13 @@ export default function Page() {
   const [records, setRecords] = useState<RequestRecord[]>([])
   const [preloadedPolygon, setPreloadedPolygon] = useState<LatLng[] | null>(null)
   const [preloadedAreaSqMeters, setPreloadedAreaSqMeters] = useState<number | null>(null)
+
+  // Bottom drawer state
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [selectedWorkArea, setSelectedWorkArea] = useState<any | null>(null)
+
+  // Temporary data — later will come from Esri + Upload Flow
+  const [workAreas, setWorkAreas] = useState<any[]>([])
 
   useEffect(() => {
     const initial = loadStagedRecords()
@@ -70,6 +80,30 @@ export default function Page() {
           preloadedAreaSqMeters={preloadedAreaSqMeters}
         />
       </section>
+
+      {/* Floating action button to open drawer */}
+      <Button
+        onClick={() => setDrawerOpen(true)}
+        className="fixed top-20 right-4 z-50 shadow-lg hover:shadow-xl transition-shadow"
+        variant="default"
+        size="default"
+      >
+        <List className="mr-2 h-4 w-4" />
+        Project Index
+      </Button>
+
+      <BottomDrawer
+        isOpen={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        records={records}
+        workAreas={workAreas}
+        selectedWorkArea={selectedWorkArea}
+        onSelectWorkArea={(id) =>
+          setSelectedWorkArea(workAreas.find((w) => w.id === id) || null)
+        }
+        onZoomToRecord={(rec) => console.log("Zoom to record:", rec)}
+        onZoomToWorkArea={(wa) => console.log("Zoom to work area:", wa)}
+      />
     </main>
   )
 }
