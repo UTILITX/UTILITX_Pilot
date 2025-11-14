@@ -21,6 +21,9 @@ import { RecordPopup } from "@/components/RecordPopup";
 import { getApwaColor } from "@/lib/apwaColors";
 import { getFeatureGeometry } from "@/lib/geoUtils";
 import { zoomToEsriFeature } from "@/lib/zoomToFeature";
+import Legend from "@/components/map/Legend";
+import DrawingToolbar from "@/components/map/DrawingToolbar";
+import BasemapToggle from "@/components/map/BasemapToggle";
 
 // Note: Supabase client initialization is handled via singleton pattern in lib/supabase-client.ts
 // This prevents multiple GoTrueClient instances and eliminates duplication warnings
@@ -38,6 +41,89 @@ function renderReactPopup(component: React.ReactElement): HTMLElement {
   root.render(component);
   return div;
 }
+
+// Helper function to compute centroid from GeoJSON geometry
+function getCentroidFromGeometry(geometry: any): [number, number] | null {
+  if (!geometry) return null;
+
+  try {
+    // Handle Point
+    if (geometry.type === "Point" && geometry.coordinates) {
+      return [geometry.coordinates[1], geometry.coordinates[0]]; // [lat, lng]
+    }
+
+    // Handle LineString
+    if (geometry.type === "LineString" && geometry.coordinates && geometry.coordinates.length > 0) {
+      const coords = geometry.coordinates;
+      const sum = coords.reduce(
+        (acc: [number, number], coord: [number, number]) => [acc[0] + coord[1], acc[1] + coord[0]],
+        [0, 0]
+      );
+      return [sum[0] / coords.length, sum[1] / coords.length];
+    }
+
+    // Handle Polygon (use first ring)
+    if (geometry.type === "Polygon" && geometry.coordinates && geometry.coordinates[0]) {
+      const ring = geometry.coordinates[0];
+      const sum = ring.reduce(
+        (acc: [number, number], coord: [number, number]) => [acc[0] + coord[1], acc[1] + coord[0]],
+        [0, 0]
+      );
+      return [sum[0] / ring.length, sum[1] / ring.length];
+    }
+
+    // Handle ArcGIS format (x, y)
+    if (geometry.x !== undefined && geometry.y !== undefined) {
+      return [geometry.y, geometry.x]; // [lat, lng]
+    }
+
+    // Handle ArcGIS paths (polyline)
+    if (geometry.paths && geometry.paths[0]) {
+      const path = geometry.paths[0];
+      const sum = path.reduce(
+        (acc: [number, number], coord: [number, number]) => [acc[0] + coord[1], acc[1] + coord[0]],
+        [0, 0]
+      );
+      return [sum[0] / path.length, sum[1] / path.length];
+    }
+
+    // Handle ArcGIS rings (polygon)
+    if (geometry.rings && geometry.rings[0]) {
+      const ring = geometry.rings[0];
+      const sum = ring.reduce(
+        (acc: [number, number], coord: [number, number]) => [acc[0] + coord[1], acc[1] + coord[0]],
+        [0, 0]
+      );
+      return [sum[0] / ring.length, sum[1] / ring.length];
+    }
+  } catch (error) {
+    console.warn("Error computing centroid:", error);
+  }
+
+  return null;
+}
+
+// Icon HTML for record types (using Lucide icon SVG paths)
+const recordTypeIcons: Record<string, L.DivIcon> = {
+  asbuilt: L.divIcon({
+    html: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/><circle cx="18" cy="16" r="1"/></svg>`,
+    className: "record-icon",
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+  }),
+  permit: L.divIcon({
+    html: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/><path d="M20 8v8"/><path d="M18 12h4"/></svg>`,
+    className: "record-icon",
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+  }),
+  locate: L.divIcon({
+    html: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><circle cx="12" cy="12" r="7"/></svg>`,
+    className: "record-icon",
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+  }),
+};
 
 type EsriMapProps = {
   mode?: "draw" | "view";
@@ -110,6 +196,11 @@ export default function EsriMap({
   const pendingRecordMetadataRef = useRef(pendingRecordMetadata);
   const recordSavedToArcGISRef = useRef(false);
   const toastRef = useRef<any>(null);
+  const lastCenterRef = useRef<L.LatLng | null>(null);
+  const lastZoomRef = useRef<number | null>(null);
+  const resizeTimeoutRef = useRef<any>(null);
+  const safeResizeRef = useRef<(() => void) | null>(null);
+  const recordIconLayerRef = useRef<L.LayerGroup | null>(null);
 
   // Dedicated initialization effect - runs once on mount
   useEffect(() => {
@@ -145,12 +236,79 @@ export default function EsriMap({
         maxZoom: 19, // Proper maxZoom for Esri vector basemaps (fixes Leaflet-Geoman pm:create issue)
         wheelDebounceTime: 25, // smoother zoom
         wheelPxPerZoomLevel: 60,
+        zoomControl: false, // Disable default zoom controls - using custom UTILITX toolbar instead
       });
 
       mapRef.current = map;
 
       // Wait for map to be ready before adding layers
       map.whenReady(() => {
+        // Restore view if map is remounted (rare case)
+        if (lastCenterRef.current && lastZoomRef.current) {
+          map.setView(lastCenterRef.current, lastZoomRef.current);
+        }
+
+        // Listen for user movements and save them
+        map.on("moveend zoomend", () => {
+          lastCenterRef.current = map.getCenter();
+          lastZoomRef.current = map.getZoom();
+        });
+
+        // Remove Geoman built-in toolbar - using custom UTILITX toolbar instead
+        try {
+          map.pm.removeControls();
+        } catch (e) {
+          // Controls might not exist yet, that's fine
+        }
+
+        // Ensure default Leaflet zoom controls are removed - using custom UTILITX toolbar instead
+        if (map.zoomControl) {
+          map.removeControl(map.zoomControl);
+        }
+
+        // Create record icon layer for zoom >= 15
+        const recordIconLayer = L.layerGroup().addTo(map);
+        recordIconLayer.setZIndex(9999);
+        recordIconLayer.options.minZoom = 15;
+        recordIconLayerRef.current = recordIconLayer;
+
+        // Show/hide icon layer based on zoom level
+        const updateIconLayerVisibility = () => {
+          const zoom = map.getZoom();
+          if (zoom >= 15) {
+            if (!map.hasLayer(recordIconLayer)) {
+              map.addLayer(recordIconLayer);
+            }
+          } else {
+            if (map.hasLayer(recordIconLayer)) {
+              recordIconLayer.clearLayers();
+              map.removeLayer(recordIconLayer);
+            }
+          }
+        };
+
+        map.on("zoomend", updateIconLayerVisibility);
+        updateIconLayerVisibility(); // Initial check
+
+        // Fix bounce caused by sidebar/layout changes with debounced resize
+        const safeResize = () => {
+          if (resizeTimeoutRef.current) {
+            clearTimeout(resizeTimeoutRef.current);
+          }
+          resizeTimeoutRef.current = setTimeout(() => {
+            if (!map) return;
+            map.invalidateSize({ animate: false });
+
+            // Restore view instantly — avoids zoom bounce
+            if (lastCenterRef.current && lastZoomRef.current) {
+              map.setView(lastCenterRef.current, lastZoomRef.current, { animate: false });
+            }
+          }, 80);
+        };
+
+        safeResizeRef.current = safeResize;
+        window.addEventListener("resize", safeResize);
+
         // Fix squished map layout first
         map.invalidateSize();
         
@@ -206,31 +364,9 @@ export default function EsriMap({
               console.error("Error adding basemap:", err);
             }
 
-            // Add layer control after basemap is added
-    setTimeout(() => {
-              try {
-                if (L.control && L.control.layers && map.getContainer() && map.getPane('mapPane')) {
-                  const layerControl = L.control.layers(basemaps, undefined, {
-                    position: "topright" as const,
-                    collapsed: false,
-                  });
-                  if (layerControl) {
-                    layerControl.addTo(map);
-                    
-                    // Update map maxZoom when basemap changes
-                    map.on("baselayerchange", (e: any) => {
-                      const newBasemap = e.layer;
-                      const tileMax = (newBasemap.options as any).maxZoom ?? 19;
-                      map.setMaxZoom(tileMax);
-                    });
-                  }
-                }
-              } catch (err) {
-                console.error("Error adding layer control:", err);
-                // Continue without layer control - not critical
-              }
-            }, 100);
-    }, 100);
+            // Basemap control is now handled by BasemapToggle component
+            // Removed default Leaflet layer control for cleaner UI
+          }, 100);
   
           // Add hosted WorkAreas layer (polygons) - "workarea" layer
           // Wait a bit more to ensure map is fully ready
@@ -354,6 +490,33 @@ export default function EsriMap({
                   } : undefined,
                   onEachFeature: (feature: any, layer: L.Layer) => {
                     const props = feature.properties || {};
+                    
+                    // Add record type icon (will be shown/hidden based on zoom)
+                    if (recordIconLayerRef.current) {
+                      let recordType = (props.record_type || "").toLowerCase().trim();
+                      // Handle "as built" with space
+                      if (recordType === "as built") {
+                        recordType = "asbuilt";
+                      }
+                      if (recordType && (recordType === "asbuilt" || recordType === "permit" || recordType === "locate")) {
+                        const icon = recordTypeIcons[recordType];
+                        if (icon) {
+                          // Get geometry from feature
+                          const geometry = feature.geometry || getFeatureGeometry(feature);
+                          const centroid = getCentroidFromGeometry(geometry);
+                          
+                          if (centroid) {
+                            const marker = L.marker([centroid[0], centroid[1]], { icon });
+                            // Store marker on layer for potential cleanup
+                            (layer as any)._recordIconMarker = marker;
+                            // Add to icon layer if zoom is high enough
+                            if (map.getZoom() >= 15 && recordIconLayerRef.current) {
+                              marker.addTo(recordIconLayerRef.current);
+                            }
+                          }
+                        }
+                      }
+                    }
                     
                     // Format record ID (use OBJECTID or record_id, format as R-XXXXX)
                     const recordId = props.record_id 
@@ -596,24 +759,14 @@ export default function EsriMap({
           setTimeout(() => {
             try {
               if (mode === "draw" && map.getContainer() && map.getPane('mapPane')) {
+                // Ensure Geoman toolbar is removed - using custom UTILITX toolbar instead
+                try {
+                  map.pm.removeControls();
+                } catch (e) {
+                  // Controls might not exist, that's fine
+                }
+
                 if (enableWorkAreaDrawing) {
-                  // Work area drawing: hide draw buttons, only show Edit/Erase
-                  // Drawing is controlled programmatically
-                  map.pm.addControls({
-                    position: "topleft",
-                    drawMarker: false,
-                    drawPolyline: false,
-                    drawPolygon: false,
-                    drawRectangle: false,
-                    drawCircle: false,
-                    drawCircleMarker: false,
-                    editMode: true,      // ✏️ enable edit mode (move / edit vertices)
-                    dragMode: false,
-                    cutPolygon: false,
-                    removalMode: true,   // 🗑️ allows erase/delete
-                    oneBlock: true,      // groups icons into one compact block
-                  });
-                  
                   // Only enable draw mode if explicitly requested AND we are starting a fresh drawing session.
                   if (enableWorkAreaDrawing === true) {
                     if (drawingSessionActiveRef.current === false && hasActiveWorkAreaRef.current === false) {
@@ -628,23 +781,6 @@ export default function EsriMap({
                     }
                   }
                 } else if (georefMode !== "none") {
-                  // Record drawing: hide draw buttons, only show Edit/Erase
-                  // Drawing is controlled programmatically via "Draw on Map" button
-                  map.pm.addControls({
-                    position: "topleft",
-                    drawMarker: false,
-                    drawPolyline: false,
-                    drawPolygon: false,
-                    drawRectangle: false,
-                    drawCircle: false,
-                    drawCircleMarker: false,
-                    editMode: true,      // ✏️ enable edit mode (move / edit vertices)
-                    dragMode: false,
-                    cutPolygon: false,
-                    removalMode: true,   // 🗑️ allows erase/delete
-                    oneBlock: true,      // groups icons into one compact block
-                  });
-
                   // Enable the appropriate drawing mode programmatically
                   if (georefMode === "point") {
                     map.pm.enableDraw("Marker");
@@ -654,21 +790,6 @@ export default function EsriMap({
                     map.pm.enableDraw("Polygon");
                   }
                 } else {
-                  // Hide all draw buttons - only show Edit and Erase for professional cleanup
-                  map.pm.addControls({
-                    position: "topleft",
-                    drawMarker: false,
-                    drawPolyline: false,
-                    drawPolygon: false,
-                    drawRectangle: false,
-                    drawCircle: false,
-                    drawCircleMarker: false,
-                    editMode: true,      // ✏️ enable edit mode (move / edit vertices)
-                    dragMode: false,
-                    cutPolygon: false,
-                    removalMode: true,   // 🗑️ allows erase/delete
-                    oneBlock: true,      // groups icons into one compact block
-                  });
                   map.pm.disableDraw();
                 }
 
@@ -1129,6 +1250,16 @@ export default function EsriMap({
 
     // Cleanup
     return () => {
+      // Clean up resize handler
+      if (safeResizeRef.current) {
+        window.removeEventListener("resize", safeResizeRef.current);
+        safeResizeRef.current = null;
+      }
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+        resizeTimeoutRef.current = null;
+      }
+      
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
@@ -1162,11 +1293,14 @@ export default function EsriMap({
   }, [zoomToFeature]);
 
   // Separate effect to handle focusPoint/focusZoom updates
+  // Only set view if we don't have a tracked view state (first mount) or if explicitly needed
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    if (focusPoint) {
+    // Only set view if we don't have a tracked center/zoom yet (first initialization)
+    // This prevents the map from resetting when parent props change
+    if (focusPoint && (!lastCenterRef.current || !lastZoomRef.current)) {
       map.setView([focusPoint.lat, focusPoint.lng], focusZoom);
     }
   }, [focusPoint, focusZoom]);
@@ -1279,27 +1413,12 @@ export default function EsriMap({
       map.pm.disableGlobalEditMode();
       map.pm.disableGlobalRemovalMode();
 
-      // Ensure controls are set up (Edit/Erase only, no draw buttons)
+      // Ensure Geoman toolbar is removed - using custom UTILITX toolbar instead
       try {
         map.pm.removeControls();
       } catch (e) {
         // Controls might not exist, that's fine
       }
-      
-      map.pm.addControls({
-        position: "topleft",
-        drawMarker: false,
-        drawPolyline: false,
-        drawPolygon: false,
-        drawRectangle: false,
-        drawCircle: false,
-        drawCircleMarker: false,
-        editMode: true,      // ✏️ enable edit mode (move / edit vertices)
-        dragMode: false,
-        cutPolygon: false,
-        removalMode: true,   // 🗑️ allows erase/delete
-        oneBlock: true,      // groups icons into one compact block
-      });
 
       // Enable appropriate PM draw mode based on georefMode
       if (georefMode === "point") {
@@ -1317,29 +1436,12 @@ export default function EsriMap({
     const map = mapRef.current;
     if (!map || mode !== "draw") return;
 
-    // Only setup controls, do NOT auto-enable draw mode
-    // Draw mode is now controlled exclusively by shouldStartRecordDraw command token
+    // Ensure Geoman toolbar is removed - using custom UTILITX toolbar instead
     try {
       map.pm.removeControls();
     } catch (e) {
       // Controls might not exist, that's fine
     }
-
-    // Always show Edit/Erase controls for professional cleanup
-    map.pm.addControls({
-      position: "topleft",
-      drawMarker: false,
-      drawPolyline: false,
-      drawPolygon: false,
-      drawRectangle: false,
-      drawCircle: false,
-      drawCircleMarker: false,
-      editMode: true,      // ✏️ enable edit mode (move / edit vertices)
-      dragMode: false,
-      cutPolygon: false,
-      removalMode: true,   // 🗑️ allows erase/delete
-      oneBlock: true,      // groups icons into one compact block
-    });
 
     // Disable drawing when edit mode is enabled to prevent overlap
     const handleEditModeToggle = (e: any) => {
@@ -1653,9 +1755,15 @@ export default function EsriMap({
   }, []);
 
   return (
-    <div
-      id="map"
-      className="w-full h-full rounded-2xl overflow-hidden shadow-md border border-gray-200"
+    <div className="relative w-full h-full rounded-2xl overflow-hidden shadow-md border border-gray-200">
+      <div
+        id="map"
+        className="w-full h-full"
       />
+      {/* UI overlays - placed after map container to ensure proper stacking */}
+      <DrawingToolbar map={mapRef.current} />
+      <BasemapToggle map={mapRef.current} />
+      <Legend />
+    </div>
   );
 }
