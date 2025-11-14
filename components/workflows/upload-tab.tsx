@@ -78,6 +78,7 @@ export default function UploadTab({ records, setRecords, preloadedPolygon, prelo
   const [target, setTarget] = useState<{ recordId: string; fileId: string } | null>(null)
   const [picked, setPicked] = useState<LatLng | null>(null)
   const [pendingDropMeta, setPendingDropMeta] = useState<PendingDropMeta | null>(null)
+  const [pendingRecordMetadata, setPendingRecordMetadata] = useState<any>(null)
 
   const [pendingDrop, setPendingDrop] = useState<File[] | null>(null)
   const [pendingManualFiles, setPendingManualFiles] = useState<File[] | null>(null)
@@ -105,6 +106,9 @@ export default function UploadTab({ records, setRecords, preloadedPolygon, prelo
   const [isDrawingWorkArea, setIsDrawingWorkArea] = useState(false)
   const [isSelectingWorkArea, setIsSelectingWorkArea] = useState(false)
   const [drawCommand, setDrawCommand] = useState(0)
+  
+  // Record drawing mode (for georeferencing)
+  const [recordDrawCommand, setRecordDrawCommand] = useState(0)
 
   // Map overlays from records
   const { bubbles, shapes } = useMemo(() => {
@@ -327,18 +331,37 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
       notes: notes,
     })
 
+    // Create pending record metadata for ArcGIS save
+    // Get the first file's URL (or null if no files uploaded yet)
+    const firstFile = uploadedFiles[0]
+    const firstFileUrlData = firstFile ? fileUrls.get(firstFile) : null
+    const recordId = crypto.randomUUID()
+    
+    const pendingRecordMetadata = {
+      utility_type: selectedUtilityType,
+      record_type: selectedRecordType,
+      organization: orgName || "Organization",
+      notes: notes || null,
+      file_url: firstFileUrlData ? `Records_Private/${firstFileUrlData.path}` : null,
+      record_id: recordId,
+      source: orgName || null,
+      processed_date: new Date().toISOString(),
+      Creator: uploaderName || "Uploader",
+    }
+
     // Use APWA colors based on utility type
     const apwaColor = getApwaColor(selectedUtilityType)
     setGeorefColor(apwaColor)
 
     // Set the georeferencing mode based on selected geometry type
-    // This will enable drawing mode on the map (toolbar stays hidden)
     const geoMode: GeorefMode = selectedGeometryType
     setGeorefMode(geoMode)
 
-    // Drawing will be enabled automatically when georefMode changes
-    // The map component will handle pm:create events and call onGeorefComplete
-    // which will store geometry and trigger reactive refresh with correct colors
+    // Increment record draw command to trigger drawing mode
+    setRecordDrawCommand((c) => c + 1)
+    
+    // Store pending record metadata (will be passed to map)
+    setPendingRecordMetadata(pendingRecordMetadata)
     
     if (geoMode === "point") {
       toast({ title: "Point georeference", description: "Click on the map to place the files." })
@@ -484,6 +507,7 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
 
       setRedrawTarget(null)
       setGeorefMode("none")
+      setPendingRecordMetadata(null)
 
       if (result.type === "Point") {
         setFocusPoint(result.point)
@@ -518,15 +542,17 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
       })
       
       // Prepare the new record (but don't add to state yet - wait for ArcGIS save)
+      // Note: pendingDropMeta.type only has utilityType and recordType, not id/priority
+      // Use a default recordTypeId and priority for now
       const newRecord: RequestRecord = {
         id: crypto.randomUUID(),
         uploaderName: uploader,
         uploadedAt: now,
-        recordTypeId: pendingDropMeta.type.id as any,
+        recordTypeId: "lm-water-asbuilts" as any, // Default - could be improved with mapping
         recordTypePath: `${pendingDropMeta.type.utilityType} / ${pendingDropMeta.type.recordType}`,
-        priority: pendingDropMeta.type.priority,
+        priority: 1, // Default priority
         orgName: pendingDropMeta.org.trim(),
-        notes: pendingDropMeta.notes.trim() || undefined,
+        notes: pendingDropMeta.notes?.trim() || undefined,
         files: filesWithUrls.map(({ file, urlData }) => ({
           id: crypto.randomUUID(),
           name: file.name,
@@ -603,6 +629,7 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
       setFocusPoint(result.point)
       setPendingDropMeta(null)
       setGeorefMode("none")
+      setPendingRecordMetadata(null)
       setIsGeometryComplete(true)
       toast({
         title: "Files georeferenced",
@@ -645,6 +672,7 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
       setFocusPoint(result.point)
       setTarget(null)
       setGeorefMode("none")
+      setPendingRecordMetadata(null)
       toast({
         title: "Georeferenced",
         description: "Point saved for the file.",
@@ -672,15 +700,17 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
       })
       
       // Prepare the new record (but don't add to state yet - wait for ArcGIS save)
+      // Note: pendingDropMeta.type only has utilityType and recordType, not id/priority
+      // Use a default recordTypeId and priority for now
       const newRecord: RequestRecord = {
         id: crypto.randomUUID(),
         uploaderName: uploader,
         uploadedAt: now,
-        recordTypeId: pendingDropMeta.type.id as any,
+        recordTypeId: "lm-water-asbuilts" as any, // Default - could be improved with mapping
         recordTypePath: `${pendingDropMeta.type.utilityType} / ${pendingDropMeta.type.recordType}`,
-        priority: pendingDropMeta.type.priority,
+        priority: 1, // Default priority
         orgName: pendingDropMeta.org.trim(),
-        notes: pendingDropMeta.notes.trim() || undefined,
+        notes: pendingDropMeta.notes?.trim() || undefined,
         files: filesWithUrls.map(({ file, urlData }) => ({
           id: crypto.randomUUID(),
           name: file.name,
@@ -698,69 +728,18 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
         })),
       }
       
-      // Save to ArcGIS first, then update state after success + delay
-      const savePromises: Promise<any>[] = [];
-      for (const { file, urlData } of filesWithUrls) {
-        if (urlData?.path) {
-          const geometry = {
-            type: result.type,
-            coordinates: result.type === "LineString" 
-              ? result.path.map((p) => [p.lng, p.lat])
-              : result.type === "Point"
-              ? [result.point.lng, result.point.lat]
-              : [result.path.map((p) => [p.lng, p.lat])], // Polygon needs nested array
-          }
-          const storagePath = `Records_Private/${urlData.path}`
-          const attributes = {
-            Creator: uploader,
-            processed_date: now,
-            source: pendingDropMeta.org?.trim() || null,
-            file_url: storagePath,
-            notes: pendingDropMeta.notes?.trim() || null,
-            utility_type: pendingDropMeta.type?.utilityType || null,
-            record_type: pendingDropMeta.type?.recordType || null,
-            geometry_type: result.type,
-          }
-          
-          // Determine geometry type for routing
-          const geometryType = result.type === "LineString" ? "Line" : result.type === "Point" ? "Point" : "Polygon";
-          const targetUrl = getRecordsLayerUrl(geometryType);
-          if (targetUrl) {
-            savePromises.push(
-              addFeatureToLayer(targetUrl, geometry, attributes)
-                .then((saveResult) => {
-                  console.log(`✅ Feature added successfully:`, saveResult)
-                  return saveResult
-                })
-                .catch((err) => {
-                  console.error("Error saving record to ArcGIS:", err)
-                  throw err
-                })
-            )
-          } else {
-            console.error(`No target layer URL found for geometry: ${geometryType}`);
-          }
-        }
-      }
+      // Add to state immediately (optimistically) so user sees the record right away
+      console.log("📝 Adding record to state optimistically");
+      setRecords((prev) => [newRecord, ...prev])
       
-      // Wait for all ArcGIS saves to complete, then add 500ms delay for commit, then update state
-      Promise.all(savePromises)
-        .then(() => {
-          // Wait 500ms to ensure ArcGIS response is committed
-          return new Promise(resolve => setTimeout(resolve, 500))
-        })
-        .then(() => {
-          // Now update state - this triggers reactive refresh with stable data
-          setRecords((prev) => [newRecord, ...prev])
-        })
-        .catch((err) => {
-          console.error("Error during ArcGIS save, updating state anyway:", err)
-          // Update state even on error so user sees their drawing
-          setRecords((prev) => [newRecord, ...prev])
-        })
+      // Note: ArcGIS save now happens in handleRecordDrawing() in EsriMap.tsx
+      // with full metadata. No need to save here again to avoid duplicates.
+      console.log("ℹ️ ArcGIS save handled by handleRecordDrawing in EsriMap");
       setFocusPoint(centroid)
       setPendingDropMeta(null)
+      setPendingRecordMetadata(null) // Reset metadata after save
       setGeorefMode("none")
+      setPendingRecordMetadata(null)
       setIsGeometryComplete(true)
       toast({
         title: "Files georeferenced",
@@ -1441,6 +1420,8 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
                 focusZoom={16}
                 zoomToFeature={zoomToFeature}
                 shouldStartWorkAreaDraw={drawCommand}
+                shouldStartRecordDraw={recordDrawCommand}
+                pendingRecordMetadata={pendingRecordMetadata}
               />
             </div>
 

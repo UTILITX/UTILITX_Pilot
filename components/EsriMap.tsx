@@ -11,6 +11,7 @@ import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import * as EL from "esri-leaflet";
 import { useToast } from "@/hooks/use-toast";
 import { addFeatureToLayer } from "@/lib/esriUtils";
+import { getRecordsLayerUrl } from "@/lib/getRecordsLayerUrl";
 import { getSignedUrl, getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
 import type { LatLng } from "@/lib/record-types";
 import type { GeorefMode } from "@/lib/types";
@@ -43,6 +44,7 @@ type EsriMapProps = {
   polygon?: LatLng[] | null;
   onPolygonChange?: (path: LatLng[], area?: number) => void;
   enableWorkAreaDrawing?: boolean;
+  shouldStartRecordDraw?: number;
   enableWorkAreaSelection?: boolean;
   onWorkAreaSelected?: (path: LatLng[], area?: number) => void;
   georefMode?: GeorefMode;
@@ -62,6 +64,7 @@ type EsriMapProps = {
   center?: LatLng;
   zoom?: number;
   zoomToFeature?: any | null; // Esri feature geometry to zoom to
+  pendingRecordMetadata?: any;
 };
 
 export default function EsriMap({
@@ -69,22 +72,24 @@ export default function EsriMap({
   polygon,
   onPolygonChange,
   enableWorkAreaDrawing = false,
+  shouldStartRecordDraw = 0,
   enableWorkAreaSelection = false,
   onWorkAreaSelected,
   georefMode = "none",
   georefColor,
   onGeorefComplete,
   pickPointActive = false,
-  pickZoom = 16,
+  pickZoom = 20,
   bubbles = [],
   shapes = [],
   enableDrop = false,
   onDropFilesAt,
   focusPoint,
-  focusZoom = 16,
+  focusZoom = 20,
   center,
   zoom,
   zoomToFeature,
+  pendingRecordMetadata,
 }: EsriMapProps) {
   const mapRef = useRef<L.Map | null>(null);
   const workAreasLayerRef = useRef<any>(null);
@@ -101,6 +106,9 @@ export default function EsriMap({
   const hasActiveWorkAreaRef = useRef(false);
   const drawingSessionActiveRef = useRef(false);
   const enableWorkAreaDrawingRef = useRef(enableWorkAreaDrawing);
+  const georefModeRef = useRef(georefMode);
+  const pendingRecordMetadataRef = useRef(pendingRecordMetadata);
+  const recordSavedToArcGISRef = useRef(false);
   const toastRef = useRef<any>(null);
 
   // Dedicated initialization effect - runs once on mount
@@ -133,6 +141,10 @@ export default function EsriMap({
       const map = L.map("map", {
         center: [43.7, -79.4], // Toronto default
         zoom: 12,
+        minZoom: 3,
+        maxZoom: 19, // Proper maxZoom for Esri vector basemaps (fixes Leaflet-Geoman pm:create issue)
+        wheelDebounceTime: 25, // smoother zoom
+        wheelPxPerZoomLevel: 60,
       });
 
       mapRef.current = map;
@@ -165,12 +177,15 @@ export default function EsriMap({
           const basemaps: Record<string, L.TileLayer> = {
             Imagery: EL.basemapLayer("Imagery", {
               apikey: apiKey,
+              maxZoom: 19,
             }),
             Streets: EL.basemapLayer("Streets", {
               apikey: apiKey,
+              maxZoom: 19,
             }),
             Topographic: EL.basemapLayer("Topographic", {
               apikey: apiKey,
+              maxZoom: 19,
             }),
           };
   
@@ -178,7 +193,14 @@ export default function EsriMap({
           setTimeout(() => {
             try {
               if (map.getPane('tilePane') && map.getContainer()) {
-                basemaps.Streets.addTo(map);
+                const defaultBasemap = basemaps.Streets;
+                defaultBasemap.addTo(map);
+                
+                // Make the map adopt the basemap's maxZoom when it loads
+                defaultBasemap.on("load", () => {
+                  const tileMax = (defaultBasemap.options as any).maxZoom ?? 19;
+                  map.setMaxZoom(tileMax);
+                });
               }
             } catch (err) {
               console.error("Error adding basemap:", err);
@@ -194,6 +216,13 @@ export default function EsriMap({
                   });
                   if (layerControl) {
                     layerControl.addTo(map);
+                    
+                    // Update map maxZoom when basemap changes
+                    map.on("baselayerchange", (e: any) => {
+                      const newBasemap = e.layer;
+                      const tileMax = (newBasemap.options as any).maxZoom ?? 19;
+                      map.setMaxZoom(tileMax);
+                    });
                   }
                 }
               } catch (err) {
@@ -778,8 +807,19 @@ export default function EsriMap({
 
           // Handle record drawing (points, lines, polygons)
           const handleRecordDrawing = async (e: any) => {
-            if (isDrawingWorkAreaRef.current) return; // Don't handle if we're drawing work area
-            if (georefMode === "none") return; // Only handle when in georef mode
+            console.log("🎯 handleRecordDrawing called", {
+              isDrawingWorkArea: isDrawingWorkAreaRef.current,
+              georefMode: georefModeRef.current,
+            });
+            
+            if (isDrawingWorkAreaRef.current) {
+              console.log("⏭️ Skipping - work area drawing is active");
+              return; // Don't handle if we're drawing work area
+            }
+            if (georefModeRef.current === "none") {
+              console.log("⏭️ Skipping - georefMode is none");
+              return; // Only handle when in georef mode
+            }
 
             const layer = e.layer;
             const geojson = layer.toGeoJSON();
@@ -789,80 +829,211 @@ export default function EsriMap({
             isDrawingRecordRef.current = true;
 
             // Check if this matches the current georef mode
-            if (georefMode === "point" && type !== "Point") {
+            const currentGeorefMode = georefModeRef.current;
+            console.log("🔍 Checking geometry type match:", {
+              currentGeorefMode,
+              geometryType: type,
+            });
+            
+            if (currentGeorefMode === "point" && type !== "Point") {
+              console.log("❌ Geometry type mismatch - removing layer");
               map.removeLayer(layer);
               isDrawingRecordRef.current = false;
               return;
             }
-            if (georefMode === "line" && type !== "LineString") {
+            if (currentGeorefMode === "line" && type !== "LineString") {
+              console.log("❌ Geometry type mismatch - removing layer");
               map.removeLayer(layer);
               isDrawingRecordRef.current = false;
               return;
             }
-            if (georefMode === "polygon" && type !== "Polygon") {
+            if (currentGeorefMode === "polygon" && type !== "Polygon") {
+              console.log("❌ Geometry type mismatch - removing layer");
               map.removeLayer(layer);
               isDrawingRecordRef.current = false;
               return;
             }
+            
+            console.log("✅ Geometry type matches - proceeding with record save");
 
-            // Apply APWA color styling based on georefColor or utility type
-            const color = georefColor || getApwaColor(undefined);
-            if (type === "LineString" || type === "Polygon") {
-              (layer as L.Polyline | L.Polygon).setStyle({
-                color: color,
-                fillColor: type === "Polygon" ? color : undefined,
-                weight: type === "LineString" ? 3 : 2,
-                opacity: 1,
-                fillOpacity: type === "Polygon" ? 0.5 : undefined,
-              });
-            } else if (type === "Point") {
-              (layer as L.Marker).setIcon(
-                L.divIcon({
-                  className: "custom-marker",
-                  html: `<div style="background-color: ${color}; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>`,
-                  iconSize: [20, 20],
-                })
-              );
-            }
-
-            // Convert to appropriate format
-            let result: { type: "Point"; point: LatLng } | { type: "LineString" | "Polygon"; path: LatLng[] };
-
-            if (type === "Point") {
-              const point: LatLng = {
-                lat: geometry.coordinates[1],
-                lng: geometry.coordinates[0],
-              };
-              result = { type: "Point", point };
-
-              // Don't save here - let upload-tab.tsx save with file URLs
-              // Just call the callback to update the UI
-              if (onGeorefComplete) {
-                onGeorefComplete(result, { utilityType: undefined }); // Will be set by upload-tab
+            try {
+              // Apply APWA color styling based on georefColor or utility type
+              const color = georefColor || getApwaColor(undefined);
+              console.log("🎨 Applying color:", color, "georefColor:", georefColor);
+              
+              if (type === "LineString" || type === "Polygon") {
+                (layer as L.Polyline | L.Polygon).setStyle({
+                  color: color,
+                  fillColor: type === "Polygon" ? color : undefined,
+                  weight: type === "LineString" ? 3 : 2,
+                  opacity: 1,
+                  fillOpacity: type === "Polygon" ? 0.5 : undefined,
+                });
+                console.log("✅ Applied styling to", type);
+              } else if (type === "Point") {
+                (layer as L.Marker).setIcon(
+                  L.divIcon({
+                    className: "custom-marker",
+                    html: `<div style="background-color: ${color}; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>`,
+                    iconSize: [20, 20],
+                  })
+                );
+                console.log("✅ Applied icon to Point");
               }
-            } else if (type === "LineString" || type === "Polygon") {
-              const coordinates = type === "LineString" 
-                ? geometry.coordinates 
-                : geometry.coordinates[0]; // First ring for polygon
-              const path: LatLng[] = coordinates.map((coord: number[]) => ({
-                lat: coord[1],
-                lng: coord[0],
-              }));
 
-              result = { type: type as "LineString" | "Polygon", path };
+              // Convert to appropriate format
+              let result: { type: "Point"; point: LatLng } | { type: "LineString" | "Polygon"; path: LatLng[] };
 
-              // Don't save here - let upload-tab.tsx save with file URLs
-              // Just call the callback to update the UI
-              if (onGeorefComplete) {
-                onGeorefComplete(result, { utilityType: undefined }); // Will be set by upload-tab
+              if (type === "Point") {
+                const point: LatLng = {
+                  lat: geometry.coordinates[1],
+                  lng: geometry.coordinates[0],
+                };
+                result = { type: "Point", point };
+                console.log("✅ Converted Point geometry");
+
+                // Save to ArcGIS with metadata BEFORE calling onGeorefComplete
+                if (pendingRecordMetadataRef.current) {
+                  // Merge metadata with the Esri attributes
+                  const metadata = pendingRecordMetadataRef.current;
+                  const attributes = {
+                    utility_type: metadata.utility_type ?? null,
+                    record_type: metadata.record_type ?? null,
+                    organization: metadata.organization ?? null,
+                    notes: metadata.notes ?? null,
+                    file_url: metadata.file_url ?? null,
+                    record_id: metadata.record_id ?? null,
+                    source: metadata.source ?? null,
+                    processed_date: metadata.processed_date ?? null,
+                    Creator: metadata.Creator ?? null,
+                    geometry_type: "Point",
+                  };
+
+                  console.log("🟦 Saving record with attributes:", attributes);
+
+                  // Convert geometry to GeoJSON format for ArcGIS
+                  const esriGeometry = {
+                    type: "Point",
+                    coordinates: [point.lng, point.lat],
+                  };
+
+                  const recordsLayerUrl = getRecordsLayerUrl("Point");
+                  
+                  if (recordsLayerUrl) {
+                    try {
+                      await addFeatureToLayer(recordsLayerUrl, esriGeometry, attributes);
+                      console.log("✅ Record saved to ArcGIS successfully");
+                      recordSavedToArcGISRef.current = true;
+                    } catch (err) {
+                      console.error("❌ Error saving record to ArcGIS:", err);
+                      // Continue anyway - still call onGeorefComplete for UI
+                    }
+                  } else {
+                    console.error("❌ No target layer URL found for geometry: Point");
+                  }
+                } else {
+                  console.warn("⚠️ No pendingRecordMetadata - skipping ArcGIS save");
+                }
+
+                // Call the callback to update the UI
+                console.log("📞 Calling onGeorefComplete for Point");
+                if (onGeorefComplete) {
+                  onGeorefComplete(result, { utilityType: undefined }); // Will be set by upload-tab
+                  console.log("✅ onGeorefComplete called for Point");
+                } else {
+                  console.log("⚠️ onGeorefComplete is not defined!");
+                }
+              } else if (type === "LineString" || type === "Polygon") {
+                const coordinates = type === "LineString" 
+                  ? geometry.coordinates 
+                  : geometry.coordinates[0]; // First ring for polygon
+                const path: LatLng[] = coordinates.map((coord: number[]) => ({
+                  lat: coord[1],
+                  lng: coord[0],
+                }));
+
+                result = { type: type as "LineString" | "Polygon", path };
+                console.log("✅ Converted", type, "geometry, path length:", path.length);
+
+                // Save to ArcGIS with metadata BEFORE calling onGeorefComplete
+                if (pendingRecordMetadataRef.current) {
+                  // Merge metadata with the Esri attributes
+                  const metadata = pendingRecordMetadataRef.current;
+                  const attributes = {
+                    utility_type: metadata.utility_type ?? null,
+                    record_type: metadata.record_type ?? null,
+                    organization: metadata.organization ?? null,
+                    notes: metadata.notes ?? null,
+                    file_url: metadata.file_url ?? null,
+                    record_id: metadata.record_id ?? null,
+                    source: metadata.source ?? null,
+                    processed_date: metadata.processed_date ?? null,
+                    Creator: metadata.Creator ?? null,
+                    geometry_type: type,
+                  };
+
+                  console.log("🟦 Saving record with attributes:", attributes);
+
+                  // Convert geometry to GeoJSON format for ArcGIS
+                  const esriGeometry = {
+                    type: type,
+                    coordinates: type === "LineString" 
+                      ? path.map((p) => [p.lng, p.lat])
+                      : [path.map((p) => [p.lng, p.lat])], // Polygon needs nested array
+                  };
+
+                  // Determine geometry type for routing
+                  const geometryType = type === "LineString" ? "Line" : "Polygon";
+                  const recordsLayerUrl = getRecordsLayerUrl(geometryType);
+                  
+                  if (recordsLayerUrl) {
+                    try {
+                      await addFeatureToLayer(recordsLayerUrl, esriGeometry, attributes);
+                      console.log("✅ Record saved to ArcGIS successfully");
+                      recordSavedToArcGISRef.current = true;
+                    } catch (err) {
+                      console.error("❌ Error saving record to ArcGIS:", err);
+                      // Continue anyway - still call onGeorefComplete for UI
+                    }
+                  } else {
+                    console.error(`❌ No target layer URL found for geometry: ${geometryType}`);
+                  }
+                } else {
+                  console.warn("⚠️ No pendingRecordMetadata - skipping ArcGIS save");
+                }
+
+                // Call the callback to update the UI
+                console.log("📞 Calling onGeorefComplete for", type, "with path length:", path.length);
+                if (onGeorefComplete) {
+                  onGeorefComplete(result, { utilityType: undefined }); // Will be set by upload-tab
+                  console.log("✅ onGeorefComplete called for", type);
+                } else {
+                  console.log("⚠️ onGeorefComplete is not defined!");
+                }
               }
+            } catch (error: any) {
+              console.error("❌ Error in handleRecordDrawing:", error);
+              throw error;
             }
 
             // Store georef layer
             currentGeorefLayerRef.current = layer;
 
-            map.removeLayer(layer); // Remove temporary drawing layer
+            // Don't remove the layer immediately - let it stay visible until the record is in state
+            // The layer will be replaced by the proper record rendering from bubbles/shapes
+            // Remove it after a short delay to allow state update to trigger re-render
+            setTimeout(() => {
+              if (map.hasLayer(layer)) {
+                map.removeLayer(layer);
+              }
+            }, 100);
+            
             isDrawingRecordRef.current = false;
+            
+            // Reset the save flag for next drawing session
+            setTimeout(() => {
+              recordSavedToArcGISRef.current = false;
+            }, 1000);
           };
 
           // Handle point picking for georeferencing
@@ -917,12 +1088,25 @@ export default function EsriMap({
                   const geojson = e.layer.toGeoJSON();
                   const geometry = geojson.geometry;
 
-                  // Determine if this is work area or record based on enableWorkAreaDrawing and georefMode
-                  // Use ref to get current value, not captured closure value
-                  if (enableWorkAreaDrawingRef.current && geometry.type === "Polygon") {
-                    handleWorkAreaDrawing(e);
-                  } else if (georefMode !== "none") {
+                  // Determine if this is work area or record
+                  // PRIORITY: Check record drawing mode FIRST (georefMode), then work area
+                  // Use refs to get current values, not captured closure values
+                  console.log("🔍 pm:create event - routing decision:", {
+                    geometryType: geometry.type,
+                    georefMode: georefModeRef.current,
+                    enableWorkAreaDrawing: enableWorkAreaDrawingRef.current,
+                  });
+                  
+                  if (georefModeRef.current !== "none") {
+                    // Record drawing mode is active - route to record handler
+                    console.log("✅ Routing to handleRecordDrawing");
                     handleRecordDrawing(e);
+                  } else if (enableWorkAreaDrawingRef.current && geometry.type === "Polygon") {
+                    // Work area drawing mode is active - route to work area handler
+                    console.log("✅ Routing to handleWorkAreaDrawing");
+                    handleWorkAreaDrawing(e);
+                  } else {
+                    console.log("⚠️ No handler matched - geometry type:", geometry.type);
                   }
                 });
 
@@ -1042,10 +1226,18 @@ export default function EsriMap({
     }
   }, [polygon]);
 
-  // Update ref whenever enableWorkAreaDrawing changes (for event listener)
+  // Update refs whenever props change (for event listener)
   useEffect(() => {
     enableWorkAreaDrawingRef.current = enableWorkAreaDrawing;
   }, [enableWorkAreaDrawing]);
+
+  useEffect(() => {
+    georefModeRef.current = georefMode;
+  }, [georefMode]);
+
+  useEffect(() => {
+    pendingRecordMetadataRef.current = pendingRecordMetadata;
+  }, [pendingRecordMetadata]);
 
   // 🔒 Never auto-enable draw mode from React re-render.
   // Only turn ON drawing when the user clicks the button.
@@ -1073,63 +1265,81 @@ export default function EsriMap({
     }
   }, [enableWorkAreaDrawing]);
 
-  // Update drawing controls when georefMode changes (without re-initializing map)
+  // 🎯 Record drawing mode - controlled by shouldStartRecordDraw command token
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Only trigger if georefMode is active and command token is set
+    if (shouldStartRecordDraw > 0 && georefMode !== "none") {
+      console.log("✏️ Starting RECORD draw mode:", georefMode);
+
+      // Disable any active work area draw
+      map.pm.disableDraw();
+      map.pm.disableGlobalEditMode();
+      map.pm.disableGlobalRemovalMode();
+
+      // Ensure controls are set up (Edit/Erase only, no draw buttons)
+      try {
+        map.pm.removeControls();
+      } catch (e) {
+        // Controls might not exist, that's fine
+      }
+      
+      map.pm.addControls({
+        position: "topleft",
+        drawMarker: false,
+        drawPolyline: false,
+        drawPolygon: false,
+        drawRectangle: false,
+        drawCircle: false,
+        drawCircleMarker: false,
+        editMode: true,      // ✏️ enable edit mode (move / edit vertices)
+        dragMode: false,
+        cutPolygon: false,
+        removalMode: true,   // 🗑️ allows erase/delete
+        oneBlock: true,      // groups icons into one compact block
+      });
+
+      // Enable appropriate PM draw mode based on georefMode
+      if (georefMode === "point") {
+        map.pm.enableDraw("Marker", { snappable: true });
+      } else if (georefMode === "line") {
+        map.pm.enableDraw("Line", { snappable: true });
+      } else if (georefMode === "polygon") {
+        map.pm.enableDraw("Polygon", { snappable: true });
+      }
+    }
+  }, [shouldStartRecordDraw, georefMode]);
+
+  // Update drawing controls when georefMode changes (setup controls only, no auto-enable)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || mode !== "draw") return;
 
-    // Remove existing controls first
+    // Only setup controls, do NOT auto-enable draw mode
+    // Draw mode is now controlled exclusively by shouldStartRecordDraw command token
     try {
-      map.pm.disableDraw();
       map.pm.removeControls();
     } catch (e) {
       // Controls might not exist, that's fine
     }
 
-    // Enable drawing controls based on mode (georef mode only, work area is handled separately)
-    if (georefMode !== "none") {
-      // Record drawing: hide draw buttons, only show Edit/Erase
-      // Drawing is controlled programmatically via "Draw on Map" button
-      map.pm.addControls({
-        position: "topleft",
-        drawMarker: false,
-        drawPolyline: false,
-        drawPolygon: false,
-        drawRectangle: false,
-        drawCircle: false,
-        drawCircleMarker: false,
-        editMode: true,      // ✏️ enable edit mode (move / edit vertices)
-        dragMode: false,
-        cutPolygon: false,
-        removalMode: true,   // 🗑️ allows erase/delete
-        oneBlock: true,      // groups icons into one compact block
-      });
-      
-      // Enable the appropriate drawing mode programmatically
-      if (georefMode === "point") {
-        map.pm.enableDraw("Marker");
-      } else if (georefMode === "line") {
-        map.pm.enableDraw("Line");
-      } else if (georefMode === "polygon") {
-        map.pm.enableDraw("Polygon");
-      }
-    } else {
-      // Hide all draw buttons - only show Edit and Erase for professional cleanup
-      map.pm.addControls({
-        position: "topleft",
-        drawMarker: false,
-        drawPolyline: false,
-        drawPolygon: false,
-        drawRectangle: false,
-        drawCircle: false,
-        drawCircleMarker: false,
-        editMode: true,      // ✏️ enable edit mode (move / edit vertices)
-        dragMode: false,
-        cutPolygon: false,
-        removalMode: true,   // 🗑️ allows erase/delete
-        oneBlock: true,      // groups icons into one compact block
-      });
-    }
+    // Always show Edit/Erase controls for professional cleanup
+    map.pm.addControls({
+      position: "topleft",
+      drawMarker: false,
+      drawPolyline: false,
+      drawPolygon: false,
+      drawRectangle: false,
+      drawCircle: false,
+      drawCircleMarker: false,
+      editMode: true,      // ✏️ enable edit mode (move / edit vertices)
+      dragMode: false,
+      cutPolygon: false,
+      removalMode: true,   // 🗑️ allows erase/delete
+      oneBlock: true,      // groups icons into one compact block
+    });
 
     // Disable drawing when edit mode is enabled to prevent overlap
     const handleEditModeToggle = (e: any) => {
@@ -1203,10 +1413,21 @@ export default function EsriMap({
     // Debounce layer refresh to prevent "line disappears" bug and flicker
     const timer = setTimeout(() => {
       // Clear existing bubbles and shapes
+      // Explicitly unbind popups before clearing to ensure clean state
       if (markersGroupRef.current) {
+        markersGroupRef.current.eachLayer((layer: any) => {
+          if (layer.unbindPopup) {
+            layer.unbindPopup();
+          }
+        });
         markersGroupRef.current.clearLayers();
       }
       if (shapesGroupRef.current) {
+        shapesGroupRef.current.eachLayer((layer: any) => {
+          if (layer.unbindPopup) {
+            layer.unbindPopup();
+          }
+        });
         shapesGroupRef.current.clearLayers();
       }
 
@@ -1317,11 +1538,18 @@ export default function EsriMap({
           />
         );
         
+        // Bind popup before adding to map to ensure proper initialization
         marker.bindPopup(popupContent, {
           className: "custom-popup",
           maxWidth: 400,
         });
         markersGroupRef.current.addLayer(marker);
+        
+        // Ensure popup is properly initialized (force Leaflet to recognize the popup)
+        // This ensures new bubbles have working popups even after map stability improvements
+        if (marker.getPopup) {
+          marker.getPopup(); // Force popup initialization
+        }
       });
     }
 

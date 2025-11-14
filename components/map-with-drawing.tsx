@@ -39,6 +39,7 @@ type MapWithDrawingProps = {
   polygon?: LatLng[] | null;
   onPolygonChange?: (path: LatLng[], area?: number) => void;
   shouldStartWorkAreaDraw?: number;
+  shouldStartRecordDraw?: number;
   enableWorkAreaSelection?: boolean;
   onWorkAreaSelected?: (path: LatLng[], area?: number) => void;
   georefMode?: GeorefMode;
@@ -57,6 +58,7 @@ type MapWithDrawingProps = {
   center?: LatLng;
   zoom?: number;
   zoomToFeature?: any | null;
+  pendingRecordMetadata?: any;
 };
 
 export default function MapWithDrawing({
@@ -64,6 +66,7 @@ export default function MapWithDrawing({
   polygon,
   onPolygonChange,
   shouldStartWorkAreaDraw = 0,
+  shouldStartRecordDraw = 0,
   enableWorkAreaSelection = false,
   onWorkAreaSelected,
   georefMode = "none",
@@ -80,6 +83,7 @@ export default function MapWithDrawing({
   center,
   zoom,
   zoomToFeature,
+  pendingRecordMetadata,
 }: MapWithDrawingProps) {
   // Convert command token to boolean for EsriMap
   // When shouldStartWorkAreaDraw increments, enableWorkAreaDrawing becomes true
@@ -92,6 +96,7 @@ export default function MapWithDrawing({
         polygon={polygon}
         onPolygonChange={onPolygonChange}
         enableWorkAreaDrawing={enableWorkAreaDrawing}
+        shouldStartRecordDraw={shouldStartRecordDraw}
         enableWorkAreaSelection={enableWorkAreaSelection}
         onWorkAreaSelected={onWorkAreaSelected}
         georefMode={georefMode}
@@ -108,6 +113,7 @@ export default function MapWithDrawing({
         center={center}
         zoom={zoom}
         zoomToFeature={zoomToFeature}
+        pendingRecordMetadata={pendingRecordMetadata}
       />
     </div>
   );
