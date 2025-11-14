@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { RecordsTable } from "@/components/tables/RecordsTable";
@@ -38,6 +39,14 @@ export default function BottomDrawer({
   onZoomToRecord,
   onZoomToWorkArea,
 }: BottomDrawerProps) {
+  // Filter state - lifted up to persist across tab switches
+  const [utilityFilter, setUtilityFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [orgFilter, setOrgFilter] = useState<string>("all");
+  const [geometryFilter, setGeometryFilter] = useState<string>("all");
+  const [hasFileFilter, setHasFileFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+
   if (!isOpen) return null;
 
   return (
@@ -70,6 +79,18 @@ export default function BottomDrawer({
           <RecordsTable
             records={records}
             onZoomToRecord={onZoomToRecord}
+            utilityFilter={utilityFilter}
+            setUtilityFilter={setUtilityFilter}
+            typeFilter={typeFilter}
+            setTypeFilter={setTypeFilter}
+            orgFilter={orgFilter}
+            setOrgFilter={setOrgFilter}
+            geometryFilter={geometryFilter}
+            setGeometryFilter={setGeometryFilter}
+            hasFileFilter={hasFileFilter}
+            setHasFileFilter={setHasFileFilter}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
           />
         </TabsContent>
 
