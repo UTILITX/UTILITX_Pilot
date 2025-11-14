@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useCallback } from "react"
 import { useMemo, useState, useRef } from "react"
 import type React from "react"
 import type { LatLng, RequestRecord } from "@/lib/record-types"
@@ -104,6 +104,7 @@ export default function UploadTab({ records, setRecords, preloadedPolygon, prelo
   // Work area drawing mode
   const [isDrawingWorkArea, setIsDrawingWorkArea] = useState(false)
   const [isSelectingWorkArea, setIsSelectingWorkArea] = useState(false)
+  const [drawCommand, setDrawCommand] = useState(0)
 
   // Map overlays from records
   const { bubbles, shapes } = useMemo(() => {
@@ -865,7 +866,6 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
     setGeorefMode("none")
     setGeorefColor(undefined)
     setFocusPoint(null)
-    setShowAllRecords(false)
 
     // Clear file input
     const el = document.getElementById("upload-file-input") as HTMLInputElement | null
@@ -917,6 +917,20 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
   const handleCompleteUpload = () => {
     completeUpload()
   }
+
+  // Memoize props passed to the map
+  const memoPolygon = useMemo(() => polygon, [polygon])
+  const memoBubbles = useMemo(() => bubbles, [bubbles])
+  const memoShapes = useMemo(() => shapes, [shapes])
+
+  // Wrap onPolygonChange in useCallback
+  const handlePolygonChange = useCallback((path: LatLng[], area?: number) => {
+    setPolygon(path)
+    setAreaSqMeters(area ?? null)
+    setIsDrawingWorkArea(false)
+    // Reset drawCommand to 0 so enableWorkAreaDrawing becomes false and draw mode is disabled
+    setDrawCommand(0)
+  }, [])
 
   return (
     <div className="space-y-4">
@@ -989,6 +1003,7 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
                 <div className="space-y-2">
                   <Button
                     onClick={() => {
+                      setDrawCommand((c) => c + 1)
                       setIsDrawingWorkArea(true)
                       setIsSelectingWorkArea(false)
                       toast({
@@ -1033,6 +1048,7 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
                   <Button
                     variant="outline"
                     onClick={() => {
+                      setDrawCommand((c) => c + 1)
                       setIsDrawingWorkArea(true)
                       toast({
                         title: "Redraw mode activated",
@@ -1401,14 +1417,8 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
             <div className="aspect-[4/3] w-full rounded-md border">
               <MapWithDrawing
                 mode="draw"
-                polygon={polygon}
-                onPolygonChange={(path, area) => {
-                  setPolygon(path)
-                  setAreaSqMeters(area ?? null)
-                  setIsDrawingWorkArea(false) // Disable drawing mode after polygon is drawn
-                }}
-                enableWorkAreaDrawing={isDrawingWorkArea}
-                enableWorkAreaSelection={isSelectingWorkArea}
+                polygon={memoPolygon}
+                onPolygonChange={handlePolygonChange}
                 onWorkAreaSelected={(path, area) => {
                   setPolygon(path)
                   setAreaSqMeters(area ?? null)
@@ -1423,13 +1433,14 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
                 onGeorefComplete={handleGeorefComplete}
                 pickPointActive={georefMode === "point"}
                 pickZoom={16}
-                bubbles={bubbles}
-                shapes={shapes}
+                bubbles={memoBubbles}
+                shapes={memoShapes}
                 enableDrop
                 onDropFilesAt={handleDropFilesAt}
                 focusPoint={focusPoint}
                 focusZoom={16}
                 zoomToFeature={zoomToFeature}
+                shouldStartWorkAreaDraw={drawCommand}
               />
             </div>
 

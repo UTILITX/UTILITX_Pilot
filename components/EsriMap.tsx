@@ -98,28 +98,20 @@ export default function EsriMap({
   const shapesGroupRef = useRef<L.LayerGroup | null>(null);
   const isDrawingWorkAreaRef = useRef(false);
   const isDrawingRecordRef = useRef(false);
+  const hasActiveWorkAreaRef = useRef(false);
+  const drawingSessionActiveRef = useRef(false);
+  const enableWorkAreaDrawingRef = useRef(enableWorkAreaDrawing);
   const toastRef = useRef<any>(null);
 
+  // Dedicated initialization effect - runs once on mount
   useEffect(() => {
-    // Get toast function - we'll use a ref to avoid calling useToast in useEffect
-    const showToast = (options: any) => {
-      // We'll use a simple approach - try to get toast from window or use console
-      if (typeof window !== "undefined" && (window as any).toast) {
-        (window as any).toast(options);
-      } else {
-        console.log("Toast:", options.title, options.description);
-      }
-    };
-    
+    // Guard: ensure map initializes only once
+    if (mapRef.current) return;
+
     // Check if container exists
     const mapContainer = document.getElementById("map");
     if (!mapContainer) {
       console.error("Map container not found");
-      return;
-    }
-
-    // Don't initialize if map already exists
-    if (mapRef.current) {
       return;
     }
 
@@ -137,10 +129,10 @@ export default function EsriMap({
     initializeMap();
 
     function initializeMap() {
-      // Initialize map
+      // Initialize map with default values (no prop dependencies)
       const map = L.map("map", {
-        center: center ? [center.lat, center.lng] : [43.7, -79.4], // Toronto default
-        zoom: zoom || 12,
+        center: [43.7, -79.4], // Toronto default
+        zoom: 12,
       });
 
       mapRef.current = map;
@@ -297,7 +289,7 @@ export default function EsriMap({
                 const layer = EL.featureLayer({
                   url: url,
                   apikey: process.env.NEXT_PUBLIC_ARCGIS_API_KEY!,
-                  pointToLayer: geometryType === "Point" ? (feature, latlng) => {
+                  pointToLayer: geometryType === "Point" ? (feature: any, latlng: any) => {
                     const props = feature.properties || {};
                     const utilityType = props.utility_type;
                     const color = getApwaColor(utilityType);
@@ -561,6 +553,16 @@ export default function EsriMap({
             }
           }, 300);
 
+          // Get toast function - we'll use a ref to avoid calling useToast in useEffect
+          const showToast = (options: any) => {
+            // We'll use a simple approach - try to get toast from window or use console
+            if (typeof window !== "undefined" && (window as any).toast) {
+              (window as any).toast(options);
+            } else {
+              console.log("Toast:", options.title, options.description);
+            }
+          };
+
           // Enable drawing controls based on mode - wait for map to be fully ready
           setTimeout(() => {
             try {
@@ -583,8 +585,19 @@ export default function EsriMap({
                     oneBlock: true,      // groups icons into one compact block
                   });
                   
-                  // Enable polygon drawing mode programmatically (not via toolbar)
-                  map.pm.enableDraw("Polygon");
+                  // Only enable draw mode if explicitly requested AND we are starting a fresh drawing session.
+                  if (enableWorkAreaDrawing === true) {
+                    if (drawingSessionActiveRef.current === false && hasActiveWorkAreaRef.current === false) {
+                      console.log("🔥 enableDraw called from INIT_BLOCK", {
+                        enableWorkAreaDrawing,
+                        drawingSessionActive: drawingSessionActiveRef.current,
+                        hasActiveWorkArea: hasActiveWorkAreaRef.current,
+                      });
+                      map.pm.enableDraw("Polygon");
+                      drawingSessionActiveRef.current = true;
+                      hasActiveWorkAreaRef.current = true;
+                    }
+                  }
                 } else if (georefMode !== "none") {
                   // Record drawing: hide draw buttons, only show Edit/Erase
                   // Drawing is controlled programmatically via "Draw on Map" button
@@ -656,7 +669,9 @@ export default function EsriMap({
               return;
             }
 
+            // Mark that we're starting to draw a work area
             isDrawingWorkAreaRef.current = true;
+            hasActiveWorkAreaRef.current = true;
 
             // Convert GeoJSON coordinates to LatLng[]
             // Polygon: [[[lng, lat], [lng, lat], ...]] (first ring is exterior)
@@ -709,8 +724,31 @@ export default function EsriMap({
                 description: "Polygon saved to workarea layer",
               });
               
-              // Disable drawing mode after saving
+              // Mark that drawing is complete and work area is saved
+              isDrawingWorkAreaRef.current = false;
+              hasActiveWorkAreaRef.current = false;
+              drawingSessionActiveRef.current = false;
+              
+              console.log("🎉 Work area saved — drawing session should now be OFF", {
+                drawingSessionActive: drawingSessionActiveRef.current,
+                hasActiveWorkArea: hasActiveWorkAreaRef.current,
+              });
+              
+              // Full kill switch
+              console.log("🛑 Disabling draw");
               map.pm.disableDraw();
+              map.pm.disableGlobalEditMode();
+              map.pm.disableGlobalRemovalMode();
+              
+              // 🔥 FINAL FIX - close the UI loop
+              // Note: setEnableWorkAreaDrawing would need to be a callback prop from parent
+              // For now, the refs are reset and the effect will handle cleanup when prop changes
+              
+              // reset refs
+              drawingSessionActiveRef.current = false;
+              hasActiveWorkAreaRef.current = false;
+              
+              console.log("🎉 Work area saved — draw permanently off");
             } catch (err: any) {
               console.error("Error saving work area:", err);
               let errorMessage = "Could not save to workarea layer";
@@ -730,9 +768,12 @@ export default function EsriMap({
                 variant: "destructive",
               });
               map.removeLayer(layer);
+              
+              // Mark that drawing is complete even on error
+              isDrawingWorkAreaRef.current = false;
+              hasActiveWorkAreaRef.current = false;
+              drawingSessionActiveRef.current = false; // End drawing session
             }
-
-            isDrawingWorkAreaRef.current = false;
           };
 
           // Handle record drawing (points, lines, polygons)
@@ -877,7 +918,8 @@ export default function EsriMap({
                   const geometry = geojson.geometry;
 
                   // Determine if this is work area or record based on enableWorkAreaDrawing and georefMode
-                  if (enableWorkAreaDrawing && geometry.type === "Polygon") {
+                  // Use ref to get current value, not captured closure value
+                  if (enableWorkAreaDrawingRef.current && geometry.type === "Polygon") {
                     handleWorkAreaDrawing(e);
                   } else if (georefMode !== "none") {
                     handleRecordDrawing(e);
@@ -897,63 +939,9 @@ export default function EsriMap({
               console.error("Error setting up event listeners and drawing features:", err);
             }
           }, 500);
-
-          // Focus on point if provided - wait for map to be ready
-          setTimeout(() => {
-            try {
-              if (focusPoint && map.getContainer()) {
-                map.setView([focusPoint.lat, focusPoint.lng], focusZoom);
-              }
-            } catch (err) {
-              console.error("Error focusing on point:", err);
-            }
-          }, 600);
-
-          // Handle zoom to feature geometry (wait for Map Pane init)
-          setTimeout(() => {
-            try {
-              // Ensure map pane is ready
-              if (!map.getPane('mapPane') || !map.getContainer()) {
-                console.warn("Map not ready for zoom, skipping...");
-                return;
-              }
-              
-              if (zoomToFeature?.geometry) {
-                zoomToEsriFeature(map, zoomToFeature);
-              } else if (zoomToFeature && !zoomToFeature.geometry) {
-                console.warn("Skipping zoom — feature missing geometry:", zoomToFeature);
-              }
-            } catch (err) {
-              console.error("Error zooming to feature:", err);
-            }
-          }, 500);
-
-          // Handle file drops - wait for map to be ready
-          setTimeout(() => {
-            try {
-              if (enableDrop && onDropFilesAt && map.getContainer()) {
-                const handleDrop = (e: DragEvent) => {
-                  e.preventDefault();
-                  if (e.dataTransfer?.files) {
-                    const files = Array.from(e.dataTransfer.files);
-                    const latlng = map.mouseEventToLatLng(e as any);
-                    onDropFilesAt({ lat: latlng.lat, lng: latlng.lng }, files);
-                  }
-                };
-
-                const mapContainer = document.getElementById("map");
-                if (mapContainer) {
-                  mapContainer.addEventListener("drop", handleDrop);
-                  mapContainer.addEventListener("dragover", (e) => e.preventDefault());
-                }
-              }
-      } catch (err) {
-              console.error("Error setting up file drop handlers:", err);
-            }
-          }, 600);
-        }); // Close setTimeout
-      }); // Close whenReady callback
-    } // Close initializeMap function
+        }, 100);
+      });
+    }
 
     // Cleanup
     return () => {
@@ -962,26 +950,7 @@ export default function EsriMap({
         mapRef.current = null;
       }
     };
-  }, [
-    mode,
-    onPolygonChange,
-    enableWorkAreaDrawing,
-    enableWorkAreaSelection,
-    onWorkAreaSelected,
-    georefMode,
-    georefColor,
-    onGeorefComplete,
-    pickPointActive,
-    bubbles,
-    shapes,
-    enableDrop,
-    onDropFilesAt,
-    focusPoint,
-    focusZoom,
-    center,
-    zoom,
-    zoomToFeature,
-  ]);
+  }, []); // Empty dependency array - runs once on mount
 
   // Separate effect to handle zoom to feature updates without re-initializing the map
   useEffect(() => {
@@ -1008,6 +977,48 @@ export default function EsriMap({
     }, 400);
   }, [zoomToFeature]);
 
+  // Separate effect to handle focusPoint/focusZoom updates
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (focusPoint) {
+      map.setView([focusPoint.lat, focusPoint.lng], focusZoom);
+    }
+  }, [focusPoint, focusZoom]);
+
+  // Separate effect to handle enableDrop/onDropFilesAt
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const mapContainer = document.getElementById("map");
+    if (!mapContainer) return;
+
+    if (enableDrop && onDropFilesAt) {
+      const handleDrop = (e: DragEvent) => {
+        e.preventDefault();
+        if (e.dataTransfer?.files) {
+          const files = Array.from(e.dataTransfer.files);
+          const latlng = map.mouseEventToLatLng(e as any);
+          onDropFilesAt({ lat: latlng.lat, lng: latlng.lng }, files);
+        }
+      };
+
+      const handleDragOver = (e: DragEvent) => {
+        e.preventDefault();
+      };
+
+      mapContainer.addEventListener("drop", handleDrop);
+      mapContainer.addEventListener("dragover", handleDragOver);
+
+      return () => {
+        mapContainer.removeEventListener("drop", handleDrop);
+        mapContainer.removeEventListener("dragover", handleDragOver);
+      };
+    }
+  }, [enableDrop, onDropFilesAt]);
+
   // Separate effect to handle polygon updates without re-initializing the map
   useEffect(() => {
     const map = mapRef.current;
@@ -1031,6 +1042,37 @@ export default function EsriMap({
     }
   }, [polygon]);
 
+  // Update ref whenever enableWorkAreaDrawing changes (for event listener)
+  useEffect(() => {
+    enableWorkAreaDrawingRef.current = enableWorkAreaDrawing;
+  }, [enableWorkAreaDrawing]);
+
+  // 🔒 Never auto-enable draw mode from React re-render.
+  // Only turn ON drawing when the user clicks the button.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // If user clicked the UI toggle ON:
+    if (enableWorkAreaDrawing === true) {
+      // Only start drawing if not already active and no work area was just completed
+      if (drawingSessionActiveRef.current === false && hasActiveWorkAreaRef.current === false) {
+        console.log("✏️ User-initiated draw mode ON");
+        map.pm.enableDraw("Polygon");
+        drawingSessionActiveRef.current = true;
+        hasActiveWorkAreaRef.current = true;
+      }
+    }
+
+    // If user turned off draw mode (or a polygon was saved):
+    if (enableWorkAreaDrawing === false) {
+      console.log("🛑 React disabling draw mode");
+      map.pm.disableDraw();
+      drawingSessionActiveRef.current = false;
+      hasActiveWorkAreaRef.current = false;
+    }
+  }, [enableWorkAreaDrawing]);
+
   // Update drawing controls when georefMode changes (without re-initializing map)
   useEffect(() => {
     const map = mapRef.current;
@@ -1044,26 +1086,8 @@ export default function EsriMap({
       // Controls might not exist, that's fine
     }
 
-    // Enable drawing controls based on mode
-    if (enableWorkAreaDrawing) {
-      // Work area drawing: hide draw buttons, only show Edit/Erase
-      // Drawing is controlled programmatically
-      map.pm.addControls({
-        position: "topleft",
-        drawMarker: false,
-        drawPolyline: false,
-        drawPolygon: false,
-        drawRectangle: false,
-        drawCircle: false,
-        drawCircleMarker: false,
-        editMode: true,      // ✏️ enable edit mode (move / edit vertices)
-        dragMode: false,
-        cutPolygon: false,
-        removalMode: true,   // 🗑️ allows erase/delete
-        oneBlock: true,      // groups icons into one compact block
-      });
-      map.pm.enableDraw("Polygon"); // Enable polygon drawing mode programmatically
-    } else if (georefMode !== "none") {
+    // Enable drawing controls based on mode (georef mode only, work area is handled separately)
+    if (georefMode !== "none") {
       // Record drawing: hide draw buttons, only show Edit/Erase
       // Drawing is controlled programmatically via "Draw on Map" button
       map.pm.addControls({
@@ -1119,7 +1143,7 @@ export default function EsriMap({
     return () => {
       map.off("pm:globaleditmodetoggled", handleEditModeToggle);
     };
-  }, [mode, enableWorkAreaDrawing, georefMode]);
+  }, [mode, georefMode]);
 
   // Handle work area selection mode changes
   useEffect(() => {

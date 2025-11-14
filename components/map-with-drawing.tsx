@@ -38,7 +38,7 @@ type MapWithDrawingProps = {
   mode?: "draw" | "view";
   polygon?: LatLng[] | null;
   onPolygonChange?: (path: LatLng[], area?: number) => void;
-  enableWorkAreaDrawing?: boolean;
+  shouldStartWorkAreaDraw?: number;
   enableWorkAreaSelection?: boolean;
   onWorkAreaSelected?: (path: LatLng[], area?: number) => void;
   georefMode?: GeorefMode;
@@ -63,7 +63,7 @@ export default function MapWithDrawing({
   mode = "draw",
   polygon,
   onPolygonChange,
-  enableWorkAreaDrawing = false,
+  shouldStartWorkAreaDraw = 0,
   enableWorkAreaSelection = false,
   onWorkAreaSelected,
   georefMode = "none",
@@ -81,6 +81,10 @@ export default function MapWithDrawing({
   zoom,
   zoomToFeature,
 }: MapWithDrawingProps) {
+  // Convert command token to boolean for EsriMap
+  // When shouldStartWorkAreaDraw increments, enableWorkAreaDrawing becomes true
+  const enableWorkAreaDrawing = shouldStartWorkAreaDraw > 0;
+
   return (
     <div className="h-full w-full flex flex-col">
       <EsriMap
