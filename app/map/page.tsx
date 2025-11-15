@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button"
 import { List } from "lucide-react"
 import { fetchAllRecordsFromEsri, fetchAllWorkAreasFromEsri, type IndexedRecord } from "@/lib/fetchAllEsriData"
 import { WorkAreaAnalysisDrawer } from "@/components/work-areas/WorkAreaAnalysisDrawer"
+import { computeWorkAreaCompleteness } from "@/lib/completeness"
+import { queryRecordsInPolygon } from "@/lib/esri-records"
 
 type PreloadedRequest = {
   createdAt: string
@@ -47,6 +49,7 @@ export default function MapPage() {
     polygon?: LatLng[] | null
     data?: any
   } | null>(null)
+  const [completenessLoading, setCompletenessLoading] = useState(false)
 
   // Esri data for drawer (separate from workflow records)
   const [esriRecords, setEsriRecords] = useState<IndexedRecord[]>([])
@@ -139,15 +142,57 @@ export default function MapPage() {
               data: workArea,
             })
           }}
-          onOpenWorkAreaAnalysis={(workArea) => {
+          onOpenWorkAreaAnalysis={async (workArea) => {
             // Open the analysis drawer directly from Leaflet popup
+            const polygon = workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null
+            
             setSelectedWorkAreaForAnalysis({
               id: workArea.id,
               name: workArea.name,
-              polygon: workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null,
-              data: workArea,
+              polygon,
+              data: {
+                ...workArea,
+                completenessLoading: true,
+              },
             })
+            setCompletenessLoading(true)
             setAnalysisOpen(true)
+
+            try {
+              if (!polygon || polygon.length < 3) {
+                console.warn("No valid polygon on work area, cannot compute completeness.")
+                setCompletenessLoading(false)
+                return
+              }
+
+              // Query records within the polygon
+              const recordFeatures = await queryRecordsInPolygon(polygon)
+              
+              // Compute completeness
+              const completeness = computeWorkAreaCompleteness({ records: recordFeatures })
+
+              // Update with computed data
+              setSelectedWorkAreaForAnalysis({
+                id: workArea.id,
+                name: workArea.name,
+                polygon,
+                data: {
+                  ...workArea,
+                  records: recordFeatures,
+                  ...completeness,
+                },
+              })
+
+              console.log("✅ Computed completeness for work area", {
+                workArea: workArea.name,
+                recordCount: recordFeatures.length,
+                completeness,
+              })
+            } catch (error) {
+              console.error("❌ Error computing work area completeness:", error)
+            } finally {
+              setCompletenessLoading(false)
+            }
           }}
         />
 
@@ -194,6 +239,7 @@ export default function MapPage() {
           polygon={selectedWorkAreaForAnalysis?.polygon || preloadedPolygon}
           records={records}
           data={selectedWorkAreaForAnalysis?.data}
+          loading={completenessLoading}
         />
 
       </div>
