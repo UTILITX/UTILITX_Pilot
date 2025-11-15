@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import type { LatLng, RequestRecord } from "@/lib/record-types"
 import { defaultTaxonomy, flattenTaxonomy, type Taxonomy } from "@/lib/taxonomy"
-import { getUtilityColorsFromDomain } from "@/lib/utility-colors"
+import { getUtilityColorsFromDomain, getUtilityColorsFromUtilityType } from "@/lib/utility-colors"
+import { Droplet, Flame, Zap, Phone, CloudRain, Trash2 } from "lucide-react"
 
 type WorkAreaCompletenessPanelProps = {
   workAreaId?: string
@@ -15,6 +16,7 @@ type WorkAreaCompletenessPanelProps = {
   records?: RequestRecord[]
   taxonomy?: Taxonomy
   className?: string
+  data?: any // For passing pre-computed data
 }
 
 const CATEGORY_DISPLAY_NAMES = {
@@ -26,6 +28,26 @@ const CATEGORY_DISPLAY_NAMES = {
   telecom: "Telecom",
 } as const
 
+const ALL_UTILITIES = ["Water", "Gas", "Electric", "Telecom", "Storm", "Wastewater"] as const
+
+const utilityIcons: Record<string, React.ReactNode> = {
+  Water: <Droplet className="h-3 w-3" />,
+  Gas: <Flame className="h-3 w-3" />,
+  Electric: <Zap className="h-3 w-3" />,
+  Telecom: <Phone className="h-3 w-3" />,
+  Storm: <CloudRain className="h-3 w-3" />,
+  Wastewater: <Trash2 className="h-3 w-3" />,
+}
+
+const utilityAPWAColors: Record<string, { bg: string; text: string; border: string }> = {
+  Water: { bg: "bg-blue-100", text: "text-blue-700", border: "border-blue-200" },
+  Gas: { bg: "bg-yellow-100", text: "text-yellow-700", border: "border-yellow-200" },
+  Electric: { bg: "bg-red-100", text: "text-red-700", border: "border-red-200" },
+  Telecom: { bg: "bg-orange-100", text: "text-orange-700", border: "border-orange-200" },
+  Storm: { bg: "bg-green-100", text: "text-green-700", border: "border-green-200" },
+  Wastewater: { bg: "bg-green-100", text: "text-green-700", border: "border-green-200" },
+}
+
 export function WorkAreaCompletenessPanel({
   workAreaId,
   workAreaName,
@@ -33,6 +55,7 @@ export function WorkAreaCompletenessPanel({
   records = [],
   taxonomy = defaultTaxonomy,
   className,
+  data,
 }: WorkAreaCompletenessPanelProps) {
   // Require a closed polygon with at least 3 vertices
   const active = !!polygon && polygon.length >= 3
@@ -91,29 +114,64 @@ export function WorkAreaCompletenessPanel({
       categoryGroups.set(category.toLowerCase(), { category, items: [] })
     })
 
+    // Track utilities present and record types
+    const utilitiesPresent = new Set<string>()
+    const recordsByType: Record<string, number> = {
+      PDF: 0,
+      AsBuilt: 0,
+      Locate: 0,
+      Permit: 0,
+    }
+
     for (const rec of recordsInside) {
       // Extract utility type from the record path (e.g., "water / as built" -> "water")
       const pathParts = rec.recordTypePath.split("/").map((p) => p.trim().toLowerCase())
       const utilityType = pathParts[0] || ""
+      const recordType = pathParts[1] || ""
 
       // Map utility type to category
       let categoryKey = utilityType
+      let utilityDisplayName = ""
       if (utilityType === "wastewater/sanitary" || utilityType === "wastewater") {
         categoryKey = "wastewater"
-      } else if (utilityType === "stormwater") {
+        utilityDisplayName = "Wastewater"
+      } else if (utilityType === "stormwater" || utilityType === "storm") {
         categoryKey = "storm"
-      } else if (utilityType === "natural gas") {
+        utilityDisplayName = "Storm"
+      } else if (utilityType === "natural gas" || utilityType === "gas") {
         categoryKey = "gas"
-      } else if (utilityType === "electric") {
+        utilityDisplayName = "Gas"
+      } else if (utilityType === "electric" || utilityType === "power") {
         categoryKey = "power"
-      } else if (utilityType === "telco") {
+        utilityDisplayName = "Electric"
+      } else if (utilityType === "telco" || utilityType === "telecom") {
         categoryKey = "telecom"
+        utilityDisplayName = "Telecom"
+      } else if (utilityType === "water") {
+        categoryKey = "water"
+        utilityDisplayName = "Water"
+      }
+
+      if (utilityDisplayName) {
+        utilitiesPresent.add(utilityDisplayName)
+      }
+
+      // Count record types
+      const recordTypeLower = recordType.toLowerCase()
+      if (recordTypeLower.includes("asbuilt") || recordTypeLower.includes("as-built")) {
+        recordsByType.AsBuilt++
+      } else if (recordTypeLower.includes("locate")) {
+        recordsByType.Locate++
+      } else if (recordTypeLower.includes("permit")) {
+        recordsByType.Permit++
+      } else {
+        recordsByType.PDF++
       }
 
       const group = categoryGroups.get(categoryKey)
       if (group) {
         group.items.push({
-          label: pathParts[1] || rec.recordTypePath, // Use record type (e.g., "as built")
+          label: recordType || rec.recordTypePath, // Use record type (e.g., "as built")
           owner: rec.orgName || "Unknown",
           domain: utilityType,
           path: rec.recordTypePath,
@@ -138,62 +196,145 @@ export function WorkAreaCompletenessPanel({
 
     const totalPresent = recordsInside.length
 
+    // Calculate completeness percentage (based on utilities present vs all utilities)
+    const completenessPct = Math.round((utilitiesPresent.size / ALL_UTILITIES.length) * 100)
+
+    // Identify missing utilities
+    const missingUtilities = ALL_UTILITIES.filter((u) => !utilitiesPresent.has(u))
+    const gaps = missingUtilities.map((u) => `Missing ${u} records`)
+
     return {
       categories: nonEmptyCategories,
       totalPresent,
+      utilitiesPresent: Array.from(utilitiesPresent),
+      recordsByType,
+      completenessPct,
+      gaps,
     }
   }, [active, polygon, records, taxonomy])
+
+  // Use data prop if provided, otherwise use computed analysis
+  const completenessPct = data?.completenessPct ?? analysis?.completenessPct ?? 82
+  const recordCount = data?.recordCount ?? analysis?.totalPresent ?? 0
+  const utilitiesPresent = data?.utilitiesPresent ?? analysis?.utilitiesPresent ?? []
+  const recordsByType = data?.recordsByType ?? analysis?.recordsByType ?? { PDF: 0, AsBuilt: 0, Locate: 0, Permit: 0 }
+  const gaps = data?.gaps ?? analysis?.gaps ?? []
+
+  // Get confidence bar color based on completeness
+  const getBarColor = (pct: number) => {
+    if (pct >= 80) return "bg-green-600"
+    if (pct >= 60) return "bg-blue-600"
+    if (pct >= 40) return "bg-yellow-600"
+    return "bg-red-600"
+  }
 
   return (
     <div className={className}>
       {!active ? (
-        <div className="text-sm text-muted-foreground">Draw a polygon to see uploaded records.</div>
-      ) : !analysis ? (
-        <div className="text-sm text-muted-foreground">No analysis available.</div>
-      ) : analysis.categories.length === 0 ? (
-        <div className="text-sm text-muted-foreground">No records found in the selected area.</div>
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-[#dad9d6] animate-slideUpFade">
+          <div className="text-sm text-[#68869a]">Draw a polygon to see uploaded records.</div>
+        </div>
+      ) : !analysis && !data ? (
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-[#dad9d6] animate-slideUpFade">
+          <div className="text-sm text-[#68869a]">No analysis available.</div>
+        </div>
       ) : (
-        <>
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-[#dad9d6] animate-slideUpFade">
+          {/* Bold Completeness Score */}
           <div className="flex items-center justify-between mb-4">
-            <div className="text-sm font-medium">Records in area</div>
-            <div className="text-sm text-muted-foreground">{analysis.totalPresent} records found</div>
+            <div>
+              <div className="text-xs uppercase tracking-wide text-[#68869a]">Completeness</div>
+              <div className="text-2xl font-bold text-[#011e31]">{completenessPct}%</div>
+            </div>
+            <div className="text-xs px-2 py-1 rounded-md bg-[#d7e0eb] text-[#011e31] font-medium">
+              {recordCount} records
+            </div>
           </div>
-          <Separator className="mb-4" />
-          <div className="grid gap-4">
-            {analysis.categories.map((categoryGroup) => {
-              const firstDomain = categoryGroup.items[0]?.domain || ""
-              const colors = getUtilityColorsFromDomain(firstDomain)
 
-              return (
-                <div key={categoryGroup.category} className="rounded-md border p-3">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span
-                      className="inline-block h-3 w-3 rounded-full"
-                      style={{ backgroundColor: colors.stroke }}
-                      aria-hidden
-                    />
-                    <div className="font-medium text-base">{categoryGroup.category}</div>
-                    <div className="text-xs text-muted-foreground ml-auto">{categoryGroup.items.length} uploaded</div>
-                  </div>
+          {/* Horizontal Confidence Bar */}
+          <div className="w-full h-2 bg-gray-100 rounded-md overflow-hidden mb-6">
+            <div
+              className={`h-full ${getBarColor(completenessPct)} transition-all duration-500`}
+              style={{ width: `${completenessPct}%` }}
+            ></div>
+          </div>
 
-                  <div className="space-y-2">
-                    {categoryGroup.items.map((item) => (
-                      <div
-                        key={`${item.recordId}-${item.path}`}
-                        className="flex items-center justify-between text-sm"
-                      >
-                        <Badge variant="secondary" className="text-xs">
-                          {item.label}
-                        </Badge>
-                        <div className="text-xs text-muted-foreground">{item.owner}</div>
+          {/* Utility Coverage Matrix */}
+          <div className="mb-6">
+            <h3 className="text-sm font-medium text-[#011e31] mb-2">Utility Coverage</h3>
+            <div className="flex flex-wrap gap-2">
+              {ALL_UTILITIES.map((u) => {
+                const isPresent = utilitiesPresent.includes(u)
+                const colors = utilityAPWAColors[u] || {
+                  bg: "bg-gray-100",
+                  text: "text-gray-700",
+                  border: "border-gray-200",
+                }
+                return (
+                  <span
+                    key={u}
+                    className={`
+                      px-2 py-1 text-xs rounded-md border flex items-center gap-1
+                      ${
+                        isPresent
+                          ? `${colors.bg} ${colors.text} ${colors.border}`
+                          : "bg-gray-100 text-gray-400 border-gray-200 line-through opacity-60"
+                      }
+                    `}
+                  >
+                    {utilityIcons[u]}
+                    {u}
+                  </span>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Record-Type Breakdown */}
+          <div className="mb-6">
+            <h3 className="text-sm font-medium text-[#011e31] mb-2">Records by Type</h3>
+            <div className="space-y-2">
+              {Object.entries(recordsByType)
+                .filter(([_, count]) => count > 0)
+                .map(([type, count]) => {
+                  // Get APWA color for record type indicator
+                  const colors = getUtilityColorsFromUtilityType(type.toLowerCase())
+                  return (
+                    <div key={type} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="h-2 w-2 rounded-full"
+                          style={{ backgroundColor: colors.stroke }}
+                        ></span>
+                        <span className="text-sm text-[#011e31]">{type}</span>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
+                      <span className="text-sm text-[#011e31] font-medium">{count}</span>
+                    </div>
+                  )
+                })}
+              {Object.values(recordsByType).every((count) => count === 0) && (
+                <div className="text-sm text-[#68869a]">No records by type</div>
+              )}
+            </div>
           </div>
-        </>
+
+          {/* Data Gaps Section */}
+          {gaps.length > 0 && (
+            <div>
+              <h3 className="text-sm font-medium text-[#011e31] mb-2">Data Gaps</h3>
+              <ul className="space-y-1">
+                {gaps.map((gap, index) => (
+                  <li
+                    key={index}
+                    className="px-2 py-1 bg-red-50 text-red-700 rounded-md text-xs border border-red-200"
+                  >
+                    {gap}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
       )}
     </div>
   )

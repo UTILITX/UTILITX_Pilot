@@ -200,3 +200,35 @@
 .utilitx-btn.active {
   @apply bg-white/40 shadow-lg;
 }
+
+/* Drawer animations - Step 4 premium polish */
+@keyframes slideUpFade {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0px);
+  }
+}
+
+.animate-slideUpFade {
+  animation: slideUpFade 0.25s ease-out;
+  animation-fill-mode: both;
+}
+
+@keyframes slideInRight {
+  0% {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0px);
+  }
+}
+
+.animate-slideInRight {
+  animation: slideInRight 0.25s ease-out;
+}
