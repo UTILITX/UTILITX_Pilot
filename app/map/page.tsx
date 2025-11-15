@@ -8,6 +8,7 @@ import BottomDrawer from "@/components/BottomDrawer"
 import { Button } from "@/components/ui/button"
 import { List } from "lucide-react"
 import { fetchAllRecordsFromEsri, fetchAllWorkAreasFromEsri, type IndexedRecord } from "@/lib/fetchAllEsriData"
+import { WorkAreaAnalysisDrawer } from "@/components/work-areas/WorkAreaAnalysisDrawer"
 
 type PreloadedRequest = {
   createdAt: string
@@ -36,6 +37,15 @@ export default function MapPage() {
     date?: string
     notes?: string
     records?: any[]
+  } | null>(null)
+
+  // Work Area Analysis Drawer state
+  const [analysisOpen, setAnalysisOpen] = useState(false)
+  const [selectedWorkAreaForAnalysis, setSelectedWorkAreaForAnalysis] = useState<{
+    id?: string
+    name?: string
+    polygon?: LatLng[] | null
+    data?: any
   } | null>(null)
 
   // Esri data for drawer (separate from workflow records)
@@ -120,6 +130,25 @@ export default function MapPage() {
           preloadedPolygon={preloadedPolygon}
           preloadedAreaSqMeters={preloadedAreaSqMeters}
           zoomToFeature={zoomToFeature}
+          onWorkAreaClick={(workArea) => {
+            // Store work area data (for potential future use)
+            setSelectedWorkAreaForAnalysis({
+              id: workArea.id,
+              name: workArea.name,
+              polygon: workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null,
+              data: workArea,
+            })
+          }}
+          onOpenWorkAreaAnalysis={(workArea) => {
+            // Open the analysis drawer directly from Leaflet popup
+            setSelectedWorkAreaForAnalysis({
+              id: workArea.id,
+              name: workArea.name,
+              polygon: workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null,
+              data: workArea,
+            })
+            setAnalysisOpen(true)
+          }}
         />
 
         {/* Floating action button to open drawer */}
@@ -155,8 +184,47 @@ export default function MapPage() {
             setTimeout(() => setZoomToFeature(null), 100);
           }}
         />
+
+        {/* Work Area Analysis Drawer */}
+        <WorkAreaAnalysisDrawer
+          open={analysisOpen}
+          onOpenChange={setAnalysisOpen}
+          workAreaId={selectedWorkAreaForAnalysis?.id}
+          workAreaName={selectedWorkAreaForAnalysis?.name}
+          polygon={selectedWorkAreaForAnalysis?.polygon || preloadedPolygon}
+          records={records}
+          data={selectedWorkAreaForAnalysis?.data}
+        />
+
       </div>
     </div>
   )
+}
+
+// Helper function to convert Esri geometry to LatLng polygon
+function convertGeometryToPolygon(geometry: any): LatLng[] | null {
+  if (!geometry) return null
+
+  try {
+    // Handle GeoJSON Polygon
+    if (geometry.type === "Polygon" && geometry.coordinates && geometry.coordinates[0]) {
+      return geometry.coordinates[0].map((coord: number[]) => ({
+        lat: coord[1],
+        lng: coord[0],
+      }))
+    }
+
+    // Handle ArcGIS rings format
+    if (geometry.rings && geometry.rings[0]) {
+      return geometry.rings[0].map((coord: number[]) => ({
+        lat: coord[1],
+        lng: coord[0],
+      }))
+    }
+  } catch (error) {
+    console.warn("Error converting geometry to polygon:", error)
+  }
+
+  return null
 }
 

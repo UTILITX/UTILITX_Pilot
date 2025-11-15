@@ -42,6 +42,17 @@ type MapWithDrawingProps = {
   shouldStartRecordDraw?: number;
   enableWorkAreaSelection?: boolean;
   onWorkAreaSelected?: (path: LatLng[], area?: number) => void;
+  onWorkAreaClick?: (workArea: {
+    id?: string;
+    name?: string;
+    [key: string]: any;
+  }) => void;
+  onOpenWorkAreaAnalysis?: (workArea: {
+    id?: string;
+    name?: string;
+    geometry?: any;
+    [key: string]: any;
+  }) => void;
   georefMode?: GeorefMode;
   georefColor?: string;
   onGeorefComplete?: (
@@ -69,6 +80,8 @@ export default function MapWithDrawing({
   shouldStartRecordDraw = 0,
   enableWorkAreaSelection = false,
   onWorkAreaSelected,
+  onWorkAreaClick,
+  onOpenWorkAreaAnalysis,
   georefMode = "none",
   georefColor,
   onGeorefComplete,
@@ -99,6 +112,8 @@ export default function MapWithDrawing({
         shouldStartRecordDraw={shouldStartRecordDraw}
         enableWorkAreaSelection={enableWorkAreaSelection}
         onWorkAreaSelected={onWorkAreaSelected}
+        onWorkAreaClick={onWorkAreaClick}
+        onOpenWorkAreaAnalysis={onOpenWorkAreaAnalysis}
         georefMode={georefMode}
         georefColor={georefColor}
         onGeorefComplete={onGeorefComplete}

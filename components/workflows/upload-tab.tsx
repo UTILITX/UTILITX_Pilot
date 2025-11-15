@@ -52,9 +52,20 @@ type Props = {
   preloadedPolygon?: LatLng[] | null
   preloadedAreaSqMeters?: number | null
   zoomToFeature?: any | null
+  onWorkAreaClick?: (workArea: {
+    id?: string
+    name?: string
+    [key: string]: any
+  }) => void
+  onOpenWorkAreaAnalysis?: (workArea: {
+    id?: string
+    name?: string
+    geometry?: any
+    [key: string]: any
+  }) => void
 }
 
-export default function UploadTab({ records, setRecords, preloadedPolygon, preloadedAreaSqMeters, zoomToFeature }: Props) {
+export default function UploadTab({ records, setRecords, preloadedPolygon, preloadedAreaSqMeters, zoomToFeature, onWorkAreaClick, onOpenWorkAreaAnalysis }: Props) {
   const { toast } = useToast()
   const [polygon, setPolygon] = useState<LatLng[] | null>(null)
   const [areaSqMeters, setAreaSqMeters] = useState<number | null>(null)
@@ -1407,6 +1418,8 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
                     description: "Selected work area from the map. You can now upload records.",
                   })
                 }}
+                onWorkAreaClick={onWorkAreaClick}
+                onOpenWorkAreaAnalysis={onOpenWorkAreaAnalysis}
                 georefMode={georefMode}
                 georefColor={georefColor}
                 onGeorefComplete={handleGeorefComplete}

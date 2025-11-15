@@ -133,6 +133,17 @@ type EsriMapProps = {
   shouldStartRecordDraw?: number;
   enableWorkAreaSelection?: boolean;
   onWorkAreaSelected?: (path: LatLng[], area?: number) => void;
+  onWorkAreaClick?: (workArea: {
+    id?: string;
+    name?: string;
+    [key: string]: any;
+  }) => void;
+  onOpenWorkAreaAnalysis?: (workArea: {
+    id?: string;
+    name?: string;
+    geometry?: any;
+    [key: string]: any;
+  }) => void;
   georefMode?: GeorefMode;
   georefColor?: string;
   onGeorefComplete?: (
@@ -161,6 +172,8 @@ export default function EsriMap({
   shouldStartRecordDraw = 0,
   enableWorkAreaSelection = false,
   onWorkAreaSelected,
+  onWorkAreaClick,
+  onOpenWorkAreaAnalysis,
   georefMode = "none",
   georefColor,
   onGeorefComplete,
@@ -390,10 +403,14 @@ export default function EsriMap({
         // Format date
         const date = props.timestamp || props.created_date || props.date;
         
+        // Get work area name
+        const workAreaName = props.name || props.workarea_name || props.work_area_name || `Work Area ${workAreaId}`;
+        
         // Create popup content using React component
         const popupContent = renderReactPopup(
           <WorkAreaPopup
             workAreaId={workAreaId}
+            workAreaName={workAreaName}
             region={props.region}
             owner={props.owner}
             createdBy={props.created_by || props.createdBy}
@@ -407,12 +424,45 @@ export default function EsriMap({
               // TODO: Implement user profile/view functionality
               console.log("View profile for:", name);
             }}
+            onOpenAnalysis={() => {
+              // Open the analysis drawer directly
+              if (onOpenWorkAreaAnalysis) {
+                onOpenWorkAreaAnalysis({
+                  id: workAreaId,
+                  name: workAreaName,
+                  region: props.region,
+                  owner: props.owner,
+                  createdBy: props.created_by || props.createdBy,
+                  date: date,
+                  notes: props.notes,
+                  geometry: feature.geometry,
+                  ...props,
+                });
+              }
+            }}
           />
         );
         
         layer.bindPopup(popupContent, {
           className: "custom-popup",
           maxWidth: 400,
+        });
+
+        // Add click handler for work area analysis
+        layer.on('click', (e: L.LeafletMouseEvent) => {
+          if (onWorkAreaClick) {
+            onWorkAreaClick({
+              id: workAreaId,
+              name: props.name || props.workarea_name || props.work_area_name || `Work Area ${workAreaId}`,
+              region: props.region,
+              owner: props.owner,
+              createdBy: props.created_by || props.createdBy,
+              date: date,
+              notes: props.notes,
+              geometry: feature.geometry,
+              ...props,
+            });
+          }
         });
       },
     }).addTo(map);

@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 
 type WorkAreaPopupProps = {
   workAreaId?: string;
+  workAreaName?: string;
   region?: string;
   owner?: string;
   createdBy?: string;
@@ -14,10 +15,13 @@ type WorkAreaPopupProps = {
   notes?: string;
   onViewRecords?: () => void;
   onCreatedByClick?: (name: string) => void;
+  onOpenAnalysis?: () => void;
+  onClose?: () => void;
 };
 
 export function WorkAreaPopup({
   workAreaId,
+  workAreaName,
   region,
   owner,
   createdBy,
@@ -25,6 +29,8 @@ export function WorkAreaPopup({
   notes,
   onViewRecords,
   onCreatedByClick,
+  onOpenAnalysis,
+  onClose,
 }: WorkAreaPopupProps) {
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return null;
@@ -43,11 +49,22 @@ export function WorkAreaPopup({
   return (
     <div className="min-w-[280px] max-w-[400px] bg-white rounded-lg shadow-lg border border-gray-200 p-4 font-sans">
       {/* Header */}
-      <div className="flex items-center gap-2 mb-4">
-        <MapPin className="h-5 w-5 text-blue-600" />
-        <h3 className="font-bold text-base text-gray-900">
-          Work Area: {workAreaId || "N/A"}
-        </h3>
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <div className="flex items-center gap-2">
+          <MapPin className="h-5 w-5 text-blue-600" />
+          <h3 className="font-bold text-base text-gray-900">
+            {workAreaName || `Work Area: ${workAreaId || "N/A"}`}
+          </h3>
+        </div>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        )}
       </div>
 
       {/* Details */}
@@ -94,16 +111,27 @@ export function WorkAreaPopup({
         )}
       </div>
 
-      {/* Action Button */}
-      {onViewRecords && (
-        <Button
-          onClick={onViewRecords}
-          className="w-full bg-black text-white hover:bg-gray-800 rounded-md h-9 text-sm font-medium"
-        >
-          <FileText className="h-4 w-4 mr-2" />
-          View Records
-        </Button>
-      )}
+      {/* Action Buttons */}
+      <div className="flex flex-col gap-2">
+        {onOpenAnalysis && (
+          <Button
+            onClick={onOpenAnalysis}
+            className="w-full bg-[#011e31] text-white hover:bg-[#0c4160] rounded-md h-9 text-sm font-medium"
+          >
+            Open Analysis
+          </Button>
+        )}
+        {onViewRecords && (
+          <Button
+            onClick={onViewRecords}
+            variant="outline"
+            className="w-full rounded-md h-9 text-sm font-medium"
+          >
+            <FileText className="h-4 w-4 mr-2" />
+            View Records
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

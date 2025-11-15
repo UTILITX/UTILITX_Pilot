@@ -1,0 +1,24 @@
+<svg width="140" height="40" viewBox="0 0 140 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background rectangle for contrast -->
+  <rect width="140" height="40" fill="#faf9f7" rx="4"/>
+  
+  <!-- Geometric 3D Logo - Dark Navy Blue -->
+  <g transform="translate(8, 4)">
+    <!-- Isometric cube structure with interconnected lines -->
+    <!-- Top face -->
+    <path d="M8 4 L16 0 L24 4 L16 8 Z" fill="#011e31" stroke="#0c4160" stroke-width="0.8"/>
+    <!-- Left face -->
+    <path d="M8 4 L8 16 L16 20 L16 8 Z" fill="#011e31" stroke="#0c4160" stroke-width="0.8"/>
+    <!-- Right face -->
+    <path d="M16 8 L24 4 L24 16 L16 20 Z" fill="#0b2837" stroke="#0c4160" stroke-width="0.8"/>
+    <!-- Central U shape with interconnected lines -->
+    <path d="M12 8 L12 14 L16 16 L20 14 L20 8" fill="none" stroke="#0c4160" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Top arrow/T -->
+    <path d="M16 4 L16 8 M14 6 L16 4 L18 6" fill="none" stroke="#0c4160" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Additional interconnected lines for depth -->
+    <path d="M10 10 L14 12 L18 10" fill="none" stroke="#0c4160" stroke-width="1.5" stroke-linecap="round"/>
+  </g>
+  
+  <!-- UTILITX Text - Dark Navy Blue -->
+  <text x="40" y="26" font-family="system-ui, -apple-system, sans-serif" font-size="17" font-weight="700" fill="#011e31" letter-spacing="0.8px">UTILITX</text>
+</svg>
