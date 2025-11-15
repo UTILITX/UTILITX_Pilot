@@ -16,7 +16,15 @@ type WorkAreaCompletenessPanelProps = {
   records?: RequestRecord[]
   taxonomy?: Taxonomy
   className?: string
-  data?: any // For passing pre-computed data
+  data?: {
+    completenessPct?: number
+    recordCount?: number
+    utilitiesPresent?: string[]
+    utilitiesMissing?: string[]
+    recordsByType?: Record<string, number>
+    gaps?: string[]
+    [key: string]: any
+  }
 }
 
 const CATEGORY_DISPLAY_NAMES = {
@@ -213,20 +221,15 @@ export function WorkAreaCompletenessPanel({
     }
   }, [active, polygon, records, taxonomy])
 
-  // Use data prop if provided, otherwise use computed analysis
-  const completenessPct = data?.completenessPct ?? analysis?.completenessPct ?? 82
+  // Use data prop if provided (from completeness engine), otherwise use computed analysis
+  // Priority: data prop > computed analysis > defaults
+  // Completeness percentage kept in data but hidden from UI for now
+  // const completenessPct = data?.completenessPct ?? analysis?.completenessPct ?? 0
   const recordCount = data?.recordCount ?? analysis?.totalPresent ?? 0
   const utilitiesPresent = data?.utilitiesPresent ?? analysis?.utilitiesPresent ?? []
-  const recordsByType = data?.recordsByType ?? analysis?.recordsByType ?? { PDF: 0, AsBuilt: 0, Locate: 0, Permit: 0 }
+  const utilitiesMissing = data?.utilitiesMissing ?? []
+  const recordsByType = data?.recordsByType ?? analysis?.recordsByType ?? {}
   const gaps = data?.gaps ?? analysis?.gaps ?? []
-
-  // Get confidence bar color based on completeness
-  const getBarColor = (pct: number) => {
-    if (pct >= 80) return "bg-green-600"
-    if (pct >= 60) return "bg-blue-600"
-    if (pct >= 40) return "bg-yellow-600"
-    return "bg-red-600"
-  }
 
   return (
     <div className={className}>
@@ -240,23 +243,12 @@ export function WorkAreaCompletenessPanel({
         </div>
       ) : (
         <div className="bg-white rounded-xl p-4 border border-[var(--utilitx-gray-200)] animate-slideUpFade animate-fadeIn" style={{ boxShadow: "var(--utilitx-shadow-light)" }}>
-          {/* Bold Completeness Score */}
-          <div className="flex items-center justify-between mb-4">
+          {/* Records Found Header */}
+          <div className="flex items-center justify-between mb-6">
             <div>
-              <div className="text-xs uppercase tracking-wide text-[var(--utilitx-gray-600)]">Completeness</div>
-              <div className="text-2xl font-bold text-[var(--utilitx-gray-900)]">{completenessPct}%</div>
+              <div className="text-xs uppercase tracking-wide text-[var(--utilitx-gray-600)] mb-1">Records Found</div>
+              <div className="text-2xl font-bold text-[var(--utilitx-gray-900)]">{recordCount}</div>
             </div>
-            <div className="text-xs px-2 py-1 rounded-md bg-[var(--utilitx-light-blue)] text-[var(--utilitx-gray-900)] font-medium">
-              {recordCount} records
-            </div>
-          </div>
-
-          {/* Horizontal Confidence Bar */}
-          <div className="w-full h-2 bg-gray-100 rounded-md overflow-hidden mb-6">
-            <div
-              className={`h-full ${getBarColor(completenessPct)} transition-all duration-500`}
-              style={{ width: `${completenessPct}%` }}
-            ></div>
           </div>
 
           {/* Utility Coverage Matrix */}
@@ -264,7 +256,8 @@ export function WorkAreaCompletenessPanel({
             <h3 className="text-sm font-medium text-[var(--utilitx-gray-700)] mb-2">Utility Coverage</h3>
             <div className="flex flex-wrap gap-2">
               {ALL_UTILITIES.map((u) => {
-                const isPresent = utilitiesPresent.includes(u)
+                // Use utilitiesPresent from data if available, otherwise check if it's in the missing list
+                const isPresent = utilitiesPresent.includes(u) && !utilitiesMissing.includes(u)
                 const colors = utilityAPWAColors[u] || {
                   bg: "bg-gray-100",
                   text: "text-gray-700",
