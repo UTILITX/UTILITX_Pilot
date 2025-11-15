@@ -3,6 +3,8 @@ import { GeistSans } from 'geist/font/sans'
 import { GeistMono } from 'geist/font/mono'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
+import Sidebar from '@/components/Sidebar'
+import Topbar from '@/components/Topbar'
 
 export const metadata: Metadata = {
   title: 'v0 App',
@@ -18,7 +20,17 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`font-sans antialiased ${GeistSans.variable} ${GeistMono.variable}`}>
-        {children}
+        <div className="h-screen w-screen overflow-hidden">
+          <div className="flex h-full w-full">
+            <Sidebar />
+            <div className="flex flex-col flex-1 ml-16">
+              <Topbar />
+              <main className="flex-1 overflow-auto bg-gray-50 p-4">
+                {children}
+              </main>
+            </div>
+          </div>
+        </div>
         <Analytics />
       </body>
     </html>
