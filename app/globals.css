@@ -4,11 +4,25 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* UTILITX Color Palette */
-  --utilitx-navy: #011e31;
+  /* UTILITX Color Palette - Updated for Step 6 */
+  --utilitx-navy: #0A1A2F;
+  --utilitx-blue: #1B4DFF;
+  --utilitx-light-blue: #E9F1FF;
+  --utilitx-gray-50: #F8FAFC;
+  --utilitx-gray-100: #F1F5F9;
+  --utilitx-gray-200: #E2E8F0;
+  --utilitx-gray-300: #CBD5E1;
+  --utilitx-gray-600: #475569;
+  --utilitx-gray-700: #334155;
+  --utilitx-gray-900: #0F172A;
+  --utilitx-shadow-light: 0 1px 3px rgba(0,0,0,0.06);
+  --utilitx-shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+  --utilitx-radius-lg: 0.75rem;
+  --utilitx-radius-xl: 1rem;
+
+  /* Legacy UTILITX Color Palette (keeping for backward compatibility) */
   --utilitx-dark-teal: #0c4160;
   --utilitx-medium-blue: #68869a;
-  --utilitx-light-blue: #d7e0eb;
   --utilitx-off-white: #faf9f7;
   --utilitx-light-gray: #dad9d6;
   --utilitx-dark-gray: #394f5a;
@@ -17,7 +31,7 @@
   --utilitx-lavender: #a066cb;
 
   /* Theme Colors - Light Background with Accent Colors */
-  --background: #faf9f7;
+  --background: var(--utilitx-gray-50);
   --foreground: #011e31;
   --card: #ffffff;
   --card-foreground: #011e31;
@@ -231,4 +245,18 @@
 
 .animate-slideInRight {
   animation: slideInRight 0.25s ease-out;
+}
+
+/* Global fade-in animation - Step 6 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.25s ease-out;
 }

@@ -13,7 +13,7 @@ import {
 
 export default function Topbar() {
   return (
-    <header className="sticky top-0 z-40 w-full h-16 bg-white border-b border-[#dad9d6] shadow-sm">
+    <header className="sticky top-0 z-40 w-full h-16 bg-white border-b border-[var(--utilitx-gray-200)] shadow-sm">
       <div className="flex items-center justify-between h-full px-6">
         {/* Left: Logo */}
         <div className="flex items-center">

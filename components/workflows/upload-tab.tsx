@@ -941,9 +941,9 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
         {/* Left Column - Define Work Area and Attach Records */}
         <div className="space-y-4 md:col-span-1 md:h-[calc(100vh-12rem)] md:overflow-y-auto md:pr-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
           {/* Define Work Area - Step 1 */}
-          <Card className="relative z-10 bg-white">
+          <Card className="relative z-10 bg-white rounded-xl border border-[var(--utilitx-gray-200)]" style={{ boxShadow: "var(--utilitx-shadow-light)" }}>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-xl font-semibold text-[var(--utilitx-gray-900)]">
                 <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-sm font-bold">
                   1
                 </span>
@@ -1055,9 +1055,9 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
           </Card>
 
           {/* Attach Records - Step 2 */}
-          <Card className="relative z-10 bg-white">
+          <Card className="relative z-10 bg-white rounded-xl border border-[var(--utilitx-gray-200)]" style={{ boxShadow: "var(--utilitx-shadow-light)" }}>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-xl font-semibold text-[var(--utilitx-gray-900)]">
                 <span
                   className={cn(
                     "flex items-center justify-center w-6 h-6 rounded-full text-sm font-bold",
@@ -1371,9 +1371,9 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
           </Card>
 
           {records.some((r) => Array.isArray(r.files) && r.files.some((f) => f.status === "Georeferenced")) && (
-            <Card className="relative z-10 bg-white">
+            <Card className="relative z-10 bg-white rounded-xl border border-[var(--utilitx-gray-200)]" style={{ boxShadow: "var(--utilitx-shadow-light)" }}>
               <CardHeader>
-                <CardTitle className="text-sm">Quick Actions</CardTitle>
+                <CardTitle className="text-sm font-medium text-[var(--utilitx-gray-700)]">Quick Actions</CardTitle>
               </CardHeader>
               <CardContent>
                 <Button
@@ -1398,14 +1398,15 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
         </div>
 
         {/* Right Column - Map */}
-        <Card className="relative z-10 bg-white md:col-span-2">
-          <CardHeader>
-            <CardTitle>Work Area</CardTitle>
+          <Card className="relative z-10 bg-white md:col-span-2 rounded-xl border border-[var(--utilitx-gray-200)]" style={{ boxShadow: "var(--utilitx-shadow-light)" }}>
+            <CardHeader>
+              <CardTitle className="text-xl font-semibold text-[var(--utilitx-gray-900)]">Work Area</CardTitle>
             <CardDescription>Single map for drawing, georeferencing, and sharing.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="aspect-[4/3] w-full rounded-md border">
-              <MapWithDrawing
+            <div className="relative rounded-xl overflow-hidden border border-[var(--utilitx-gray-200)]" style={{ boxShadow: "var(--utilitx-shadow-light)" }}>
+              <div className="aspect-[4/3] w-full">
+                <MapWithDrawing
                 mode="draw"
                 polygon={memoPolygon}
                 onPolygonChange={handlePolygonChange}
@@ -1436,6 +1437,7 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
                 shouldStartRecordDraw={recordDrawCommand}
                 pendingRecordMetadata={pendingRecordMetadata}
               />
+              </div>
             </div>
 
             {records.length > 0 && <UtilityOverviewPanel records={records} className="mt-4" />}

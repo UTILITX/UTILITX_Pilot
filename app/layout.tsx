@@ -25,7 +25,7 @@ export default function RootLayout({
             <Sidebar />
             <div className="flex flex-col flex-1 ml-16">
               <Topbar />
-              <main className="flex-1 overflow-auto bg-[#faf9f7] p-4">
+              <main className="flex-1 overflow-auto bg-[var(--utilitx-gray-50)] p-4 sm:p-6">
                 {children}
               </main>
             </div>

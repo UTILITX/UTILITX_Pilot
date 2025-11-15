@@ -231,22 +231,22 @@ export function WorkAreaCompletenessPanel({
   return (
     <div className={className}>
       {!active ? (
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-[#dad9d6] animate-slideUpFade">
-          <div className="text-sm text-[#68869a]">Draw a polygon to see uploaded records.</div>
+        <div className="bg-white rounded-xl p-4 border border-[var(--utilitx-gray-200)] animate-slideUpFade animate-fadeIn" style={{ boxShadow: "var(--utilitx-shadow-light)" }}>
+          <div className="text-sm text-[var(--utilitx-gray-600)]">Draw a polygon to see uploaded records.</div>
         </div>
       ) : !analysis && !data ? (
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-[#dad9d6] animate-slideUpFade">
-          <div className="text-sm text-[#68869a]">No analysis available.</div>
+        <div className="bg-white rounded-xl p-4 border border-[var(--utilitx-gray-200)] animate-slideUpFade animate-fadeIn" style={{ boxShadow: "var(--utilitx-shadow-light)" }}>
+          <div className="text-sm text-[var(--utilitx-gray-600)]">No analysis available.</div>
         </div>
       ) : (
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-[#dad9d6] animate-slideUpFade">
+        <div className="bg-white rounded-xl p-4 border border-[var(--utilitx-gray-200)] animate-slideUpFade animate-fadeIn" style={{ boxShadow: "var(--utilitx-shadow-light)" }}>
           {/* Bold Completeness Score */}
           <div className="flex items-center justify-between mb-4">
             <div>
-              <div className="text-xs uppercase tracking-wide text-[#68869a]">Completeness</div>
-              <div className="text-2xl font-bold text-[#011e31]">{completenessPct}%</div>
+              <div className="text-xs uppercase tracking-wide text-[var(--utilitx-gray-600)]">Completeness</div>
+              <div className="text-2xl font-bold text-[var(--utilitx-gray-900)]">{completenessPct}%</div>
             </div>
-            <div className="text-xs px-2 py-1 rounded-md bg-[#d7e0eb] text-[#011e31] font-medium">
+            <div className="text-xs px-2 py-1 rounded-md bg-[var(--utilitx-light-blue)] text-[var(--utilitx-gray-900)] font-medium">
               {recordCount} records
             </div>
           </div>
@@ -261,7 +261,7 @@ export function WorkAreaCompletenessPanel({
 
           {/* Utility Coverage Matrix */}
           <div className="mb-6">
-            <h3 className="text-sm font-medium text-[#011e31] mb-2">Utility Coverage</h3>
+            <h3 className="text-sm font-medium text-[var(--utilitx-gray-700)] mb-2">Utility Coverage</h3>
             <div className="flex flex-wrap gap-2">
               {ALL_UTILITIES.map((u) => {
                 const isPresent = utilitiesPresent.includes(u)
@@ -292,7 +292,7 @@ export function WorkAreaCompletenessPanel({
 
           {/* Record-Type Breakdown */}
           <div className="mb-6">
-            <h3 className="text-sm font-medium text-[#011e31] mb-2">Records by Type</h3>
+            <h3 className="text-sm font-medium text-[var(--utilitx-gray-700)] mb-2">Records by Type</h3>
             <div className="space-y-2">
               {Object.entries(recordsByType)
                 .filter(([_, count]) => count > 0)
@@ -306,14 +306,14 @@ export function WorkAreaCompletenessPanel({
                           className="h-2 w-2 rounded-full"
                           style={{ backgroundColor: colors.stroke }}
                         ></span>
-                        <span className="text-sm text-[#011e31]">{type}</span>
+                        <span className="text-sm text-[var(--utilitx-gray-900)]">{type}</span>
                       </div>
-                      <span className="text-sm text-[#011e31] font-medium">{count}</span>
+                      <span className="text-sm text-[var(--utilitx-gray-900)] font-medium">{count}</span>
                     </div>
                   )
                 })}
               {Object.values(recordsByType).every((count) => count === 0) && (
-                <div className="text-sm text-[#68869a]">No records by type</div>
+                <div className="text-sm text-[var(--utilitx-gray-600)]">No records by type</div>
               )}
             </div>
           </div>
@@ -321,7 +321,7 @@ export function WorkAreaCompletenessPanel({
           {/* Data Gaps Section */}
           {gaps.length > 0 && (
             <div>
-              <h3 className="text-sm font-medium text-[#011e31] mb-2">Data Gaps</h3>
+              <h3 className="text-sm font-medium text-[var(--utilitx-gray-700)] mb-2">Data Gaps</h3>
               <ul className="space-y-1">
                 {gaps.map((gap, index) => (
                   <li

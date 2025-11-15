@@ -111,29 +111,30 @@ export function WorkAreaAnalysisDrawer({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="group w-full sm:w-[420px] lg:w-[480px] overflow-y-auto p-6 bg-white border-l border-[#dad9d6] animate-slideInRight"
+        className="group w-full sm:w-[420px] lg:w-[480px] overflow-y-auto p-6 bg-white border-l border-[var(--utilitx-gray-200)] animate-slideInRight animate-fadeIn"
+        style={{ boxShadow: "var(--utilitx-shadow-md)" }}
       >
         <SheetHeader className="mb-4 animate-slideUpFade">
           <div className="flex items-center justify-between">
-            <SheetTitle className="text-lg font-semibold text-[#011e31]">
+            <SheetTitle className="text-xl font-semibold text-[var(--utilitx-gray-900)]">
               {workAreaName ?? workAreaId ?? "Work Area"}
             </SheetTitle>
             {coveragePercentage !== null && (
-              <Badge variant="secondary" className="ml-2 bg-[#d7e0eb] text-[#011e31]">
+              <Badge variant="secondary" className="ml-2 bg-[var(--utilitx-light-blue)] text-[var(--utilitx-gray-900)]">
                 {coveragePercentage}% coverage
               </Badge>
             )}
           </div>
-          <SheetDescription className="text-sm text-[#68869a]">
+          <SheetDescription className="text-sm text-[var(--utilitx-gray-600)]">
             Completeness & data coverage summary
           </SheetDescription>
         </SheetHeader>
 
         {/* Arrow Indicator */}
         <div className="flex items-center gap-2 mb-4 animate-slideUpFade" style={{ animationDelay: "0.1s" }}>
-          <span className="text-xs text-[#68869a]">Summary</span>
+          <span className="text-xs text-[var(--utilitx-gray-600)]">Summary</span>
           <svg
-            className="h-3 w-3 text-[#68869a] transition-transform duration-300 group-hover:translate-x-1"
+            className="h-3 w-3 text-[var(--utilitx-gray-600)] transition-transform duration-300 group-hover:translate-x-1"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -159,14 +160,14 @@ export function WorkAreaAnalysisDrawer({
           />
         </div>
 
-        <div className="h-px bg-[#dad9d6] my-5" />
+        <div className="h-px bg-[var(--utilitx-gray-200)] my-5" />
 
         {/* Utility Coverage Section */}
         <div className="mb-6 animate-slideUpFade" style={{ animationDelay: "0.2s" }}>
-          <h3 className="text-sm font-medium text-[#011e31] mb-3 flex items-center gap-1">
+          <h3 className="text-sm font-medium text-[var(--utilitx-gray-700)] mb-2 flex items-center gap-1">
             Utilities Covered
-            <span className="text-[#68869a]">•</span>
-            <span className="text-[#68869a] text-xs font-normal">{utilityTypes.length} types</span>
+            <span className="text-[var(--utilitx-gray-600)]">•</span>
+            <span className="text-[var(--utilitx-gray-600)] text-xs font-normal">{utilityTypes.length} types</span>
           </h3>
           {utilityTypes.length > 0 ? (
             <div className="flex flex-wrap gap-2">
@@ -192,61 +193,61 @@ export function WorkAreaAnalysisDrawer({
               })}
             </div>
           ) : (
-            <p className="text-sm text-[#68869a]">No utilities identified</p>
+            <p className="text-sm text-[var(--utilitx-gray-600)]">No utilities identified</p>
           )}
         </div>
 
-        <div className="h-px bg-[#dad9d6] my-5" />
+        <div className="h-px bg-[var(--utilitx-gray-200)] my-5" />
 
         {/* Records Section */}
         <div className="mb-6 animate-slideUpFade" style={{ animationDelay: "0.25s" }}>
-          <h3 className="text-sm font-medium text-[#011e31] mb-3 flex items-center gap-1">
+          <h3 className="text-sm font-medium text-[var(--utilitx-gray-700)] mb-2 flex items-center gap-1">
             Records in this Work Area
-            <span className="text-[#68869a]">•</span>
-            <span className="text-[#68869a] text-xs font-normal">{recordCounts.total} total</span>
+            <span className="text-[var(--utilitx-gray-600)]">•</span>
+            <span className="text-[var(--utilitx-gray-600)] text-xs font-normal">{recordCounts.total} total</span>
           </h3>
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-[#68869a]">Total Records</span>
-              <span className="font-medium text-[#011e31]">{recordCounts.total}</span>
+              <span className="text-[var(--utilitx-gray-600)]">Total Records</span>
+              <span className="font-medium text-[var(--utilitx-gray-900)]">{recordCounts.total}</span>
             </div>
             {recordCounts.asBuilt > 0 && (
               <div className="flex items-center justify-between text-sm">
-                <span className="text-[#68869a]">As-builts</span>
-                <span className="font-medium text-[#011e31]">{recordCounts.asBuilt}</span>
+              <span className="text-[var(--utilitx-gray-600)]">As-builts</span>
+              <span className="font-medium text-[var(--utilitx-gray-900)]">{recordCounts.asBuilt}</span>
               </div>
             )}
             {recordCounts.locate > 0 && (
               <div className="flex items-center justify-between text-sm">
-                <span className="text-[#68869a]">Locates</span>
-                <span className="font-medium text-[#011e31]">{recordCounts.locate}</span>
+              <span className="text-[var(--utilitx-gray-600)]">Locates</span>
+              <span className="font-medium text-[var(--utilitx-gray-900)]">{recordCounts.locate}</span>
               </div>
             )}
             {recordCounts.permit > 0 && (
               <div className="flex items-center justify-between text-sm">
-                <span className="text-[#68869a]">Permits</span>
-                <span className="font-medium text-[#011e31]">{recordCounts.permit}</span>
+              <span className="text-[var(--utilitx-gray-600)]">Permits</span>
+              <span className="font-medium text-[var(--utilitx-gray-900)]">{recordCounts.permit}</span>
               </div>
             )}
             {recordCounts.pdf > 0 && (
               <div className="flex items-center justify-between text-sm">
-                <span className="text-[#68869a]">PDFs</span>
-                <span className="font-medium text-[#011e31]">{recordCounts.pdf}</span>
+              <span className="text-[var(--utilitx-gray-600)]">PDFs</span>
+              <span className="font-medium text-[var(--utilitx-gray-900)]">{recordCounts.pdf}</span>
               </div>
             )}
             {recordCounts.total === 0 && (
-              <p className="text-sm text-[#68869a]">No records found</p>
+              <p className="text-sm text-[var(--utilitx-gray-600)]">No records found</p>
             )}
           </div>
         </div>
 
-        <div className="h-px bg-[#dad9d6] my-5" />
+        <div className="h-px bg-[var(--utilitx-gray-200)] my-5" />
 
         {/* Data Gaps Section */}
         <div className="mb-6 animate-slideUpFade" style={{ animationDelay: "0.3s" }}>
           <div className="flex items-center gap-2 mb-3">
-            <AlertCircle className="h-4 w-4 text-[#68869a]" />
-            <h3 className="text-sm font-medium text-[#011e31]">Data Gaps</h3>
+            <AlertCircle className="h-4 w-4 text-[var(--utilitx-gray-600)]" />
+            <h3 className="text-sm font-medium text-[var(--utilitx-gray-700)]">Data Gaps</h3>
           </div>
           {gaps.length > 0 && gaps[0] !== "No data gaps identified" ? (
             <ul className="space-y-2">
@@ -266,12 +267,12 @@ export function WorkAreaAnalysisDrawer({
           )}
         </div>
 
-        <div className="h-px bg-[#dad9d6] my-5" />
+        <div className="h-px bg-[var(--utilitx-gray-200)] my-5" />
 
         {/* Actions */}
         <div className="mt-8 flex flex-col gap-3 animate-slideUpFade" style={{ animationDelay: "0.35s" }}>
           <Button
-            className="w-full bg-[#011e31] hover:bg-[#0c4160] text-white shadow-sm hover:shadow-md transition-all duration-200"
+            className="w-full bg-[var(--utilitx-blue)] hover:bg-blue-700 text-white shadow-sm hover:shadow-md transition-all duration-200"
             onClick={() => {
               // TODO: Implement view records functionality
               console.log("View records for work area:", workAreaId)
@@ -282,7 +283,7 @@ export function WorkAreaAnalysisDrawer({
           </Button>
           <Button
             variant="outline"
-            className="w-full border-[#dad9d6] text-[#011e31] hover:bg-[#d7e0eb] transition-all duration-200"
+            className="w-full border-[var(--utilitx-gray-200)] text-[var(--utilitx-gray-900)] hover:bg-[var(--utilitx-gray-100)] transition-all duration-200"
             onClick={() => {
               // TODO: Implement export functionality
               console.log("Export summary for work area:", workAreaId)
