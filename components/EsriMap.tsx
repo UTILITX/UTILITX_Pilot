@@ -1805,7 +1805,7 @@ export default function EsriMap({
   }, []);
 
   return (
-    <div className="relative w-full h-full rounded-2xl overflow-hidden shadow-md border border-gray-200">
+    <div className="relative w-full h-full overflow-hidden">
       <div
         id="map"
         className="w-full h-full"

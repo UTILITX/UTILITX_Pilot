@@ -52,7 +52,7 @@ export default function BottomDrawer({
   return (
     <div
       className={cn(
-        "fixed bottom-0 left-0 right-0 bg-white shadow-xl border-t z-[5000]",
+        "fixed bottom-0 left-0 right-0 bg-white shadow-xl border-t z-[4000]",
         "transition-all duration-300",
         isOpen ? "h-[40vh]" : "h-0"
       )}

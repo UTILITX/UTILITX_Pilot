@@ -1,6 +1,5 @@
 "use client"
 
-import Image from "next/image"
 import Link from "next/link"
 import { Bell, HelpCircle, User } from "lucide-react"
 import {
@@ -10,21 +9,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import BrandLogo from "@/components/BrandLogo"
 
 export default function Topbar() {
   return (
     <header className="sticky top-0 z-40 w-full h-16 bg-white border-b border-[var(--utilitx-gray-200)] shadow-sm">
-      <div className="flex items-center justify-between h-full px-6">
-        {/* Left: Logo */}
-        <div className="flex items-center">
-          <Image
-            src="/utilitx-logo.svg"
-            alt="UTILITX"
-            width={140}
-            height={40}
-            className="h-10 w-auto"
-            priority
-          />
+      <div className="flex items-center justify-between h-full">
+        {/* Left: Logo with consistent padding */}
+        <div className="flex items-center pl-4 pt-3 pb-3">
+          <BrandLogo size="default" />
         </div>
 
         {/* Center: Project Selector */}
@@ -42,7 +35,7 @@ export default function Topbar() {
         </div>
 
         {/* Right: Actions */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 pr-4">
           <button
             className="p-2 rounded-lg hover:bg-[#d7e0eb] transition-colors"
             aria-label="Notifications"

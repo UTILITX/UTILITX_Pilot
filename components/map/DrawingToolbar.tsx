@@ -132,13 +132,14 @@ export default function DrawingToolbar({ map }: DrawingToolbarProps) {
   return (
     <div
       className="
-        absolute top-4 left-4 z-[9999]
+        absolute z-[1000]
         flex flex-col gap-1.5
         bg-white/20 backdrop-blur-xl 
         border border-white/40 
         rounded-xl p-1.5 
         shadow-[0_4px_30px_rgba(0,0,0,0.12)]
       "
+      style={{ top: '72px', left: '500px' }}
     >
       {/* Zoom In */}
       <button className="utilitx-btn" onClick={() => map.zoomIn()}>

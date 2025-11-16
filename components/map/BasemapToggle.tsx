@@ -109,7 +109,7 @@ const BasemapToggle = ({ map }: BasemapToggleProps) => {
 
   return (
     <div 
-      className="absolute top-4 right-4 z-[9999] flex gap-2"
+      className="absolute top-4 right-2 z-[1000] flex gap-2"
       style={{ pointerEvents: "auto" }}
     >
       <div

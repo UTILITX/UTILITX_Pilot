@@ -63,9 +63,10 @@ type Props = {
     geometry?: any
     [key: string]: any
   }) => void
+  fullscreenMap?: boolean // When true, renders only the map without cards/forms
 }
 
-export default function UploadTab({ records, setRecords, preloadedPolygon, preloadedAreaSqMeters, zoomToFeature, onWorkAreaClick, onOpenWorkAreaAnalysis }: Props) {
+export default function UploadTab({ records, setRecords, preloadedPolygon, preloadedAreaSqMeters, zoomToFeature, onWorkAreaClick, onOpenWorkAreaAnalysis, fullscreenMap = false }: Props) {
   const { toast } = useToast()
   const [polygon, setPolygon] = useState<LatLng[] | null>(null)
   const [areaSqMeters, setAreaSqMeters] = useState<number | null>(null)
@@ -923,21 +924,55 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
   }, [])
 
   return (
-    <div className="space-y-4">
-      <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold">Unified utility records workflow</h2>
-          <p className="text-muted-foreground">
-            Space-first Records: One unified workflow to define work areas, upload records, and share.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs px-2 py-1 rounded bg-emerald-50 text-emerald-700">Upload</span>
-          <span className="text-xs px-2 py-1 rounded bg-sky-50 text-sky-700">Share</span>
-        </div>
-      </header>
+    <div className={fullscreenMap ? "absolute inset-0 w-full h-full" : "space-y-4"}>
+      {fullscreenMap ? (
+        <MapWithDrawing
+          mode="draw"
+          polygon={memoPolygon}
+          onPolygonChange={handlePolygonChange}
+          onWorkAreaSelected={(path, area) => {
+            setPolygon(path)
+            setAreaSqMeters(area ?? null)
+            setIsSelectingWorkArea(false)
+            toast({
+              title: "Work area selected",
+              description: "Selected work area from the map. You can now upload records.",
+            })
+          }}
+          onWorkAreaClick={onWorkAreaClick}
+          onOpenWorkAreaAnalysis={onOpenWorkAreaAnalysis}
+          georefMode={georefMode}
+          georefColor={georefColor}
+          onGeorefComplete={handleGeorefComplete}
+          pickPointActive={georefMode === "point"}
+          pickZoom={16}
+          bubbles={memoBubbles}
+          shapes={memoShapes}
+          enableDrop
+          onDropFilesAt={handleDropFilesAt}
+          focusPoint={focusPoint}
+          focusZoom={16}
+          zoomToFeature={zoomToFeature}
+          shouldStartWorkAreaDraw={drawCommand}
+          shouldStartRecordDraw={recordDrawCommand}
+          pendingRecordMetadata={pendingRecordMetadata}
+        />
+      ) : (
+        <>
+          <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold">Unified utility records workflow</h2>
+              <p className="text-muted-foreground">
+                Space-first Records: One unified workflow to define work areas, upload records, and share.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs px-2 py-1 rounded bg-emerald-50 text-emerald-700">Upload</span>
+              <span className="text-xs px-2 py-1 rounded bg-sky-50 text-sky-700">Share</span>
+            </div>
+          </header>
 
-      <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-3">
         {/* Left Column - Define Work Area and Attach Records */}
         <div className="space-y-4 md:col-span-1 md:h-[calc(100vh-12rem)] md:overflow-y-auto md:pr-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
           {/* Define Work Area - Step 1 */}
@@ -1486,7 +1521,8 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
           </CardContent>
         </Card>
       </div>
-
+        </>
+      )}
       {/* Secure link dialogs */}
       <Dialog open={genOpen} onOpenChange={setGenOpen}>
         <DialogContent>

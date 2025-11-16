@@ -23,9 +23,9 @@ export default function RootLayout({
         <div className="h-screen w-screen overflow-hidden">
           <div className="flex h-full w-full">
             <Sidebar />
-            <div className="flex flex-col flex-1 ml-16">
+            <div className="flex flex-col flex-1">
               <Topbar />
-              <main className="flex-1 overflow-auto bg-[var(--utilitx-gray-50)] p-4 sm:p-6">
+              <main className="flex-1 overflow-auto bg-[var(--utilitx-gray-50)] [&:has(>div[data-fullscreen-map])]:p-0 [&:has(>div[data-fullscreen-map])]:m-0 [&:has(>div[data-fullscreen-map])]:overflow-hidden">
                 {children}
               </main>
             </div>
