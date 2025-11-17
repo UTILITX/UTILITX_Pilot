@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, memo } from "react";
 import { createRoot } from "react-dom/client";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -175,7 +175,7 @@ type EsriMapProps = {
   children?: React.ReactNode;
 };
 
-export default function EsriMap({
+function EsriMap({
   mode = "draw",
   polygon,
   onPolygonChange,
@@ -230,6 +230,12 @@ export default function EsriMap({
   const recordIconLayerRef = useRef<L.LayerGroup | null>(null);
   const isRestoringViewRef = useRef(false);
   const isInitializingRef = useRef(false);
+  
+  // 🔥 Stable callback references for Geoman event listeners (prevents "wrong listener type" errors)
+  const pmCreateHandlerRef = useRef<((e: any) => void) | null>(null);
+  const pmEditHandlerRef = useRef<(() => void) | null>(null);
+  const pmResizeHandlerRef = useRef<(() => void) | null>(null);
+  const mapClickHandlerRef = useRef<((e: L.LeafletMouseEvent) => void) | null>(null);
 
   // Dedicated initialization effect - runs once on mount
   useEffect(() => {
@@ -1240,6 +1246,19 @@ export default function EsriMap({
                       await addFeatureToLayer(recordsLayerUrl, esriGeometry, attributes);
                       console.log("✅ Record saved to ArcGIS successfully");
                       recordSavedToArcGISRef.current = true;
+                      
+                      // 🔥 Fix invisible drawing: Refresh ONLY the Point layer (not all layers)
+                      // This ensures the new record appears without removing the just-drawn geometry
+                      if (recordsPointLayerRef.current) {
+                        setTimeout(() => {
+                          try {
+                            recordsPointLayerRef.current?.refresh();
+                            console.log("✅ Refreshed Records_Point layer only");
+                          } catch (err) {
+                            console.warn("Could not refresh Point layer:", err);
+                          }
+                        }, 500); // Small delay to ensure ArcGIS commit
+                      }
                     } catch (err) {
                       console.error("❌ Error saving record to ArcGIS:", err);
                       // Continue anyway - still call onGeorefComplete for UI
@@ -1307,6 +1326,22 @@ export default function EsriMap({
                       await addFeatureToLayer(recordsLayerUrl, esriGeometry, attributes);
                       console.log("✅ Record saved to ArcGIS successfully");
                       recordSavedToArcGISRef.current = true;
+                      
+                      // 🔥 Fix invisible drawing: Refresh ONLY the specific layer type (not all layers)
+                      // This ensures the new record appears without removing the just-drawn geometry
+                      setTimeout(() => {
+                        try {
+                          if (geometryType === "Line" && recordsLineLayerRef.current) {
+                            recordsLineLayerRef.current.refresh();
+                            console.log("✅ Refreshed Records_Line layer only");
+                          } else if (geometryType === "Polygon" && recordsPolygonLayerRef.current) {
+                            recordsPolygonLayerRef.current.refresh();
+                            console.log("✅ Refreshed Records_Polygon layer only");
+                          }
+                        } catch (err) {
+                          console.warn("Could not refresh layer:", err);
+                        }
+                      }, 500); // Small delay to ensure ArcGIS commit
                     } catch (err) {
                       console.error("❌ Error saving record to ArcGIS:", err);
                       // Continue anyway - still call onGeorefComplete for UI
@@ -1399,10 +1434,44 @@ export default function EsriMap({
 
               // Set up event listeners
               if (mode === "draw") {
-                // Listen for polygon creation (work area)
-                map.on("pm:create", (e: any) => {
-                  const geojson = e.layer.toGeoJSON();
+                // 🔥 Create stable callback references for proper binding/unbinding
+                // This prevents "wrong listener type: undefined" errors that cause pane resets
+                
+                // pm:create handler - stable reference
+                const handlePmCreate = (e: any) => {
+                  const layer = e.layer;
+                  const geojson = layer.toGeoJSON();
                   const geometry = geojson.geometry;
+
+                  // 🔥 Fix invisible shape bug - force redraw immediately after creation
+                  setTimeout(() => {
+                    if (!map || !mapRef.current) return;
+
+                    try {
+                      // Fix 1 — refresh layer bounds (forces Leaflet to compute geometry)
+                      if (layer.getBounds) {
+                        layer.getBounds();
+                      }
+
+                      // Fix 2 — force Leaflet to recalc tile & layer sizes
+                      map.invalidateSize({ animate: false });
+
+                      // Fix 3 — force SVG/canvas redraw
+                      if (layer.redraw) {
+                        layer.redraw();
+                      }
+
+                      // Fix 4 — ensure SVG becomes visible immediately (fixes browser "invisible SVG" bug)
+                      if (layer._path) {
+                        layer._path.setAttribute("stroke-opacity", "1");
+                        if (geometry.type === "Polygon") {
+                          layer._path.setAttribute("fill-opacity", "0.3");
+                        }
+                      }
+                    } catch (err) {
+                      console.warn("Error forcing layer redraw:", err);
+                    }
+                  }, 50);
 
                   // Determine if this is work area or record
                   // PRIORITY: Check record drawing mode FIRST (georefMode), then work area
@@ -1424,8 +1493,37 @@ export default function EsriMap({
                   } else {
                     console.log("⚠️ No handler matched - geometry type:", geometry.type);
                   }
-                });
-
+                };
+                
+                // pm:edit handler - stable reference
+                const handlePmEdit = () => {
+                  setTimeout(() => {
+                    if (map && mapRef.current) {
+                      map.invalidateSize({ animate: false });
+                    }
+                  }, 50);
+                };
+                
+                // pm:resize handler - stable reference
+                const handlePmResize = () => {
+                  setTimeout(() => {
+                    if (map && mapRef.current) {
+                      map.invalidateSize({ animate: false });
+                    }
+                  }, 50);
+                };
+                
+                // Store references for cleanup
+                pmCreateHandlerRef.current = handlePmCreate;
+                pmEditHandlerRef.current = handlePmEdit;
+                pmResizeHandlerRef.current = handlePmResize;
+                mapClickHandlerRef.current = handleMapClick;
+                
+                // Bind listeners with stable references
+                map.on("pm:create", handlePmCreate);
+                map.on("pm:edit", handlePmEdit);
+                map.on("pm:resize", handlePmResize);
+                
                 // Listen for map clicks (point picking)
                 if (pickPointActive) {
                   map.on("click", handleMapClick);
@@ -1455,8 +1553,39 @@ export default function EsriMap({
         resizeTimeoutRef.current = null;
       }
       
+      // 🔥 Clean up Geoman event listeners with stable references
+      // This prevents "wrong listener type" errors and pane resets
       if (mapRef.current) {
-        mapRef.current.remove();
+        const map = mapRef.current;
+        
+        // Unbind with stable references (not undefined)
+        if (pmCreateHandlerRef.current) {
+          map.off("pm:create", pmCreateHandlerRef.current);
+          pmCreateHandlerRef.current = null;
+        }
+        if (pmEditHandlerRef.current) {
+          map.off("pm:edit", pmEditHandlerRef.current);
+          pmEditHandlerRef.current = null;
+        }
+        if (pmResizeHandlerRef.current) {
+          map.off("pm:resize", pmResizeHandlerRef.current);
+          pmResizeHandlerRef.current = null;
+        }
+        if (mapClickHandlerRef.current) {
+          map.off("click", mapClickHandlerRef.current);
+          mapClickHandlerRef.current = null;
+        }
+        
+        // Disable all drawing modes before removing map
+        try {
+          map.pm.disableDraw();
+          map.pm.disableGlobalEditMode();
+          map.pm.disableGlobalRemovalMode();
+        } catch (e) {
+          // Ignore errors during cleanup
+        }
+        
+        map.remove();
         mapRef.current = null;
       }
     };
@@ -1576,18 +1705,39 @@ export default function EsriMap({
 
     if (enableWorkAreaDrawing === true) {
       console.log("✏️ Enabling work area draw mode");
+      // Ensure we disable any existing draw mode first to prevent conflicts
+      try {
+        map.pm.disableDraw();
+      } catch (e) {
+        // Ignore if already disabled
+      }
       map.pm.enableDraw("Polygon");
       drawingSessionActiveRef.current = true;
       hasActiveWorkAreaRef.current = true;
-      return;
+      
+      return () => {
+        // Cleanup: disable draw mode when effect re-runs or unmounts
+        if (map && mapRef.current) {
+          try {
+            map.pm.disableDraw();
+            drawingSessionActiveRef.current = false;
+            hasActiveWorkAreaRef.current = false;
+          } catch (e) {
+            // Ignore errors during cleanup
+          }
+        }
+      };
     }
 
     if (enableWorkAreaDrawing === false && drawingSessionActiveRef.current) {
       console.log("🛑 Disabling work area draw mode");
-      map.pm.disableDraw();
+      try {
+        map.pm.disableDraw();
+      } catch (e) {
+        // Ignore if already disabled
+      }
       drawingSessionActiveRef.current = false;
       hasActiveWorkAreaRef.current = false;
-      return;
     }
   }, [enableWorkAreaDrawing]);
 
@@ -1600,10 +1750,14 @@ export default function EsriMap({
     if (shouldStartRecordDraw > 0 && georefMode !== "none") {
       console.log("✏️ Starting RECORD draw mode:", georefMode);
 
-      // Disable any active work area draw
-      map.pm.disableDraw();
-      map.pm.disableGlobalEditMode();
-      map.pm.disableGlobalRemovalMode();
+      // Disable any active work area draw first to prevent conflicts
+      try {
+        map.pm.disableDraw();
+        map.pm.disableGlobalEditMode();
+        map.pm.disableGlobalRemovalMode();
+      } catch (e) {
+        // Ignore if already disabled
+      }
 
       // Ensure Geoman toolbar is removed - using custom UTILITX toolbar instead
       try {
@@ -1620,6 +1774,19 @@ export default function EsriMap({
       } else if (georefMode === "polygon") {
         map.pm.enableDraw("Polygon", { snappable: true });
       }
+      
+      // Cleanup: disable draw mode when effect re-runs or unmounts
+      return () => {
+        if (map && mapRef.current) {
+          try {
+            map.pm.disableDraw();
+            map.pm.disableGlobalEditMode();
+            map.pm.disableGlobalRemovalMode();
+          } catch (e) {
+            // Ignore errors during cleanup
+          }
+        }
+      };
     }
   }, [shouldStartRecordDraw, georefMode]);
 
@@ -1885,25 +2052,27 @@ export default function EsriMap({
   // Note: Initial render race condition is now handled by the debounced effect above
   // The 250ms delay ensures both React and Leaflet are ready before rendering
 
-  // 🔄 Refresh ArcGIS records layers when needed (triggered by external refresh calls)
-  useEffect(() => {
-    // Refresh all three record layers
-    const layers = [
-      recordsPointLayerRef.current,
-      recordsLineLayerRef.current,
-      recordsPolygonLayerRef.current,
-    ].filter(Boolean);
-    
-    layers.forEach((layer) => {
-      if (layer) {
-        try {
-          layer.refresh();
-        } catch (err) {
-          console.warn("Could not refresh records layer:", err);
-        }
-      }
-    });
-  }, [bubbles.length, shapes.length]); // Refresh when record count changes
+  // 🔄 REMOVED: Full layer refresh on bubbles/shapes change
+  // This was causing invisible drawing bug - reloading all layers removes the just-drawn geometry
+  // Instead, we now refresh only the specific layer type that was just drawn (see handleRecordDrawing)
+  // useEffect(() => {
+  //   // Refresh all three record layers
+  //   const layers = [
+  //     recordsPointLayerRef.current,
+  //     recordsLineLayerRef.current,
+  //     recordsPolygonLayerRef.current,
+  //   ].filter(Boolean);
+  //   
+  //   layers.forEach((layer) => {
+  //     if (layer) {
+  //       try {
+  //         layer.refresh();
+  //       } catch (err) {
+  //         console.warn("Could not refresh records layer:", err);
+  //       }
+  //     }
+  //   });
+  // }, [bubbles.length, shapes.length]); // Refresh when record count changes
 
   // 🔍 Sanity check: Log when record layers successfully bind (for debugging)
   useEffect(() => {
@@ -1979,3 +2148,7 @@ export default function EsriMap({
     </div>
   );
 }
+
+// 🔥 PATCH 1: Memoize EsriMap to prevent double initialization
+// This prevents React from re-rendering or re-mounting the map when parent components change state
+export default memo(EsriMap);

@@ -351,8 +351,8 @@ export default function RegionSearch({ map: mapProp }: RegionSearchProps) {
   };
 
   return (
-    <div className="absolute top-4 left-[480px] z-[1000] pointer-events-auto">
-      <div className="relative w-80" ref={containerRef}>
+    <div className="absolute top-4 left-[440px] z-[1000] pointer-events-auto">
+      <div className="relative w-64" ref={containerRef}>
       <input
         type="text"
         value={query}

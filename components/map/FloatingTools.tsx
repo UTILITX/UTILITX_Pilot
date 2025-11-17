@@ -116,30 +116,30 @@ export default function FloatingTools({ map }: FloatingToolsProps) {
   }
 
   const buttonClass =
-    "w-10 h-10 rounded-lg bg-white/20 backdrop-blur-sm text-gray-700 hover:bg-white/40 flex items-center justify-center shadow border border-white/40 transition disabled:opacity-40 disabled:cursor-not-allowed"
+    "w-8 h-8 rounded-lg bg-white/20 backdrop-blur-sm text-gray-700 hover:bg-white/40 flex items-center justify-center shadow border border-white/40 transition disabled:opacity-40 disabled:cursor-not-allowed"
 
   return (
-    <div className="absolute bottom-4 left-[480px] z-[500] bg-white/20 backdrop-blur-xl border border-white/40 shadow-lg rounded-xl p-2 flex flex-col gap-2">
+    <div className="absolute bottom-4 left-[440px] z-[500] bg-white/20 backdrop-blur-xl border border-white/40 shadow-lg rounded-xl p-1.5 flex flex-col gap-1.5">
       <button className={buttonClass} onClick={() => map.zoomIn()}>
-        <Plus size={16} />
+        <Plus size={14} />
       </button>
       <button className={buttonClass} onClick={() => map.zoomOut()}>
-        <Minus size={16} />
+        <Minus size={14} />
       </button>
       <button className={buttonClass} onClick={addTextAnnotation}>
-        <Type size={16} />
+        <Type size={14} />
       </button>
       <button className={`${buttonClass} ${isEditMode ? "bg-white/40 text-blue-600 shadow-sm" : ""}`} onClick={toggleEdit}>
-        <Edit3 size={16} />
+        <Edit3 size={14} />
       </button>
       <button
         className={`${buttonClass} ${isDeleteMode ? "bg-white/40 text-red-600 shadow-sm" : ""}`}
         onClick={toggleDelete}
       >
-        <Trash2 size={16} />
+        <Trash2 size={14} />
       </button>
       <button className={buttonClass} onClick={undoLast} disabled={undoStack.length === 0}>
-        <Undo2 size={16} />
+        <Undo2 size={14} />
       </button>
     </div>
   )

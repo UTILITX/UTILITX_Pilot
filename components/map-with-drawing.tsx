@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, memo } from "react";
 import type { ReactNode } from "react";
 import EsriMap from "@/components/EsriMap";
 import type { LatLng } from "@/lib/record-types";
@@ -76,7 +76,7 @@ type MapWithDrawingProps = {
   children?: ReactNode;
 };
 
-export default function MapWithDrawing({
+function MapWithDrawing({
   mode = "draw",
   polygon,
   onPolygonChange,
@@ -162,3 +162,18 @@ export default function MapWithDrawing({
     </div>
   );
 }
+
+// 🔥 PATCH 2: Memoize MapWithDrawing with shallow comparison
+// This ensures MapWithDrawing won't re-render every time left panel opens/closes or switches modes
+export default memo(MapWithDrawing, (prev: MapWithDrawingProps, next: MapWithDrawingProps) => {
+  // Only re-render if these specific props change
+  return (
+    prev.shouldStartWorkAreaDraw === next.shouldStartWorkAreaDraw &&
+    prev.shouldStartRecordDraw === next.shouldStartRecordDraw &&
+    prev.enableWorkAreaSelection === next.enableWorkAreaSelection &&
+    prev.zoomToFeature === next.zoomToFeature &&
+    prev.mode === next.mode &&
+    prev.georefMode === next.georefMode &&
+    prev.pickPointActive === next.pickPointActive
+  );
+});

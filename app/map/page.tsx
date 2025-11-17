@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import dynamic from "next/dynamic"
 import type { RequestRecord, LatLng } from "@/lib/record-types"
 import type { GeorefMode } from "@/lib/types"
@@ -191,60 +191,40 @@ const handleRecordGeorefComplete = (
     <>
       <div className="relative h-full w-full overflow-hidden bg-white">
         <div className="absolute inset-0 z-[5]">
-          <MapWithDrawing
-            mode="draw"
-            polygon={preloadedPolygon}
-            onPolygonChange={(path, area) => {
-              setPreloadedPolygon(path)
-              setPreloadedAreaSqMeters(area ?? null)
-              setWorkAreaSelectionEnabled(false)
-            }}
-            shouldStartWorkAreaDraw={workAreaDrawCommand}
-            enableWorkAreaSelection={workAreaSelectionEnabled}
-            onWorkAreaSelected={(path, area) => {
-              setPreloadedPolygon(path)
-              setPreloadedAreaSqMeters(area ?? null)
-              setWorkAreaSelectionEnabled(false)
-            }}
-            georefMode={recordDrawingConfig?.georefMode ?? "none"}
-            georefColor={recordDrawingConfig?.georefColor}
-            onGeorefComplete={handleRecordGeorefComplete}
-            pickPointActive={recordDrawingConfig?.georefMode === "point"}
-            shouldStartRecordDraw={recordDrawCommand}
-            pendingRecordMetadata={recordDrawingConfig?.pendingRecordMetadata}
-            zoomToFeature={zoomToFeature}
-            onWorkAreaClick={(workArea) => {
-              setSelectedWorkAreaForAnalysis({
-                id: workArea.id,
-                name: workArea.name,
-                polygon: workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null,
-                data: workArea,
-              })
-            }}
-            onOpenWorkAreaAnalysis={async (workArea) => {
-              const polygon = workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null
-
-              setSelectedWorkAreaForAnalysis({
-                id: workArea.id,
-                name: workArea.name,
-                polygon,
-                data: {
-                  ...workArea,
-                  completenessLoading: true,
-                },
-              })
-              setCompletenessLoading(true)
-              setAnalysisOpen(true)
-
-              try {
-                if (!polygon || polygon.length < 3) {
-                  console.warn("No valid polygon on work area, cannot compute completeness.")
-                  setCompletenessLoading(false)
-                  return
-                }
-
-                const recordFeatures = await queryRecordsInPolygon(polygon)
-                const completeness = computeWorkAreaCompleteness({ records: recordFeatures })
+          {/* 🔥 PATCH 3: Memoize MapWithDrawing to prevent remounts on state changes */}
+          {useMemo(() => (
+            <MapWithDrawing
+              mode="draw"
+              polygon={preloadedPolygon}
+              onPolygonChange={(path, area) => {
+                setPreloadedPolygon(path)
+                setPreloadedAreaSqMeters(area ?? null)
+                setWorkAreaSelectionEnabled(false)
+              }}
+              shouldStartWorkAreaDraw={workAreaDrawCommand}
+              enableWorkAreaSelection={workAreaSelectionEnabled}
+              onWorkAreaSelected={(path, area) => {
+                setPreloadedPolygon(path)
+                setPreloadedAreaSqMeters(area ?? null)
+                setWorkAreaSelectionEnabled(false)
+              }}
+              georefMode={recordDrawingConfig?.georefMode ?? "none"}
+              georefColor={recordDrawingConfig?.georefColor}
+              onGeorefComplete={handleRecordGeorefComplete}
+              pickPointActive={recordDrawingConfig?.georefMode === "point"}
+              shouldStartRecordDraw={recordDrawCommand}
+              pendingRecordMetadata={recordDrawingConfig?.pendingRecordMetadata}
+              zoomToFeature={zoomToFeature}
+              onWorkAreaClick={(workArea) => {
+                setSelectedWorkAreaForAnalysis({
+                  id: workArea.id,
+                  name: workArea.name,
+                  polygon: workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null,
+                  data: workArea,
+                })
+              }}
+              onOpenWorkAreaAnalysis={async (workArea) => {
+                const polygon = workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null
 
                 setSelectedWorkAreaForAnalysis({
                   id: workArea.id,
@@ -252,20 +232,50 @@ const handleRecordGeorefComplete = (
                   polygon,
                   data: {
                     ...workArea,
-                    records: recordFeatures,
-                    ...completeness,
+                    completenessLoading: true,
                   },
                 })
-              } catch (error) {
-                console.error("❌ Error computing work area completeness:", error)
-              } finally {
-                setCompletenessLoading(false)
-              }
-            }}
-          >
-            <FloatingTools />
-            <RegionSearch />
-          </MapWithDrawing>
+                setCompletenessLoading(true)
+                setAnalysisOpen(true)
+
+                try {
+                  if (!polygon || polygon.length < 3) {
+                    console.warn("No valid polygon on work area, cannot compute completeness.")
+                    setCompletenessLoading(false)
+                    return
+                  }
+
+                  const recordFeatures = await queryRecordsInPolygon(polygon)
+                  const completeness = computeWorkAreaCompleteness({ records: recordFeatures })
+
+                  setSelectedWorkAreaForAnalysis({
+                    id: workArea.id,
+                    name: workArea.name,
+                    polygon,
+                    data: {
+                      ...workArea,
+                      records: recordFeatures,
+                      ...completeness,
+                    },
+                  })
+                } catch (error) {
+                  console.error("❌ Error computing work area completeness:", error)
+                } finally {
+                  setCompletenessLoading(false)
+                }
+              }}
+            >
+              <FloatingTools />
+              <RegionSearch />
+            </MapWithDrawing>
+          ), [
+            preloadedPolygon,
+            workAreaDrawCommand,
+            workAreaSelectionEnabled,
+            recordDrawingConfig,
+            recordDrawCommand,
+            zoomToFeature,
+          ])}
         </div>
 
         <div className="relative z-10 flex h-full w-full items-start justify-start pointer-events-none">
