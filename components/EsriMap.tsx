@@ -1495,6 +1495,40 @@ function EsriMap({
                     }
                   }, 50);
 
+                  // ⭐ OPTIMISTIC RENDERING: Show the drawn geometry immediately for instant feedback
+                  // This gives users instant visual feedback (like Wiz, Felt, ArcGIS Online)
+                  const tempLayer = layer;
+                  
+                  // Ensure layer is on the map and visible
+                  if (!map.hasLayer(tempLayer)) {
+                    tempLayer.addTo(map);
+                  }
+                  
+                  // Apply initial optimistic styling (will be updated after save)
+                  if (geometry.type === "Polygon") {
+                    (tempLayer as L.Polygon).setStyle({
+                      color: "#3388ff",
+                      weight: 2,
+                      opacity: 0.8,
+                      fillOpacity: 0.2,
+                    });
+                  } else if (geometry.type === "LineString") {
+                    (tempLayer as L.Polyline).setStyle({
+                      color: "#3388ff",
+                      weight: 3,
+                      opacity: 0.8,
+                    });
+                  } else if (geometry.type === "Point") {
+                    // Points are markers, styling handled in handler
+                  }
+                  
+                  // Disable Geoman editing on temp layer to prevent interference
+                  try {
+                    tempLayer.pm?.disable();
+                  } catch (e) {
+                    // Ignore if pm not available
+                  }
+
                   // Determine if this is work area or record
                   // PRIORITY: Check record drawing mode FIRST (georefMode), then work area
                   // Use refs to get current values, not captured closure values
@@ -1504,14 +1538,39 @@ function EsriMap({
                     enableWorkAreaDrawing: enableWorkAreaDrawingRef.current,
                   });
                   
+                  // ⭐ ASYNC SAVE: Save to ArcGIS in background without blocking UI
                   if (georefModeRef.current !== "none") {
                     // Record drawing mode is active - route to record handler
                     console.log("✅ Routing to handleRecordDrawing");
-                    handleRecordDrawing(e);
+                    handleRecordDrawing(e)
+                      .then(() => {
+                        console.log("✅ Record saved to ArcGIS (async)");
+                        // Layer will be updated when Esri layer refreshes
+                        // Temp layer will naturally be replaced by the real feature
+                      })
+                      .catch((err) => {
+                        console.error("❌ Error saving record:", err);
+                        // Visual error feedback - make layer red
+                        if (geometry.type === "Polygon") {
+                          (tempLayer as L.Polygon).setStyle({ color: "red", opacity: 0.6 });
+                        } else if (geometry.type === "LineString") {
+                          (tempLayer as L.Polyline).setStyle({ color: "red", opacity: 0.6 });
+                        }
+                      });
                   } else if (enableWorkAreaDrawingRef.current && geometry.type === "Polygon") {
                     // Work area drawing mode is active - route to work area handler
                     console.log("✅ Routing to handleWorkAreaDrawing");
-                    handleWorkAreaDrawing(e);
+                    handleWorkAreaDrawing(e)
+                      .then(() => {
+                        console.log("✅ Work area saved to ArcGIS (async)");
+                        // Layer will be updated when Esri layer refreshes
+                        // Temp layer will naturally be replaced by the real feature
+                      })
+                      .catch((err) => {
+                        console.error("❌ Error saving work area:", err);
+                        // Visual error feedback - make layer red
+                        (tempLayer as L.Polygon).setStyle({ color: "red", opacity: 0.6 });
+                      });
                   } else {
                     console.log("⚠️ No handler matched - geometry type:", geometry.type);
                   }
