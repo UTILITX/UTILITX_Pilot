@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import EsriMap from "@/components/EsriMap";
 import type { LatLng } from "@/lib/record-types";
 import type { GeorefMode } from "@/lib/types";
@@ -70,6 +71,7 @@ type MapWithDrawingProps = {
   zoom?: number;
   zoomToFeature?: any | null;
   pendingRecordMetadata?: any;
+  children?: ReactNode;
 };
 
 export default function MapWithDrawing({
@@ -97,13 +99,14 @@ export default function MapWithDrawing({
   zoom,
   zoomToFeature,
   pendingRecordMetadata,
+  children,
 }: MapWithDrawingProps) {
   // Convert command token to boolean for EsriMap
   // When shouldStartWorkAreaDraw increments, enableWorkAreaDrawing becomes true
   const enableWorkAreaDrawing = shouldStartWorkAreaDraw > 0;
 
   return (
-    <div className="h-full w-full flex flex-col">
+    <div className="h-full w-full flex flex-col relative">
       <EsriMap
         mode={mode}
         polygon={polygon}
@@ -130,6 +133,7 @@ export default function MapWithDrawing({
         zoomToFeature={zoomToFeature}
         pendingRecordMetadata={pendingRecordMetadata}
       />
+      {children}
     </div>
   );
 }

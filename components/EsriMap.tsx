@@ -22,7 +22,6 @@ import { getApwaColor } from "@/lib/apwaColors";
 import { getFeatureGeometry } from "@/lib/geoUtils";
 import { zoomToEsriFeature } from "@/lib/zoomToFeature";
 import Legend from "@/components/map/Legend";
-import DrawingToolbar from "@/components/map/DrawingToolbar";
 import BasemapToggle from "@/components/map/BasemapToggle";
 
 // Note: Supabase client initialization is handled via singleton pattern in lib/supabase-client.ts
@@ -162,6 +161,7 @@ type EsriMapProps = {
   zoom?: number;
   zoomToFeature?: null | { feature: any; version: number }; // Esri feature geometry to zoom to
   pendingRecordMetadata?: any;
+  children?: React.ReactNode;
 };
 
 export default function EsriMap({
@@ -189,6 +189,7 @@ export default function EsriMap({
   zoom,
   zoomToFeature,
   pendingRecordMetadata,
+  children,
 }: EsriMapProps) {
   const mapRef = useRef<L.Map | null>(null);
   const workAreasLayerRef = useRef<any>(null);
@@ -1931,8 +1932,13 @@ export default function EsriMap({
         className="w-full h-full"
       />
       {/* UI overlays - placed after map container to ensure proper stacking */}
-      <DrawingToolbar map={mapRef.current} />
       <BasemapToggle map={mapRef.current} />
+      {React.Children.map(children, (child: React.ReactNode) => {
+        if (!React.isValidElement(child)) return child
+        return React.cloneElement(child as React.ReactElement<{ map?: L.Map | null }>, {
+          map: mapRef.current,
+        })
+      })}
       <Legend />
     </div>
   );
