@@ -123,6 +123,96 @@ export default function RegionSearch({ map: mapProp }: RegionSearchProps) {
     }
   }, [map, pendingZoom]);
 
+  // Restore saved region on mount and when map becomes available
+  useEffect(() => {
+    // Only run once on mount or when map first becomes available
+    if (map && query === "") {
+      try {
+        const saved = localStorage.getItem("selectedRegion");
+        if (!saved) return;
+
+        console.log("🌍 Restoring saved region from localStorage:", saved);
+        setQuery(saved);
+
+        // Auto-geocode the saved region and zoom to it
+        (async () => {
+          try {
+            setIsLoading(true);
+            const suggestions = await suggestRegions(saved);
+            if (!suggestions.length) {
+              console.warn("⚠️ No suggestions found for saved region:", saved);
+              setIsLoading(false);
+              return;
+            }
+
+            // Use the first suggestion (most relevant match)
+            const magicKey = suggestions[0].magicKey;
+            const result = await geocodeMagicKey(magicKey);
+
+            if (result?.bounds) {
+              const [[south, west], [north, east]] = result.bounds;
+              
+              // Validate bounds
+              if (typeof south === 'number' && typeof west === 'number' && 
+                  typeof north === 'number' && typeof east === 'number' &&
+                  south !== north && west !== east) {
+                
+                const bounds = L.latLngBounds(
+                  [south, west],
+                  [north, east]
+                );
+                
+                // Store in refs for reliable zoom
+                pendingBoundsRef.current = bounds;
+                setPendingZoom({ bounds: result.bounds });
+                
+                // Zoom immediately since map is ready
+                map.invalidateSize();
+                setTimeout(() => {
+                  try {
+                    console.log("🎯 Auto-zooming to saved region:", saved);
+                    map.fitBounds(bounds, {
+                      padding: [100, 100],
+                      animate: true,
+                      duration: 1.0,
+                      maxZoom: 15,
+                    });
+                    pendingBoundsRef.current = null;
+                    setPendingZoom(null);
+                  } catch (e) {
+                    console.error("❌ Error auto-zooming to saved region:", e);
+                    pendingBoundsRef.current = null;
+                    setPendingZoom(null);
+                  }
+                }, 100);
+              }
+            } else if (result?.location) {
+              const { location } = result;
+              if (location.lat && location.lng) {
+                pendingLocationRef.current = { lat: location.lat, lng: location.lng };
+                setPendingZoom({ location });
+                
+                map.invalidateSize();
+                setTimeout(() => {
+                  map.setView([location.lat, location.lng], 11, { animate: true });
+                  pendingLocationRef.current = null;
+                  setPendingZoom(null);
+                }, 100);
+              }
+            }
+            
+            setIsLoading(false);
+          } catch (error) {
+            console.error("❌ Error restoring saved region:", error);
+            setIsLoading(false);
+          }
+        })();
+      } catch (e) {
+        console.warn("⚠️ Could not read from localStorage:", e);
+      }
+    }
+  }, [map]); // Only run when map becomes available
+
   // Fetch suggestions as user types
   useEffect(() => {
     if (!query.trim()) {
@@ -158,6 +248,14 @@ export default function RegionSearch({ map: mapProp }: RegionSearchProps) {
 
     console.log("🔍 RegionSearch: handleSelect called", { text, magicKey });
     console.log("🗺️ MAP in RegionSearch:", map ? "✅ Available" : "❌ NULL/UNDEFINED");
+
+    // 🔥 Save selected region to localStorage for persistence
+    try {
+      localStorage.setItem("selectedRegion", text);
+      console.log("💾 Saved region to localStorage:", text);
+    } catch (e) {
+      console.warn("⚠️ Could not save to localStorage:", e);
+    }
 
     try {
       const result = await geocodeMagicKey(magicKey);

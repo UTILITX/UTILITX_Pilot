@@ -319,9 +319,23 @@ export default function EsriMap({
 
       // Initialize map with default values (no prop dependencies)
       const map = L.map("map", {
-        center: [43.7, -79.4], // Toronto default
-        zoom: 12,
-        minZoom: 3,
+        // Check for saved region first - if none, use neutral world view
+        // RegionSearch will handle zooming to saved region on mount
+        center: (() => {
+          try {
+            const saved = localStorage.getItem("selectedRegion");
+            if (saved) {
+              // If there's a saved region, use neutral view - RegionSearch will zoom to it
+              return [0, 0];
+            }
+          } catch (e) {
+            // localStorage not available, use neutral view
+          }
+          // No saved region or localStorage error - use neutral world view
+          return [0, 0];
+        })(),
+        zoom: 2, // Neutral world view - RegionSearch will handle actual zoom
+        minZoom: 2, // Allow zoom level 2 for world view
         maxZoom: 19, // Proper maxZoom for Esri vector basemaps (fixes Leaflet-Geoman pm:create issue)
         wheelDebounceTime: 25, // smoother zoom
         wheelPxPerZoomLevel: 60,
