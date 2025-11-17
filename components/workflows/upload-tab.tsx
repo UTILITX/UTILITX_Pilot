@@ -75,6 +75,7 @@ type Props = {
       metadata?: { utilityType?: string; fileUrl?: string; filePath?: string; notes?: string }
     ) => void
   }) => void
+  onOpenIndex?: () => void
 }
 
 export default function UploadTab({
@@ -89,6 +90,7 @@ export default function UploadTab({
   onStartWorkAreaSelection,
   onClearWorkArea,
   onStartRecordDrawing,
+  onOpenIndex,
 }: Props) {
   const { toast } = useToast()
   const [polygon, setPolygon] = useState<LatLng[] | null>(null)
@@ -1501,45 +1503,42 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
 
         {records.length > 0 && <UtilityOverviewPanel records={records} className="mt-4 md:col-span-2" />}
 
-        <div className="flex flex-col gap-3 md:col-span-2">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 text-sm">
-            <div className="text-muted-foreground">
-              {polygon && polygon.length >= 3 ? (
-                <div className="flex flex-wrap gap-2">
-                  <span className="font-medium text-foreground">Polygon saved:</span>
-                  <span>{polygon.length} vertices</span>
-                  {typeof areaSqMeters === "number" ? (
-                    <span>• Area: {(areaSqMeters / 1_000_000).toFixed(3)} km²</span>
-                  ) : null}
-                </div>
-              ) : (
-                "No polygon yet. You can still georeference files."
-              )}
-            </div>
-            <div className="flex gap-2">
-              {polygon && polygon.length >= 3 ? (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    onClearWorkArea?.()
-                    setPolygon(null)
-                    setAreaSqMeters(null)
-                  }}
-                >
-                  Remove polygon
-                </Button>
-              ) : null}
-              <Button onClick={() => setGenOpen(true)} disabled={!polygon || polygon.length < 3}>
-                Generate secure sharing link
-              </Button>
-            </div>
-          </div>
+        <div className="flex flex-col gap-2 md:col-span-2">
+          <Button
+            variant="outline"
+            disabled={!polygon || polygon.length < 3}
+            onClick={() => {
+              onClearWorkArea?.()
+              setPolygon(null)
+              setAreaSqMeters(null)
+            }}
+          >
+            Remove polygon
+          </Button>
 
-          <div className="flex justify-end">
-            <Button onClick={handleCompleteUpload} className="bg-emerald-600 hover:bg-emerald-700 text-white">
-              Complete Upload & Start New
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            onClick={() => setGenOpen(true)}
+            disabled={!polygon || polygon.length < 3}
+          >
+            Generate secure sharing link
+          </Button>
+
+          <Button
+            onClick={handleCompleteUpload}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            disabled={!polygon || polygon.length < 3}
+          >
+            Complete Upload & Start New
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={() => onOpenIndex?.()}
+            className="justify-center gap-2"
+          >
+            Project Index
+          </Button>
         </div>
       </div>
 

@@ -173,43 +173,8 @@ const handleRecordGeorefComplete = (
 
   return (
     <>
-      <div className="flex h-full w-full min-h-0 overflow-hidden bg-white">
-        <div className="relative z-[9999]">
-          <LeftWorkspacePanel
-            mode="upload"
-            records={records}
-            setRecords={setRecords}
-            preloadedPolygon={preloadedPolygon}
-            preloadedAreaSqMeters={preloadedAreaSqMeters}
-            zoomToFeature={zoomToFeature}
-            onWorkAreaClick={(workArea) => {
-              setSelectedWorkAreaForAnalysis({
-                id: workArea.id,
-                name: workArea.name,
-                polygon: workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null,
-                data: workArea,
-              })
-            }}
-            onOpenWorkAreaAnalysis={(workArea) => {
-              setSelectedWorkAreaForAnalysis({
-                id: workArea.id,
-                name: workArea.name,
-                polygon: workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null,
-                data: {
-                  ...workArea,
-                  completenessLoading: true,
-                },
-              })
-              setAnalysisOpen(true)
-            }}
-            onStartWorkAreaDraw={startWorkAreaDraw}
-            onStartWorkAreaSelection={startWorkAreaSelection}
-            onClearWorkArea={clearWorkArea}
-            onStartRecordDrawing={startRecordDrawing}
-          />
-        </div>
-
-        <div className="flex-1 relative min-h-0">
+      <div className="relative h-full w-full overflow-hidden bg-white">
+        <div className="absolute inset-0 z-0">
           <MapWithDrawing
             mode="draw"
             polygon={preloadedPolygon}
@@ -284,6 +249,44 @@ const handleRecordGeorefComplete = (
           >
             <FloatingTools />
           </MapWithDrawing>
+        </div>
+
+        <div className="relative z-10 flex h-full w-full items-start justify-start pointer-events-none">
+          <div className="pointer-events-auto">
+            <LeftWorkspacePanel
+              mode="upload"
+              records={records}
+              setRecords={setRecords}
+              preloadedPolygon={preloadedPolygon}
+              preloadedAreaSqMeters={preloadedAreaSqMeters}
+              zoomToFeature={zoomToFeature}
+              onWorkAreaClick={(workArea) => {
+                setSelectedWorkAreaForAnalysis({
+                  id: workArea.id,
+                  name: workArea.name,
+                  polygon: workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null,
+                  data: workArea,
+                })
+              }}
+              onOpenWorkAreaAnalysis={(workArea) => {
+                setSelectedWorkAreaForAnalysis({
+                  id: workArea.id,
+                  name: workArea.name,
+                  polygon: workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null,
+                  data: {
+                    ...workArea,
+                    completenessLoading: true,
+                  },
+                })
+                setAnalysisOpen(true)
+              }}
+              onStartWorkAreaDraw={startWorkAreaDraw}
+              onStartWorkAreaSelection={startWorkAreaSelection}
+              onClearWorkArea={clearWorkArea}
+              onStartRecordDrawing={startRecordDrawing}
+              onOpenIndex={() => setBottomDrawerOpen(true)}
+            />
+          </div>
         </div>
       </div>
 

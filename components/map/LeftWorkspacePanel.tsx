@@ -187,6 +187,7 @@ export default function LeftWorkspacePanel({
                   onStartWorkAreaSelection={onStartWorkAreaSelection}
                   onClearWorkArea={onClearWorkArea}
                   onStartRecordDrawing={onStartRecordDrawing}
+                  onOpenIndex={onOpenIndex}
                 />
               </div>
             ) : (
