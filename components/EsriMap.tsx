@@ -1535,29 +1535,25 @@ export default function EsriMap({
     pendingRecordMetadataRef.current = pendingRecordMetadata;
   }, [pendingRecordMetadata]);
 
-  // 🔒 Never auto-enable draw mode from React re-render.
-  // Only turn ON drawing when the user clicks the button.
+  // 🔒 Only toggle work area drawing when the prop actually changes state.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    // If user clicked the UI toggle ON:
     if (enableWorkAreaDrawing === true) {
-      // Only start drawing if not already active and no work area was just completed
-      if (drawingSessionActiveRef.current === false && hasActiveWorkAreaRef.current === false) {
-        console.log("✏️ User-initiated draw mode ON");
-        map.pm.enableDraw("Polygon");
-        drawingSessionActiveRef.current = true;
-        hasActiveWorkAreaRef.current = true;
-      }
+      console.log("✏️ Enabling work area draw mode");
+      map.pm.enableDraw("Polygon");
+      drawingSessionActiveRef.current = true;
+      hasActiveWorkAreaRef.current = true;
+      return;
     }
 
-    // If user turned off draw mode (or a polygon was saved):
-    if (enableWorkAreaDrawing === false) {
-      console.log("🛑 React disabling draw mode");
+    if (enableWorkAreaDrawing === false && drawingSessionActiveRef.current) {
+      console.log("🛑 Disabling work area draw mode");
       map.pm.disableDraw();
       drawingSessionActiveRef.current = false;
       hasActiveWorkAreaRef.current = false;
+      return;
     }
   }, [enableWorkAreaDrawing]);
 

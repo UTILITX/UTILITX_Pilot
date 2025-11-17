@@ -63,9 +63,23 @@ type Props = {
     geometry?: any
     [key: string]: any
   }) => void
+  onStartWorkAreaDraw?: () => void
+  onStartWorkAreaSelection?: () => void
+  onClearWorkArea?: () => void
 }
 
-export default function UploadTab({ records, setRecords, preloadedPolygon, preloadedAreaSqMeters, zoomToFeature, onWorkAreaClick, onOpenWorkAreaAnalysis }: Props) {
+export default function UploadTab({
+  records,
+  setRecords,
+  preloadedPolygon,
+  preloadedAreaSqMeters,
+  zoomToFeature,
+  onWorkAreaClick,
+  onOpenWorkAreaAnalysis,
+  onStartWorkAreaDraw,
+  onStartWorkAreaSelection,
+  onClearWorkArea,
+}: Props) {
   const { toast } = useToast()
   const [polygon, setPolygon] = useState<LatLng[] | null>(null)
   const [areaSqMeters, setAreaSqMeters] = useState<number | null>(null)
@@ -120,6 +134,8 @@ export default function UploadTab({ records, setRecords, preloadedPolygon, prelo
   
   // Record drawing mode (for georeferencing)
   const [recordDrawCommand, setRecordDrawCommand] = useState(0)
+
+  const usingExternalMap = Boolean(onStartWorkAreaDraw)
 
   // Map overlays from records
   const { bubbles, shapes } = useMemo(() => {
@@ -253,12 +269,17 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
     if (preloadedPolygon && preloadedPolygon.length >= 3) {
       setPolygon(preloadedPolygon)
       setAreaSqMeters(preloadedAreaSqMeters || null)
+      setIsDrawingWorkArea(false)
+      setIsSelectingWorkArea(false)
 
       toast({
         title: "Work area loaded",
         description: "The work area from the secure request has been loaded. You can now upload utility records.",
         variant: "default",
       })
+    } else if (!preloadedPolygon || preloadedPolygon.length < 3) {
+      setPolygon(preloadedPolygon ?? null)
+      setAreaSqMeters(null)
     }
   }, [preloadedPolygon, preloadedAreaSqMeters, toast])
 
@@ -924,16 +945,16 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
 
   return (
     <div className="space-y-4">
-      <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold">Unified utility records workflow</h2>
-          <p className="text-muted-foreground">
-            Space-first Records: One unified workflow to define work areas, upload records, and share.
+      <header className="flex flex-col w-full px-4 pt-4 pb-2 border-b border-gray-200">
+        <div className="mb-2">
+          <h2 className="text-lg font-semibold leading-tight">Unified utility records workflow</h2>
+          <p className="text-sm text-muted-foreground leading-snug">
+            Space-first Records: One workflow to draw, upload, and share.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs px-2 py-1 rounded bg-emerald-50 text-emerald-700">Upload</span>
-          <span className="text-xs px-2 py-1 rounded bg-sky-50 text-sky-700">Share</span>
+        <div className="flex items-center gap-1 text-xs">
+          <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700">Upload</span>
+          <span className="px-2 py-0.5 rounded bg-sky-50 text-sky-700">Share</span>
         </div>
       </header>
 
@@ -993,7 +1014,11 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
                 <div className="space-y-2">
                   <Button
                     onClick={() => {
-                      setDrawCommand((c) => c + 1)
+                      if (usingExternalMap && onStartWorkAreaDraw) {
+                        onStartWorkAreaDraw()
+                      } else {
+                        setDrawCommand((c) => c + 1)
+                      }
                       setIsDrawingWorkArea(true)
                       setIsSelectingWorkArea(false)
                       toast({
@@ -1009,6 +1034,9 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
                   <Button
                     variant="outline"
                     onClick={() => {
+                      if (usingExternalMap && onStartWorkAreaSelection) {
+                        onStartWorkAreaSelection()
+                      }
                       setIsSelectingWorkArea(true)
                       setIsDrawingWorkArea(false)
                       toast({
@@ -1027,9 +1055,11 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
                   <Button
                     variant="outline"
                     onClick={() => {
+                      onClearWorkArea?.()
                       setPolygon(null)
                       setAreaSqMeters(null)
                       setIsDrawingWorkArea(false)
+                      setIsSelectingWorkArea(false)
                     }}
                     className="flex-1"
                   >
@@ -1038,7 +1068,12 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
                   <Button
                     variant="outline"
                     onClick={() => {
-                      setDrawCommand((c) => c + 1)
+                      onClearWorkArea?.()
+                      if (usingExternalMap && onStartWorkAreaDraw) {
+                        onStartWorkAreaDraw()
+                      } else {
+                        setDrawCommand((c) => c + 1)
+                      }
                       setIsDrawingWorkArea(true)
                       toast({
                         title: "Redraw mode activated",
@@ -1397,94 +1432,94 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
           )}
         </div>
 
-        {/* Right Column - Map */}
+        {!usingExternalMap && (
           <Card className="relative z-10 bg-white md:col-span-2 rounded-xl border border-[var(--utilitx-gray-200)]" style={{ boxShadow: "var(--utilitx-shadow-light)" }}>
             <CardHeader>
               <CardTitle className="text-xl font-semibold text-[var(--utilitx-gray-900)]">Work Area</CardTitle>
-            <CardDescription>Single map for drawing, georeferencing, and sharing.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="relative rounded-xl overflow-hidden border border-[var(--utilitx-gray-200)]" style={{ boxShadow: "var(--utilitx-shadow-light)" }}>
-              <div className="aspect-[4/3] w-full">
-                <MapWithDrawing
-                mode="draw"
-                polygon={memoPolygon}
-                onPolygonChange={handlePolygonChange}
-                onWorkAreaSelected={(path, area) => {
-                  setPolygon(path)
-                  setAreaSqMeters(area ?? null)
-                  setIsSelectingWorkArea(false) // Disable selection mode after work area is selected
-                  toast({
-                    title: "Work area selected",
-                    description: "Selected work area from the map. You can now upload records.",
-                  })
-                }}
-                onWorkAreaClick={onWorkAreaClick}
-                onOpenWorkAreaAnalysis={onOpenWorkAreaAnalysis}
-                georefMode={georefMode}
-                georefColor={georefColor}
-                onGeorefComplete={handleGeorefComplete}
-                pickPointActive={georefMode === "point"}
-                pickZoom={16}
-                bubbles={memoBubbles}
-                shapes={memoShapes}
-                enableDrop
-                onDropFilesAt={handleDropFilesAt}
-                focusPoint={focusPoint}
-                focusZoom={16}
-                zoomToFeature={zoomToFeature}
-                shouldStartWorkAreaDraw={drawCommand}
-                shouldStartRecordDraw={recordDrawCommand}
-                pendingRecordMetadata={pendingRecordMetadata}
-              />
-              </div>
-            </div>
-
-            {records.length > 0 && <UtilityOverviewPanel records={records} className="mt-4" />}
-
-            <div className="flex flex-col gap-3">
-              {/* Polygon summary + actions (remove + secure link) */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 text-sm">
-                <div className="text-muted-foreground">
-                  {polygon && polygon.length >= 3 ? (
-                    <div className="flex flex-wrap gap-2">
-                      <span className="font-medium text-foreground">Polygon saved:</span>
-                      <span>{polygon.length} vertices</span>
-                      {typeof areaSqMeters === "number" ? (
-                        <span>• Area: {(areaSqMeters / 1_000_000).toFixed(3)} km²</span>
-                      ) : null}
-                    </div>
-                  ) : (
-                    "No polygon yet. You can still georeference files."
-                  )}
+              <CardDescription>Single map for drawing, georeferencing, and sharing.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="relative rounded-xl overflow-hidden border border-[var(--utilitx-gray-200)]" style={{ boxShadow: "var(--utilitx-shadow-light)" }}>
+                <div className="aspect-[4/3] w-full">
+                  <MapWithDrawing
+                    mode="draw"
+                    polygon={memoPolygon}
+                    onPolygonChange={handlePolygonChange}
+                    onWorkAreaSelected={(path, area) => {
+                      setPolygon(path)
+                      setAreaSqMeters(area ?? null)
+                      setIsSelectingWorkArea(false)
+                      toast({
+                        title: "Work area selected",
+                        description: "Selected work area from the map. You can now upload records.",
+                      })
+                    }}
+                    onWorkAreaClick={onWorkAreaClick}
+                    onOpenWorkAreaAnalysis={onOpenWorkAreaAnalysis}
+                    georefMode={georefMode}
+                    georefColor={georefColor}
+                    onGeorefComplete={handleGeorefComplete}
+                    pickPointActive={georefMode === "point"}
+                    pickZoom={16}
+                    bubbles={memoBubbles}
+                    shapes={memoShapes}
+                    enableDrop
+                    onDropFilesAt={handleDropFilesAt}
+                    focusPoint={focusPoint}
+                    focusZoom={16}
+                    zoomToFeature={zoomToFeature}
+                    shouldStartWorkAreaDraw={drawCommand}
+                    shouldStartRecordDraw={recordDrawCommand}
+                    pendingRecordMetadata={pendingRecordMetadata}
+                  />
                 </div>
-                <div className="flex gap-2">
-                  {polygon && polygon.length >= 3 ? (
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setPolygon(null)
-                        setAreaSqMeters(null)
-                      }}
-                    >
-                      Remove polygon
-                    </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {records.length > 0 && <UtilityOverviewPanel records={records} className="mt-4 md:col-span-2" />}
+
+        <div className="flex flex-col gap-3 md:col-span-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 text-sm">
+            <div className="text-muted-foreground">
+              {polygon && polygon.length >= 3 ? (
+                <div className="flex flex-wrap gap-2">
+                  <span className="font-medium text-foreground">Polygon saved:</span>
+                  <span>{polygon.length} vertices</span>
+                  {typeof areaSqMeters === "number" ? (
+                    <span>• Area: {(areaSqMeters / 1_000_000).toFixed(3)} km²</span>
                   ) : null}
-                  <Button onClick={() => setGenOpen(true)} disabled={!polygon || polygon.length < 3}>
-                    Generate secure sharing link
-                  </Button>
                 </div>
-              </div>
-
-              {/* Complete Upload button */}
-              <div className="flex justify-end">
-                <Button onClick={handleCompleteUpload} className="bg-emerald-600 hover:bg-emerald-700 text-white">
-                  Complete Upload & Start New
-                </Button>
-              </div>
+              ) : (
+                "No polygon yet. You can still georeference files."
+              )}
             </div>
-          </CardContent>
-        </Card>
+            <div className="flex gap-2">
+              {polygon && polygon.length >= 3 ? (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    onClearWorkArea?.()
+                    setPolygon(null)
+                    setAreaSqMeters(null)
+                  }}
+                >
+                  Remove polygon
+                </Button>
+              ) : null}
+              <Button onClick={() => setGenOpen(true)} disabled={!polygon || polygon.length < 3}>
+                Generate secure sharing link
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Button onClick={handleCompleteUpload} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+              Complete Upload & Start New
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* Secure link dialogs */}

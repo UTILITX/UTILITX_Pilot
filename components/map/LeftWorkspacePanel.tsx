@@ -50,6 +50,9 @@ interface LeftWorkspacePanelProps {
     geometry?: any
     [key: string]: any
   }) => void
+  onStartWorkAreaDraw?: () => void
+  onStartWorkAreaSelection?: () => void
+  onClearWorkArea?: () => void
 }
 
 export default function LeftWorkspacePanel({
@@ -68,6 +71,9 @@ export default function LeftWorkspacePanel({
   zoomToFeature,
   onWorkAreaClick,
   onOpenWorkAreaAnalysis,
+  onStartWorkAreaDraw,
+  onStartWorkAreaSelection,
+  onClearWorkArea,
 }: LeftWorkspacePanelProps) {
   // Filter state for RecordsTable (lifted to persist across tab switches)
   const [utilityFilter, setUtilityFilter] = useState<string>("all")
@@ -78,7 +84,7 @@ export default function LeftWorkspacePanel({
   const [searchQuery, setSearchQuery] = useState<string>("")
 
   return (
-    <div className="fixed left-[104px] top-16 h-[calc(100vh-64px)] w-[420px] bg-white shadow-xl rounded-r-2xl z-30 flex flex-col overflow-hidden border-r border-[var(--utilitx-gray-200)]" data-panel="project-index">
+    <div className="fixed left-[72px] top-[56px] h-[calc(100vh-64px)] w-[420px] bg-white shadow-xl rounded-r-2xl z-30 flex flex-col overflow-hidden border-r border-[var(--utilitx-gray-200)]" data-panel="project-index">
       {mode === "view" ? (
         <div className="flex flex-col h-full">
           <div className="px-4 py-3 border-b border-[var(--utilitx-gray-200)]">
@@ -147,16 +153,15 @@ export default function LeftWorkspacePanel({
         </div>
       ) : (
         <div className="flex flex-col h-full overflow-hidden">
-          <style dangerouslySetInnerHTML={{
-            __html: `
-              .upload-drawer-wrapper [class*="md:col-span-2"] {
-                display: none !important;
-              }
-              .upload-drawer-wrapper [class*="md:grid-cols-3"] {
-                grid-template-columns: 1fr !important;
-              }
-            `
-          }} />
+          <style
+            dangerouslySetInnerHTML={{
+              __html: `
+                .upload-drawer-wrapper [class*="md:grid-cols-3"] {
+                  grid-template-columns: 1fr !important;
+                }
+              `,
+            }}
+          />
           <div className="flex-1 overflow-y-auto">
             {setRecords ? (
               <div className="p-4 upload-drawer-wrapper">
@@ -168,6 +173,9 @@ export default function LeftWorkspacePanel({
                   zoomToFeature={zoomToFeature}
                   onWorkAreaClick={onWorkAreaClick}
                   onOpenWorkAreaAnalysis={onOpenWorkAreaAnalysis}
+                  onStartWorkAreaDraw={onStartWorkAreaDraw}
+                  onStartWorkAreaSelection={onStartWorkAreaSelection}
+                  onClearWorkArea={onClearWorkArea}
                 />
               </div>
             ) : (

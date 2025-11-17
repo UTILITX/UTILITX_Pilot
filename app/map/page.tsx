@@ -9,12 +9,8 @@ import { computeWorkAreaCompleteness } from "@/lib/completeness"
 import { queryRecordsInPolygon } from "@/lib/esri-records"
 import MapWithDrawing from "@/components/map-with-drawing"
 import BottomDrawer from "@/components/BottomDrawer"
-import LeftWorkflowPanel from "@/components/workflow/LeftWorkflowPanel"
-import Step1WorkArea from "@/components/workflow/Step1WorkArea"
-import Step2AttachRecords from "@/components/workflow/Step2AttachRecords"
-import Step3Share from "@/components/workflow/Step3Share"
+import LeftWorkspacePanel from "@/components/map/LeftWorkspacePanel"
 import FloatingTools from "@/components/map/FloatingTools"
-import { useWorkflow } from "@/stores/workflow-store"
 
 type PreloadedRequest = {
   createdAt: string
@@ -26,8 +22,6 @@ type PreloadedRequest = {
 }
 
 export default function MapPage() {
-  const step = useWorkflow((state) => state.step)
-
   // Shared records state for the unified workflow (used by UploadTab)
   const [records, setRecords] = useState<RequestRecord[]>([])
   const [preloadedPolygon, setPreloadedPolygon] = useState<LatLng[] | null>(null)
@@ -73,6 +67,24 @@ export default function MapPage() {
       records?: any[]
     }>
   >([])
+
+  const [workAreaDrawCommand, setWorkAreaDrawCommand] = useState(0)
+  const [workAreaSelectionEnabled, setWorkAreaSelectionEnabled] = useState(false)
+
+  const startWorkAreaDraw = () => {
+    setWorkAreaSelectionEnabled(false)
+    setWorkAreaDrawCommand((c) => c + 1)
+  }
+
+  const startWorkAreaSelection = () => {
+    setWorkAreaSelectionEnabled(true)
+  }
+
+  const clearWorkArea = () => {
+    setPreloadedPolygon(null)
+    setPreloadedAreaSqMeters(null)
+    setWorkAreaSelectionEnabled(false)
+  }
 
   // Load Esri data on mount (for Project Index drawer)
   useEffect(() => {
@@ -135,11 +147,39 @@ export default function MapPage() {
   return (
     <>
       <div className="flex h-full w-full min-h-0 overflow-hidden bg-white">
-        <LeftWorkflowPanel>
-          {step === 1 && <Step1WorkArea />}
-          {step === 2 && <Step2AttachRecords />}
-          {step === 3 && <Step3Share />}
-        </LeftWorkflowPanel>
+        <div className="relative z-[9999]">
+          <LeftWorkspacePanel
+            mode="upload"
+            records={records}
+            setRecords={setRecords}
+            preloadedPolygon={preloadedPolygon}
+            preloadedAreaSqMeters={preloadedAreaSqMeters}
+            zoomToFeature={zoomToFeature}
+            onWorkAreaClick={(workArea) => {
+              setSelectedWorkAreaForAnalysis({
+                id: workArea.id,
+                name: workArea.name,
+                polygon: workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null,
+                data: workArea,
+              })
+            }}
+            onOpenWorkAreaAnalysis={(workArea) => {
+              setSelectedWorkAreaForAnalysis({
+                id: workArea.id,
+                name: workArea.name,
+                polygon: workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null,
+                data: {
+                  ...workArea,
+                  completenessLoading: true,
+                },
+              })
+              setAnalysisOpen(true)
+            }}
+            onStartWorkAreaDraw={startWorkAreaDraw}
+            onStartWorkAreaSelection={startWorkAreaSelection}
+            onClearWorkArea={clearWorkArea}
+          />
+        </div>
 
         <div className="flex-1 relative min-h-0">
           <MapWithDrawing
@@ -148,6 +188,14 @@ export default function MapPage() {
             onPolygonChange={(path, area) => {
               setPreloadedPolygon(path)
               setPreloadedAreaSqMeters(area ?? null)
+              setWorkAreaSelectionEnabled(false)
+            }}
+            shouldStartWorkAreaDraw={workAreaDrawCommand}
+            enableWorkAreaSelection={workAreaSelectionEnabled}
+            onWorkAreaSelected={(path, area) => {
+              setPreloadedPolygon(path)
+              setPreloadedAreaSqMeters(area ?? null)
+              setWorkAreaSelectionEnabled(false)
             }}
             zoomToFeature={zoomToFeature}
             onWorkAreaClick={(workArea) => {

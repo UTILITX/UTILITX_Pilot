@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import EsriMap from "@/components/EsriMap";
 import type { LatLng } from "@/lib/record-types";
@@ -101,9 +102,19 @@ export default function MapWithDrawing({
   pendingRecordMetadata,
   children,
 }: MapWithDrawingProps) {
-  // Convert command token to boolean for EsriMap
-  // When shouldStartWorkAreaDraw increments, enableWorkAreaDrawing becomes true
-  const enableWorkAreaDrawing = shouldStartWorkAreaDraw > 0;
+  const [drawEnabled, setDrawEnabled] = useState(false);
+
+  useEffect(() => {
+    if (shouldStartWorkAreaDraw > 0) {
+      setDrawEnabled(true);
+    }
+  }, [shouldStartWorkAreaDraw]);
+
+  useEffect(() => {
+    if (polygon && polygon.length >= 3) {
+      setDrawEnabled(false);
+    }
+  }, [polygon]);
 
   return (
     <div className="h-full w-full flex flex-col relative">
@@ -111,7 +122,7 @@ export default function MapWithDrawing({
         mode={mode}
         polygon={polygon}
         onPolygonChange={onPolygonChange}
-        enableWorkAreaDrawing={enableWorkAreaDrawing}
+        enableWorkAreaDrawing={drawEnabled}
         shouldStartRecordDraw={shouldStartRecordDraw}
         enableWorkAreaSelection={enableWorkAreaSelection}
         onWorkAreaSelected={onWorkAreaSelected}
