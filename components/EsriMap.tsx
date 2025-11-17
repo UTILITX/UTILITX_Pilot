@@ -241,6 +241,32 @@ export default function EsriMap({
     initializeMap();
 
     function initializeMap() {
+      // Check if container already has a Leaflet map instance
+      const mapContainer = document.getElementById("map");
+      if (mapContainer && (mapContainer as any)._leaflet_id) {
+        // Container already has a map instance, remove it first
+        console.warn("Map container already initialized, removing existing map");
+        try {
+          // Get the existing map instance from Leaflet's internal storage
+          const leafletId = (mapContainer as any)._leaflet_id;
+          // Try to get map from Leaflet's internal registry
+          const existingMap = (L as any).Map._instances?.[leafletId];
+          if (existingMap && typeof existingMap.remove === 'function') {
+            existingMap.remove();
+          } else {
+            // Fallback: try to remove from container directly
+            if ((mapContainer as any)._leaflet && typeof (mapContainer as any)._leaflet.remove === 'function') {
+              (mapContainer as any)._leaflet.remove();
+            }
+          }
+        } catch (e) {
+          console.warn("Error removing existing map:", e);
+        }
+        // Clear the leaflet_id and any stored references
+        delete (mapContainer as any)._leaflet_id;
+        delete (mapContainer as any)._leaflet;
+      }
+
       // Initialize map with default values (no prop dependencies)
       const map = L.map("map", {
         center: [43.7, -79.4], // Toronto default
@@ -1800,6 +1826,12 @@ export default function EsriMap({
           console.warn("Error during map cleanup:", err);
         }
         mapRef.current = null;
+      }
+      // Also clear the container's Leaflet ID to allow re-initialization
+      const mapContainer = document.getElementById("map");
+      if (mapContainer) {
+        delete (mapContainer as any)._leaflet_id;
+        delete (mapContainer as any)._leaflet;
       }
     };
   }, []);

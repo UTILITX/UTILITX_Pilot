@@ -1,16 +1,15 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import UploadTab from "@/components/workflows/upload-tab"
 import type { RequestRecord, LatLng } from "@/lib/record-types"
 import { loadStagedRecords, saveStagedRecords } from "@/lib/storage"
-import BottomDrawer from "@/components/BottomDrawer"
-import { Button } from "@/components/ui/button"
-import { List } from "lucide-react"
 import { fetchAllRecordsFromEsri, fetchAllWorkAreasFromEsri, type IndexedRecord } from "@/lib/fetchAllEsriData"
 import { WorkAreaAnalysisDrawer } from "@/components/work-areas/WorkAreaAnalysisDrawer"
 import { computeWorkAreaCompleteness } from "@/lib/completeness"
 import { queryRecordsInPolygon } from "@/lib/esri-records"
+import MapWithDrawing from "@/components/map-with-drawing"
+import ModeSelector from "@/components/map/ModeSelector"
+import LeftWorkspacePanel from "@/components/map/LeftWorkspacePanel"
 
 type PreloadedRequest = {
   createdAt: string
@@ -22,13 +21,14 @@ type PreloadedRequest = {
 }
 
 export default function MapPage() {
+  // Panel mode state
+  const [panelMode, setPanelMode] = useState<"view" | "upload">("view")
+
   // Shared records state for the unified workflow (used by UploadTab)
   const [records, setRecords] = useState<RequestRecord[]>([])
   const [preloadedPolygon, setPreloadedPolygon] = useState<LatLng[] | null>(null)
   const [preloadedAreaSqMeters, setPreloadedAreaSqMeters] = useState<number | null>(null)
 
-  // Bottom drawer state
-  const [drawerOpen, setDrawerOpen] = useState(false)
   const [zoomToFeature, setZoomToFeature] = useState<any | null>(null)
   const [selectedWorkArea, setSelectedWorkArea] = useState<{
     id: string
@@ -109,7 +109,7 @@ export default function MapPage() {
 
           // If there are existing records in the request, merge them
           if (parsed.records && parsed.records.length > 0) {
-            setRecords((prev) => [...parsed.records!, ...prev])
+            setRecords((prev: RequestRecord[]) => [...parsed.records!, ...prev])
           }
         }
         // Clear the session storage after loading
@@ -125,13 +125,16 @@ export default function MapPage() {
   }, [records])
 
   return (
-    <div className="w-full h-full">
-      <div className="mx-auto max-w-7xl p-4 sm:p-6 space-y-6 relative z-10">
-        <UploadTab
-          records={records}
-          setRecords={setRecords}
-          preloadedPolygon={preloadedPolygon}
-          preloadedAreaSqMeters={preloadedAreaSqMeters}
+    <>
+      {/* Full-screen map behind all UI */}
+      <div className="fixed inset-x-0 top-16 bottom-0 z-0">
+        <MapWithDrawing
+          mode="draw"
+          polygon={preloadedPolygon}
+          onPolygonChange={(path, area) => {
+            setPreloadedPolygon(path)
+            setPreloadedAreaSqMeters(area ?? null)
+          }}
           zoomToFeature={zoomToFeature}
           onWorkAreaClick={(workArea) => {
             // Store work area data (for potential future use)
@@ -195,55 +198,112 @@ export default function MapPage() {
             }
           }}
         />
-
-        {/* Floating action button to open drawer */}
-        <Button
-          onClick={() => setDrawerOpen(true)}
-          className="fixed top-24 right-4 z-50 shadow-lg hover:shadow-xl transition-shadow"
-          variant="default"
-          size="default"
-        >
-          <List className="mr-2 h-4 w-4" />
-          Project Index
-        </Button>
-
-        <BottomDrawer
-          isOpen={drawerOpen}
-          onClose={() => setDrawerOpen(false)}
-          records={esriRecords}
-          workAreas={workAreas}
-          selectedWorkArea={selectedWorkArea}
-          onSelectWorkArea={(id) =>
-            setSelectedWorkArea(workAreas.find((w) => w.id === id) || null)
-          }
-          onZoomToRecord={(rec) => {
-            // Set the feature to zoom to (with geometry)
-            setZoomToFeature(rec);
-            // Clear after a short delay to allow re-zooming to the same feature
-            setTimeout(() => setZoomToFeature(null), 100);
-          }}
-          onZoomToWorkArea={(wa) => {
-            // Set the work area feature to zoom to (with geometry)
-            setZoomToFeature(wa);
-            // Clear after a short delay to allow re-zooming to the same feature
-            setTimeout(() => setZoomToFeature(null), 100);
-          }}
-        />
-
-        {/* Work Area Analysis Drawer */}
-        <WorkAreaAnalysisDrawer
-          open={analysisOpen}
-          onOpenChange={setAnalysisOpen}
-          workAreaId={selectedWorkAreaForAnalysis?.id}
-          workAreaName={selectedWorkAreaForAnalysis?.name}
-          polygon={selectedWorkAreaForAnalysis?.polygon || preloadedPolygon}
-          records={records}
-          data={selectedWorkAreaForAnalysis?.data}
-          loading={completenessLoading}
-        />
-
       </div>
-    </div>
+
+      {/* Mode Selector - vertical strip between sidebar and panel */}
+      <ModeSelector mode={panelMode} onModeChange={setPanelMode} />
+
+      {/* Left Workspace Panel - drawer overlay */}
+      <LeftWorkspacePanel
+        mode={panelMode}
+        esriRecords={esriRecords}
+        workAreas={workAreas}
+        selectedWorkArea={selectedWorkArea}
+        onSelectWorkArea={(id) =>
+          setSelectedWorkArea(workAreas.find((w: { id: string }) => w.id === id) || null)
+        }
+        onZoomToRecord={(rec) => {
+          // Set the feature to zoom to (with geometry)
+          setZoomToFeature(rec)
+          // Clear after a short delay to allow re-zooming to the same feature
+          setTimeout(() => setZoomToFeature(null), 100)
+        }}
+        onZoomToWorkArea={(wa) => {
+          // Set the work area feature to zoom to (with geometry)
+          setZoomToFeature(wa)
+          // Clear after a short delay to allow re-zooming to the same feature
+          setTimeout(() => setZoomToFeature(null), 100)
+        }}
+        records={records}
+        setRecords={setRecords}
+        preloadedPolygon={preloadedPolygon}
+        preloadedAreaSqMeters={preloadedAreaSqMeters}
+        zoomToFeature={zoomToFeature}
+        onWorkAreaClick={(workArea) => {
+          // Store work area data (for potential future use)
+          setSelectedWorkAreaForAnalysis({
+            id: workArea.id,
+            name: workArea.name,
+            polygon: workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null,
+            data: workArea,
+          })
+        }}
+        onOpenWorkAreaAnalysis={async (workArea) => {
+          // Open the analysis drawer directly from Leaflet popup
+          const polygon = workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null
+          
+          setSelectedWorkAreaForAnalysis({
+            id: workArea.id,
+            name: workArea.name,
+            polygon,
+            data: {
+              ...workArea,
+              completenessLoading: true,
+            },
+          })
+          setCompletenessLoading(true)
+          setAnalysisOpen(true)
+
+          try {
+            if (!polygon || polygon.length < 3) {
+              console.warn("No valid polygon on work area, cannot compute completeness.")
+              setCompletenessLoading(false)
+              return
+            }
+
+            // Query records within the polygon
+            const recordFeatures = await queryRecordsInPolygon(polygon)
+            
+            // Compute completeness
+            const completeness = computeWorkAreaCompleteness({ records: recordFeatures })
+
+            // Update with computed data
+            setSelectedWorkAreaForAnalysis({
+              id: workArea.id,
+              name: workArea.name,
+              polygon,
+              data: {
+                ...workArea,
+                records: recordFeatures,
+                ...completeness,
+              },
+            })
+
+            console.log("✅ Computed completeness for work area", {
+              workArea: workArea.name,
+              recordCount: recordFeatures.length,
+              completeness,
+            })
+          } catch (error) {
+            console.error("❌ Error computing work area completeness:", error)
+          } finally {
+            setCompletenessLoading(false)
+          }
+        }}
+      />
+
+      {/* Work Area Analysis Drawer */}
+      <WorkAreaAnalysisDrawer
+        open={analysisOpen}
+        onOpenChange={setAnalysisOpen}
+        workAreaId={selectedWorkAreaForAnalysis?.id}
+        workAreaName={selectedWorkAreaForAnalysis?.name}
+        polygon={selectedWorkAreaForAnalysis?.polygon || preloadedPolygon}
+        records={records}
+        data={selectedWorkAreaForAnalysis?.data}
+        loading={completenessLoading}
+      />
+    </>
   )
 }
 
