@@ -160,7 +160,7 @@ type EsriMapProps = {
   focusZoom?: number;
   center?: LatLng;
   zoom?: number;
-  zoomToFeature?: any | null; // Esri feature geometry to zoom to
+  zoomToFeature?: null | { feature: any; version: number }; // Esri feature geometry to zoom to
   pendingRecordMetadata?: any;
 };
 
@@ -214,24 +214,59 @@ export default function EsriMap({
   const resizeTimeoutRef = useRef<any>(null);
   const safeResizeRef = useRef<(() => void) | null>(null);
   const recordIconLayerRef = useRef<L.LayerGroup | null>(null);
+  const isRestoringViewRef = useRef(false);
+  const isInitializingRef = useRef(false);
 
   // Dedicated initialization effect - runs once on mount
   useEffect(() => {
     // Guard: ensure map initializes only once
-    if (mapRef.current) return;
+    // Check both mapRef and Leaflet ID to prevent double initialization
+    if (isInitializingRef.current) return; // Already initializing, skip
+    
+    const mapContainer = document.getElementById("map");
+    if (mapRef.current) {
+      // Map already exists in ref, verify it's still valid
+      if (mapContainer && (mapContainer as any)._leaflet_id) {
+        return; // Map is already initialized and valid
+      }
+      // Map ref exists but container doesn't have Leaflet ID - this shouldn't happen
+      // but if it does, we should clean up the ref
+      mapRef.current = null;
+    }
 
     // Check if container exists
-    const mapContainer = document.getElementById("map");
     if (!mapContainer) {
       console.error("Map container not found");
       return;
+    }
+
+    // Check if container already has a Leaflet map instance but mapRef doesn't
+    // This can happen during hot reload or React Strict Mode
+    if ((mapContainer as any)._leaflet_id && !mapRef.current) {
+      // Try to recover the existing map instance
+      try {
+        const leafletId = (mapContainer as any)._leaflet_id;
+        const existingMap = (L as any).Map._instances?.[leafletId];
+        if (existingMap && typeof existingMap.remove === 'function') {
+          // Clean up orphaned map instance
+          existingMap.remove();
+        }
+        // Clear the leaflet_id
+        delete (mapContainer as any)._leaflet_id;
+        delete (mapContainer as any)._leaflet;
+      } catch (e) {
+        console.warn("Error cleaning up orphaned map:", e);
+        // Clear IDs anyway
+        delete (mapContainer as any)._leaflet_id;
+        delete (mapContainer as any)._leaflet;
+      }
     }
 
     // Ensure container has dimensions
     if (mapContainer.clientWidth === 0 || mapContainer.clientHeight === 0) {
       // Wait a bit for container to get dimensions
       setTimeout(() => {
-        if (mapContainer.clientWidth > 0 && mapContainer.clientHeight > 0) {
+        if (mapContainer.clientWidth > 0 && mapContainer.clientHeight > 0 && !mapRef.current) {
           initializeMap();
         }
       }, 100);
@@ -241,28 +276,29 @@ export default function EsriMap({
     initializeMap();
 
     function initializeMap() {
-      // Check if container already has a Leaflet map instance
+      // Final guard: check again before initializing
+      if (mapRef.current || isInitializingRef.current) return;
+      
+      isInitializingRef.current = true; // Mark as initializing
+      
       const mapContainer = document.getElementById("map");
-      if (mapContainer && (mapContainer as any)._leaflet_id) {
-        // Container already has a map instance, remove it first
-        console.warn("Map container already initialized, removing existing map");
+      if (!mapContainer) {
+        isInitializingRef.current = false;
+        return;
+      }
+      
+      // Double-check Leaflet ID wasn't set in the meantime
+      if ((mapContainer as any)._leaflet_id) {
+        // Clean up any orphaned Leaflet instance
         try {
-          // Get the existing map instance from Leaflet's internal storage
           const leafletId = (mapContainer as any)._leaflet_id;
-          // Try to get map from Leaflet's internal registry
           const existingMap = (L as any).Map._instances?.[leafletId];
           if (existingMap && typeof existingMap.remove === 'function') {
             existingMap.remove();
-          } else {
-            // Fallback: try to remove from container directly
-            if ((mapContainer as any)._leaflet && typeof (mapContainer as any)._leaflet.remove === 'function') {
-              (mapContainer as any)._leaflet.remove();
-            }
           }
         } catch (e) {
-          console.warn("Error removing existing map:", e);
+          // Ignore errors during cleanup
         }
-        // Clear the leaflet_id and any stored references
         delete (mapContainer as any)._leaflet_id;
         delete (mapContainer as any)._leaflet;
       }
@@ -279,6 +315,7 @@ export default function EsriMap({
       });
 
       mapRef.current = map;
+      isInitializingRef.current = false; // Mark initialization as complete
 
       // Wait for map to be ready before adding layers
       map.whenReady(() => {
@@ -334,15 +371,59 @@ export default function EsriMap({
           if (resizeTimeoutRef.current) {
             clearTimeout(resizeTimeoutRef.current);
           }
+          
+          // Prevent multiple simultaneous resize operations
+          if (isRestoringViewRef.current) return;
+          
           resizeTimeoutRef.current = setTimeout(() => {
-            if (!map) return;
+            if (!map || isRestoringViewRef.current) return;
+            
+            // Store current view before invalidateSize
+            const currentCenter = map.getCenter();
+            const currentZoom = map.getZoom();
+            
+            // Only proceed if we have a stored view to restore to
+            if (!lastCenterRef.current || !lastZoomRef.current) {
+              map.invalidateSize({ animate: false });
+              lastCenterRef.current = currentCenter;
+              lastZoomRef.current = currentZoom;
+              return;
+            }
+            
             map.invalidateSize({ animate: false });
 
-            // Restore view instantly — avoids zoom bounce
-            if (lastCenterRef.current && lastZoomRef.current) {
-              map.setView(lastCenterRef.current, lastZoomRef.current, { animate: false });
-            }
-          }, 80);
+            // Use double requestAnimationFrame to ensure layout has fully settled
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                if (!map || isRestoringViewRef.current) return;
+                
+                isRestoringViewRef.current = true;
+                
+                // Check if invalidateSize caused any change
+                const newCenter = map.getCenter();
+                const newZoom = map.getZoom();
+                
+                // Calculate differences
+                const centerDiff = currentCenter.distanceTo(newCenter);
+                const zoomDiff = Math.abs(currentZoom - newZoom);
+                
+                // Only restore if there was a significant unwanted change (bounce)
+                // Small changes (< 0.0001 degrees, < 0.01 zoom) are likely just rounding
+                if (centerDiff > 0.0001 || zoomDiff > 0.01) {
+                  // Restore to last known good position
+                  if (lastCenterRef.current && lastZoomRef.current) {
+                    map.setView(lastCenterRef.current, lastZoomRef.current, { animate: false });
+                  }
+                }
+                
+                // Always update refs with the final position
+                lastCenterRef.current = map.getCenter();
+                lastZoomRef.current = map.getZoom();
+                
+                isRestoringViewRef.current = false;
+              });
+            });
+          }, 150);
         };
 
         safeResizeRef.current = safeResize;
@@ -707,12 +788,13 @@ export default function EsriMap({
                           pointLayer.eachFeature((layer: any) => {
                             if (layer.feature?.geometry) features.push(layer.feature);
                           });
-                          if (features.length > 0 && zoomToFeature?.geometry) {
+                          const feature = zoomToFeature?.feature;
+                          if (features.length > 0 && feature?.geometry) {
                             console.log("Zooming to feature from Point layer");
-                            if (zoomToFeature?.geometry) {
-                              zoomToEsriFeature(map, zoomToFeature);
+                            if (feature?.geometry) {
+                              zoomToEsriFeature(map, feature);
                             } else {
-                              console.warn("Skipping zoom — feature missing geometry:", zoomToFeature);
+                              console.warn("Skipping zoom — feature missing geometry:", feature);
                             }
                           }
                         } catch (err) {
@@ -743,12 +825,13 @@ export default function EsriMap({
                           lineLayer.eachFeature((layer: any) => {
                             if (layer.feature?.geometry) features.push(layer.feature);
                           });
-                          if (features.length > 0 && zoomToFeature?.geometry) {
+                          const feature = zoomToFeature?.feature;
+                          if (features.length > 0 && feature?.geometry) {
                             console.log("Zooming to feature from Line layer");
-                            if (zoomToFeature?.geometry) {
-                              zoomToEsriFeature(map, zoomToFeature);
+                            if (feature?.geometry) {
+                              zoomToEsriFeature(map, feature);
                             } else {
-                              console.warn("Skipping zoom — feature missing geometry:", zoomToFeature);
+                              console.warn("Skipping zoom — feature missing geometry:", feature);
                             }
                           }
                         } catch (err) {
@@ -779,12 +862,13 @@ export default function EsriMap({
                           polygonLayer.eachFeature((layer: any) => {
                             if (layer.feature?.geometry) features.push(layer.feature);
                           });
-                          if (features.length > 0 && zoomToFeature?.geometry) {
+                          const feature = zoomToFeature?.feature;
+                          if (features.length > 0 && feature?.geometry) {
                             console.log("Zooming to feature from Polygon layer");
-                            if (zoomToFeature?.geometry) {
-                              zoomToEsriFeature(map, zoomToFeature);
+                            if (feature?.geometry) {
+                              zoomToEsriFeature(map, feature);
                             } else {
-                              console.warn("Skipping zoom — feature missing geometry:", zoomToFeature);
+                              console.warn("Skipping zoom — feature missing geometry:", feature);
                             }
                           }
                         } catch (err) {
@@ -1357,16 +1441,17 @@ export default function EsriMap({
           return;
         }
         
-        if (zoomToFeature?.geometry) {
-          zoomToEsriFeature(map, zoomToFeature);
-        } else if (zoomToFeature && !zoomToFeature.geometry) {
-          console.warn("Skipping zoom — feature missing geometry:", zoomToFeature);
+        const feature = zoomToFeature?.feature;
+        if (feature?.geometry) {
+          zoomToEsriFeature(map, feature);
+        } else if (feature && !feature.geometry) {
+          console.warn("Skipping zoom — feature missing geometry:", feature);
         }
       } catch (err) {
         console.error("Error zooming to feature:", err);
       }
     }, 400);
-  }, [zoomToFeature]);
+  }, [zoomToFeature?.version]); // ⭐ ONLY zoom when version increments
 
   // Separate effect to handle focusPoint/focusZoom updates
   // Only set view if we don't have a tracked view state (first mount) or if explicitly needed
@@ -1818,6 +1903,7 @@ export default function EsriMap({
   // Cleanup effect for proper map teardown on hot reloads
   useEffect(() => {
     return () => {
+      // Only cleanup if we're actually unmounting (not just re-rendering)
       if (mapRef.current) {
         try {
           mapRef.current.off();
@@ -1827,6 +1913,8 @@ export default function EsriMap({
         }
         mapRef.current = null;
       }
+      // Reset initialization flag
+      isInitializingRef.current = false;
       // Also clear the container's Leaflet ID to allow re-initialization
       const mapContainer = document.getElementById("map");
       if (mapContainer) {

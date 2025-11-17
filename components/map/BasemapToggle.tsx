@@ -12,7 +12,7 @@ type BasemapType = "Imagery" | "Streets" | "Topographic";
 
 const BasemapToggle = ({ map }: BasemapToggleProps) => {
   const [activeBasemap, setActiveBasemap] = useState<BasemapType>("Streets");
-  const basemapLayersRef = useRef<Record<string, L.TileLayer>>({});
+  const basemapLayersRef = useRef<Record<string, L.TileLayer>>({}); // Kept for compatibility but not used for switching
   const currentBasemapRef = useRef<L.TileLayer | null>(null);
 
   useEffect(() => {
@@ -24,50 +24,49 @@ const BasemapToggle = ({ map }: BasemapToggleProps) => {
       return;
     }
 
-    // Initialize basemap layers
-    // Note: Using basemapLayer (deprecated but functional)
-    // When esri-leaflet is upgraded, migrate to: EL.Vector.vectorBasemapLayer("ArcGIS:Streets", { apiKey })
-    const basemaps: Record<string, L.TileLayer> = {
-      Imagery: EL.basemapLayer("Imagery", {
+    // Initialize basemap layers (factory functions - create new instances when needed)
+    const createBasemap = (type: BasemapType): L.TileLayer => {
+      return EL.basemapLayer(type, {
         apikey: apiKey,
         maxZoom: 19,
-      }),
-      Streets: EL.basemapLayer("Streets", {
-        apikey: apiKey,
-        maxZoom: 19,
-      }),
-      Topographic: EL.basemapLayer("Topographic", {
-        apikey: apiKey,
-        maxZoom: 19,
-      }),
+      });
     };
 
-    basemapLayersRef.current = basemaps;
+    // Store factory function instead of instances
+    basemapLayersRef.current = {
+      Imagery: createBasemap("Imagery"),
+      Streets: createBasemap("Streets"),
+      Topographic: createBasemap("Topographic"),
+    };
 
     // Detect if a basemap is already on the map (from EsriMap initialization)
+    // Check all layers and find the first basemap tile layer
     let foundExisting = false;
     map.eachLayer((layer: any) => {
-      if (layer instanceof L.TileLayer && layer._url) {
+      if (layer instanceof L.TileLayer && layer._url && !foundExisting) {
         const url = layer._url.toLowerCase();
-        if (url.includes("imagery")) {
-          currentBasemapRef.current = layer;
-          setActiveBasemap("Imagery");
-          foundExisting = true;
-        } else if (url.includes("topographic")) {
-          currentBasemapRef.current = layer;
-          setActiveBasemap("Topographic");
-          foundExisting = true;
-        } else if (url.includes("street")) {
-          currentBasemapRef.current = layer;
-          setActiveBasemap("Streets");
-          foundExisting = true;
+        // Check if this is an ArcGIS basemap layer
+        if (url.includes("arcgis.com") || url.includes("arcgisonline.com")) {
+          if (url.includes("imagery") || url.includes("world_imagery")) {
+            currentBasemapRef.current = layer;
+            setActiveBasemap("Imagery");
+            foundExisting = true;
+          } else if (url.includes("topographic") || url.includes("world_topo")) {
+            currentBasemapRef.current = layer;
+            setActiveBasemap("Topographic");
+            foundExisting = true;
+          } else if (url.includes("street") || url.includes("world_street")) {
+            currentBasemapRef.current = layer;
+            setActiveBasemap("Streets");
+            foundExisting = true;
+          }
         }
       }
     });
 
-    // If no basemap found, add default
+    // If no basemap found, add default (shouldn't happen as EsriMap adds one, but just in case)
     if (!foundExisting) {
-      const defaultBasemap = basemaps.Streets;
+      const defaultBasemap = createBasemap("Streets");
       defaultBasemap.addTo(map);
       currentBasemapRef.current = defaultBasemap;
 
@@ -81,28 +80,53 @@ const BasemapToggle = ({ map }: BasemapToggleProps) => {
   const switchBasemap = (basemapType: BasemapType) => {
     if (!map || activeBasemap === basemapType) return;
 
-    // Remove current basemap (only if it's one we manage)
-    if (currentBasemapRef.current && map.hasLayer(currentBasemapRef.current)) {
-      // Check if it's one of our managed basemaps
-      const isManaged = Object.values(basemapLayersRef.current).includes(currentBasemapRef.current);
-      if (isManaged) {
-        map.removeLayer(currentBasemapRef.current);
+    // Remove all existing basemap tile layers from map
+    // This ensures we don't have multiple basemaps stacked
+    const layersToRemove: L.Layer[] = [];
+    map.eachLayer((layer: any) => {
+      if (layer instanceof L.TileLayer && layer._url) {
+        const url = layer._url.toLowerCase();
+        // Check if this is an ArcGIS basemap layer
+        if (url.includes("arcgis.com") || url.includes("arcgisonline.com")) {
+          if (url.includes("imagery") || url.includes("topographic") || url.includes("street") || 
+              url.includes("world_imagery") || url.includes("world_topo") || url.includes("world_street")) {
+            layersToRemove.push(layer);
+          }
+        }
       }
+    });
+
+    // Remove all basemap layers
+    layersToRemove.forEach(layer => {
+      if (map.hasLayer(layer)) {
+        map.removeLayer(layer);
+      }
+    });
+
+    // Clear the current basemap ref
+    currentBasemapRef.current = null;
+
+    // Create and add new basemap
+    const apiKey = process.env.NEXT_PUBLIC_ARCGIS_API_KEY;
+    if (!apiKey) {
+      console.warn("ArcGIS API key not found");
+      return;
     }
 
-    // Add new basemap
-    const newBasemap = basemapLayersRef.current[basemapType];
-    if (newBasemap) {
-      newBasemap.addTo(map);
-      currentBasemapRef.current = newBasemap;
-      setActiveBasemap(basemapType);
+    const newBasemap = EL.basemapLayer(basemapType, {
+      apikey: apiKey,
+      maxZoom: 19,
+    });
 
-      // Update map maxZoom when basemap loads
-      newBasemap.on("load", () => {
-        const tileMax = (newBasemap.options as any).maxZoom ?? 19;
-        map.setMaxZoom(tileMax);
-      });
-    }
+    newBasemap.addTo(map);
+    currentBasemapRef.current = newBasemap;
+    setActiveBasemap(basemapType);
+
+    // Update map maxZoom when basemap loads
+    newBasemap.on("load", () => {
+      const tileMax = (newBasemap.options as any).maxZoom ?? 19;
+      map.setMaxZoom(tileMax);
+    });
   };
 
   if (!map) return null;

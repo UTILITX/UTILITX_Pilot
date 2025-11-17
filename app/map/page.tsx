@@ -30,7 +30,8 @@ export default function MapPage() {
   const [preloadedPolygon, setPreloadedPolygon] = useState<LatLng[] | null>(null)
   const [preloadedAreaSqMeters, setPreloadedAreaSqMeters] = useState<number | null>(null)
 
-  const [zoomToFeature, setZoomToFeature] = useState<any | null>(null)
+  const [zoomToFeature, setZoomToFeature] = useState<null | { feature: any; version: number }>(null)
+  const [zoomSequence, setZoomSequence] = useState(0)
   const [selectedWorkArea, setSelectedWorkArea] = useState<{
     id: string
     name: string
@@ -128,6 +129,11 @@ export default function MapPage() {
     saveStagedRecords(records)
   }, [records])
 
+  // Clear zoom request when switching modes to prevent unwanted zoom
+  useEffect(() => {
+    setZoomToFeature(null)
+  }, [panelMode])
+
   return (
     <>
       {/* Full-screen map behind all UI */}
@@ -218,15 +224,23 @@ export default function MapPage() {
         }
         onZoomToRecord={(rec) => {
           // Set the feature to zoom to (with geometry)
-          setZoomToFeature(rec)
-          // Clear after a short delay to allow re-zooming to the same feature
-          setTimeout(() => setZoomToFeature(null), 100)
+          setZoomSequence((prev: number) => {
+            const newVersion = prev + 1
+            setZoomToFeature({ feature: rec, version: newVersion })
+            // Clear after a short delay to allow re-zooming to the same feature
+            setTimeout(() => setZoomToFeature(null), 150)
+            return newVersion
+          })
         }}
         onZoomToWorkArea={(wa) => {
           // Set the work area feature to zoom to (with geometry)
-          setZoomToFeature(wa)
-          // Clear after a short delay to allow re-zooming to the same feature
-          setTimeout(() => setZoomToFeature(null), 100)
+          setZoomSequence((prev: number) => {
+            const newVersion = prev + 1
+            setZoomToFeature({ feature: wa, version: newVersion })
+            // Clear after a short delay to allow re-zooming to the same feature
+            setTimeout(() => setZoomToFeature(null), 150)
+            return newVersion
+          })
         }}
         records={records}
         setRecords={setRecords}
@@ -320,12 +334,20 @@ export default function MapPage() {
           setSelectedWorkArea(workAreas.find((w: { id: string }) => w.id === id) || null)
         }
         onZoomToRecord={(rec) => {
-          setZoomToFeature(rec)
-          setTimeout(() => setZoomToFeature(null), 100)
+          setZoomSequence((prev: number) => {
+            const newVersion = prev + 1
+            setZoomToFeature({ feature: rec, version: newVersion })
+            setTimeout(() => setZoomToFeature(null), 150)
+            return newVersion
+          })
         }}
         onZoomToWorkArea={(wa) => {
-          setZoomToFeature(wa)
-          setTimeout(() => setZoomToFeature(null), 100)
+          setZoomSequence((prev: number) => {
+            const newVersion = prev + 1
+            setZoomToFeature({ feature: wa, version: newVersion })
+            setTimeout(() => setZoomToFeature(null), 150)
+            return newVersion
+          })
         }}
       />
     </>
