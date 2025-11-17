@@ -54,7 +54,10 @@
       ".git",
       "firebase-debug.log",
       "firebase-debug.*.log",
-      "*.log"
+      "*.log",
+      ".next/cache/**",
+      ".next/trace",
+      "**/*.map"
     ],
     "predeploy": [
       "npm --prefix \"$RESOURCE_DIR/..\" run build",

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import dynamic from "next/dynamic"
 import type { RequestRecord, LatLng } from "@/lib/record-types"
 import type { GeorefMode } from "@/lib/types"
 import { loadStagedRecords, saveStagedRecords } from "@/lib/storage"
@@ -8,10 +9,24 @@ import { fetchAllRecordsFromEsri, fetchAllWorkAreasFromEsri, type IndexedRecord 
 import { WorkAreaAnalysisDrawer } from "@/components/work-areas/WorkAreaAnalysisDrawer"
 import { computeWorkAreaCompleteness } from "@/lib/completeness"
 import { queryRecordsInPolygon } from "@/lib/esri-records"
-import MapWithDrawing from "@/components/map-with-drawing"
-import BottomDrawer from "@/components/BottomDrawer"
-import LeftWorkspacePanel from "@/components/map/LeftWorkspacePanel"
-import FloatingTools from "@/components/map/FloatingTools"
+
+// Dynamically import map components to avoid SSR issues with Leaflet
+const MapWithDrawing = dynamic(() => import("@/components/map-with-drawing"), {
+  ssr: false,
+  loading: () => <div className="h-full w-full flex items-center justify-center bg-gray-100">Loading map...</div>
+})
+
+const BottomDrawer = dynamic(() => import("@/components/BottomDrawer"), {
+  ssr: false
+})
+
+const LeftWorkspacePanel = dynamic(() => import("@/components/map/LeftWorkspacePanel"), {
+  ssr: false
+})
+
+const FloatingTools = dynamic(() => import("@/components/map/FloatingTools"), {
+  ssr: false
+})
 
 type PreloadedRequest = {
   createdAt: string

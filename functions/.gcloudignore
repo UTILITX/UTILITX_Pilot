@@ -1,0 +1,48 @@
+# This file specifies files that are *not* uploaded to Google Cloud
+# using gcloud. It follows the same syntax as .gitignore
+
+# Node modules (installed separately in Cloud Functions - MUST be excluded)
+node_modules/
+**/node_modules/
+functions/node_modules/
+
+# Git files
+.git/
+.gitignore
+
+# Development files
+*.log
+*.tsbuildinfo
+.env.local
+.env*.local
+
+# TypeScript build output (we use the compiled JS)
+src/
+tsconfig.json
+
+# Next.js cache and development files
+.next/cache/
+.next/trace
+.next/server/app/**/*.js.map
+.next/server/pages/**/*.js.map
+.next/server/chunks/**/*.js.map
+
+# Keep only essential .next files for SSR
+# Exclude source maps and cache to reduce size
+*.map
+
+# Firebase files
+firebase-debug.log
+firebase-debug.*.log
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+

@@ -35,6 +35,10 @@ declare module "leaflet" {
 
 // Helper function to render React component to DOM element for Leaflet popup
 function renderReactPopup(component: React.ReactElement): HTMLElement {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    // Return a dummy div during SSR
+    return document?.createElement("div") || {} as HTMLElement;
+  }
   const div = document.createElement("div");
   const root = createRoot(div);
   root.render(component);
@@ -102,27 +106,32 @@ function getCentroidFromGeometry(geometry: any): [number, number] | null {
   return null;
 }
 
-// Icon HTML for record types (using Lucide icon SVG paths)
-const recordTypeIcons: Record<string, L.DivIcon> = {
-  asbuilt: L.divIcon({
-    html: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/><circle cx="18" cy="16" r="1"/></svg>`,
-    className: "record-icon",
-    iconSize: [20, 20],
-    iconAnchor: [10, 10],
-  }),
-  permit: L.divIcon({
-    html: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/><path d="M20 8v8"/><path d="M18 12h4"/></svg>`,
-    className: "record-icon",
-    iconSize: [20, 20],
-    iconAnchor: [10, 10],
-  }),
-  locate: L.divIcon({
-    html: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><circle cx="12" cy="12" r="7"/></svg>`,
-    className: "record-icon",
-    iconSize: [20, 20],
-    iconAnchor: [10, 10],
-  }),
-};
+// Helper function to get record type icons (lazy initialization to avoid SSR issues)
+function getRecordTypeIcons(): Record<string, L.DivIcon> {
+  if (typeof window === 'undefined') {
+    return {};
+  }
+  return {
+    asbuilt: L.divIcon({
+      html: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/><circle cx="18" cy="16" r="1"/></svg>`,
+      className: "record-icon",
+      iconSize: [20, 20],
+      iconAnchor: [10, 10],
+    }),
+    permit: L.divIcon({
+      html: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/><path d="M20 8v8"/><path d="M18 12h4"/></svg>`,
+      className: "record-icon",
+      iconSize: [20, 20],
+      iconAnchor: [10, 10],
+    }),
+    locate: L.divIcon({
+      html: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><circle cx="12" cy="12" r="7"/></svg>`,
+      className: "record-icon",
+      iconSize: [20, 20],
+      iconAnchor: [10, 10],
+    }),
+  };
+}
 
 type EsriMapProps = {
   mode?: "draw" | "view";
@@ -657,6 +666,7 @@ export default function EsriMap({
                         recordType = "asbuilt";
                       }
                       if (recordType && (recordType === "asbuilt" || recordType === "permit" || recordType === "locate")) {
+                        const recordTypeIcons = getRecordTypeIcons();
                         const icon = recordTypeIcons[recordType];
                         if (icon) {
                           // Get geometry from feature

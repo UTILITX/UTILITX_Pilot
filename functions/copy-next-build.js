@@ -29,8 +29,45 @@ if (fs.existsSync(functionsNextDir)) {
 }
 
 console.log('📦 Copying .next directory to functions/.next...');
-fs.cpSync(nextDir, functionsNextDir, { recursive: true });
-console.log('✅ Copied .next directory');
+
+// Custom copy function that excludes cache and source maps
+function copyNextDir(src, dest) {
+  if (!fs.existsSync(dest)) {
+    fs.mkdirSync(dest, { recursive: true });
+  }
+  
+  const entries = fs.readdirSync(src, { withFileTypes: true });
+  
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    
+    // Skip cache directory
+    if (entry.name === 'cache') {
+      console.log('⏭️  Skipping .next/cache (not needed for SSR)');
+      continue;
+    }
+    
+    // Skip trace files
+    if (entry.name === 'trace') {
+      console.log('⏭️  Skipping .next/trace (not needed for SSR)');
+      continue;
+    }
+    
+    if (entry.isDirectory()) {
+      copyNextDir(srcPath, destPath);
+    } else {
+      // Skip source map files
+      if (entry.name.endsWith('.map')) {
+        continue;
+      }
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
+}
+
+copyNextDir(nextDir, functionsNextDir);
+console.log('✅ Copied .next directory (excluding cache, trace, and source maps)');
 
 // Copy next.config.mjs if it exists
 if (fs.existsSync(nextConfigFile)) {
