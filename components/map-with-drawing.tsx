@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import EsriMap from "@/components/EsriMap";
 import type { LatLng } from "@/lib/record-types";
 import type { GeorefMode } from "@/lib/types";
+import type L from "leaflet";
 
 export type MapBubble = {
   id: string;
@@ -103,6 +104,7 @@ export default function MapWithDrawing({
   children,
 }: MapWithDrawingProps) {
   const [drawEnabled, setDrawEnabled] = useState(false);
+  const [map, setMap] = useState<L.Map | null>(null);
 
   useEffect(() => {
     if (shouldStartWorkAreaDraw > 0) {
@@ -115,6 +117,12 @@ export default function MapWithDrawing({
       setDrawEnabled(false);
     }
   }, [polygon]);
+
+  // Handle map ready callback
+  const handleMapReady = (mapInstance: L.Map) => {
+    console.log("🗺️ MapWithDrawing: Map initialized:", mapInstance);
+    setMap(mapInstance);
+  };
 
   return (
     <div className="h-full w-full flex flex-col relative">
@@ -143,8 +151,14 @@ export default function MapWithDrawing({
         zoom={zoom}
         zoomToFeature={zoomToFeature}
         pendingRecordMetadata={pendingRecordMetadata}
+        onMapReady={handleMapReady}
       />
-      {children}
+      {React.Children.map(children, (child: ReactNode) => {
+        if (!React.isValidElement(child)) return child;
+        return React.cloneElement(child as React.ReactElement<{ map?: L.Map | null }>, {
+          map: map,
+        });
+      })}
     </div>
   );
 }

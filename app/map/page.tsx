@@ -9,6 +9,7 @@ import { fetchAllRecordsFromEsri, fetchAllWorkAreasFromEsri, type IndexedRecord 
 import { WorkAreaAnalysisDrawer } from "@/components/work-areas/WorkAreaAnalysisDrawer"
 import { computeWorkAreaCompleteness } from "@/lib/completeness"
 import { queryRecordsInPolygon } from "@/lib/esri-records"
+import RegionSearch from "@/components/RegionSearch"
 
 // Dynamically import map components to avoid SSR issues with Leaflet
 const MapWithDrawing = dynamic(() => import("@/components/map-with-drawing"), {
@@ -189,7 +190,7 @@ const handleRecordGeorefComplete = (
   return (
     <>
       <div className="relative h-full w-full overflow-hidden bg-white">
-        <div className="absolute inset-0 z-0">
+        <div className="absolute inset-0 z-[5]">
           <MapWithDrawing
             mode="draw"
             polygon={preloadedPolygon}
@@ -263,6 +264,7 @@ const handleRecordGeorefComplete = (
             }}
           >
             <FloatingTools />
+            <RegionSearch />
           </MapWithDrawing>
         </div>
 

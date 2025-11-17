@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -23,6 +23,7 @@ import { getFeatureGeometry } from "@/lib/geoUtils";
 import { zoomToEsriFeature } from "@/lib/zoomToFeature";
 import Legend from "@/components/map/Legend";
 import BasemapToggle from "@/components/map/BasemapToggle";
+import { MapProvider } from "@/contexts/MapContext";
 
 // Note: Supabase client initialization is handled via singleton pattern in lib/supabase-client.ts
 // This prevents multiple GoTrueClient instances and eliminates duplication warnings
@@ -170,6 +171,7 @@ type EsriMapProps = {
   zoom?: number;
   zoomToFeature?: null | { feature: any; version: number }; // Esri feature geometry to zoom to
   pendingRecordMetadata?: any;
+  onMapReady?: (map: L.Map) => void; // Callback when map is initialized
   children?: React.ReactNode;
 };
 
@@ -198,9 +200,11 @@ export default function EsriMap({
   zoom,
   zoomToFeature,
   pendingRecordMetadata,
+  onMapReady,
   children,
 }: EsriMapProps) {
   const mapRef = useRef<L.Map | null>(null);
+  const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
   const workAreasLayerRef = useRef<any>(null);
   const recordsLayerRefInternal = useRef<any>(null);
   const recordsPointLayerRef = useRef<any>(null);
@@ -325,7 +329,13 @@ export default function EsriMap({
       });
 
       mapRef.current = map;
+      setMapInstance(map); // Update state so context updates
       isInitializingRef.current = false; // Mark initialization as complete
+      
+      // Notify parent component that map is ready
+      if (onMapReady) {
+        onMapReady(map);
+      }
 
       // Wait for map to be ready before adding layers
       map.whenReady(() => {
@@ -1938,16 +1948,20 @@ export default function EsriMap({
         className="w-full h-full"
       />
       {/* UI overlays */}
-      <div className="absolute bottom-4 right-4 z-[500] flex flex-col items-end gap-3 pointer-events-none">
+      <div className="absolute top-4 right-4 z-[500] pointer-events-none">
         <BasemapToggle map={mapRef.current} />
+      </div>
+      <div className="absolute bottom-4 right-4 z-[500] pointer-events-none">
         <Legend />
       </div>
-      {React.Children.map(children, (child: React.ReactNode) => {
-        if (!React.isValidElement(child)) return child
-        return React.cloneElement(child as React.ReactElement<{ map?: L.Map | null }>, {
-          map: mapRef.current,
-        })
-      })}
+      <MapProvider map={mapInstance}>
+        {React.Children.map(children, (child: React.ReactNode) => {
+          if (!React.isValidElement(child)) return child
+          return React.cloneElement(child as React.ReactElement<{ map?: L.Map | null }>, {
+            map: mapRef.current,
+          })
+        })}
+      </MapProvider>
     </div>
   );
 }

@@ -116,10 +116,10 @@ export default function FloatingTools({ map }: FloatingToolsProps) {
   }
 
   const buttonClass =
-    "w-10 h-10 rounded-lg bg-white text-gray-700 hover:bg-blue-50 flex items-center justify-center shadow border border-gray-200 transition disabled:opacity-40 disabled:cursor-not-allowed"
+    "w-10 h-10 rounded-lg bg-white/20 backdrop-blur-sm text-gray-700 hover:bg-white/40 flex items-center justify-center shadow border border-white/40 transition disabled:opacity-40 disabled:cursor-not-allowed"
 
   return (
-    <div className="absolute top-4 right-4 z-[500] bg-white shadow-lg rounded p-2 flex flex-col gap-2">
+    <div className="absolute bottom-4 left-[480px] z-[500] bg-white/20 backdrop-blur-xl border border-white/40 shadow-lg rounded-xl p-2 flex flex-col gap-2">
       <button className={buttonClass} onClick={() => map.zoomIn()}>
         <Plus size={16} />
       </button>
@@ -129,11 +129,11 @@ export default function FloatingTools({ map }: FloatingToolsProps) {
       <button className={buttonClass} onClick={addTextAnnotation}>
         <Type size={16} />
       </button>
-      <button className={`${buttonClass} ${isEditMode ? "bg-blue-50 text-blue-600" : ""}`} onClick={toggleEdit}>
+      <button className={`${buttonClass} ${isEditMode ? "bg-white/40 text-blue-600 shadow-sm" : ""}`} onClick={toggleEdit}>
         <Edit3 size={16} />
       </button>
       <button
-        className={`${buttonClass} ${isDeleteMode ? "bg-red-50 text-red-600" : ""}`}
+        className={`${buttonClass} ${isDeleteMode ? "bg-white/40 text-red-600 shadow-sm" : ""}`}
         onClick={toggleDelete}
       >
         <Trash2 size={16} />
