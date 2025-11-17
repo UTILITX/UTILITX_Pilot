@@ -132,7 +132,7 @@ export default function DrawingToolbar({ map }: DrawingToolbarProps) {
   return (
     <div
       className="
-        absolute top-4 left-4 z-[9999]
+        absolute top-4 left-[536px] z-[9999]
         flex flex-col gap-1.5
         bg-white/20 backdrop-blur-xl 
         border border-white/40 

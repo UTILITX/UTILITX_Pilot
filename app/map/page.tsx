@@ -10,6 +10,7 @@ import { queryRecordsInPolygon } from "@/lib/esri-records"
 import MapWithDrawing from "@/components/map-with-drawing"
 import ModeSelector from "@/components/map/ModeSelector"
 import LeftWorkspacePanel from "@/components/map/LeftWorkspacePanel"
+import BottomDrawer from "@/components/BottomDrawer"
 
 type PreloadedRequest = {
   createdAt: string
@@ -50,6 +51,9 @@ export default function MapPage() {
     data?: any
   } | null>(null)
   const [completenessLoading, setCompletenessLoading] = useState(false)
+
+  // Bottom Drawer (Project Index) state
+  const [bottomDrawerOpen, setBottomDrawerOpen] = useState(false)
 
   // Esri data for drawer (separate from workflow records)
   const [esriRecords, setEsriRecords] = useState<IndexedRecord[]>([])
@@ -229,6 +233,7 @@ export default function MapPage() {
         preloadedPolygon={preloadedPolygon}
         preloadedAreaSqMeters={preloadedAreaSqMeters}
         zoomToFeature={zoomToFeature}
+        onOpenIndex={() => setBottomDrawerOpen(true)}
         onWorkAreaClick={(workArea) => {
           // Store work area data (for potential future use)
           setSelectedWorkAreaForAnalysis({
@@ -302,6 +307,26 @@ export default function MapPage() {
         records={records}
         data={selectedWorkAreaForAnalysis?.data}
         loading={completenessLoading}
+      />
+
+      {/* Bottom Drawer - Project Index */}
+      <BottomDrawer
+        isOpen={bottomDrawerOpen}
+        onClose={() => setBottomDrawerOpen(false)}
+        records={esriRecords}
+        workAreas={workAreas}
+        selectedWorkArea={selectedWorkArea}
+        onSelectWorkArea={(id) =>
+          setSelectedWorkArea(workAreas.find((w: { id: string }) => w.id === id) || null)
+        }
+        onZoomToRecord={(rec) => {
+          setZoomToFeature(rec)
+          setTimeout(() => setZoomToFeature(null), 100)
+        }}
+        onZoomToWorkArea={(wa) => {
+          setZoomToFeature(wa)
+          setTimeout(() => setZoomToFeature(null), 100)
+        }}
       />
     </>
   )

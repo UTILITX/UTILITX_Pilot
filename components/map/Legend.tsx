@@ -22,7 +22,7 @@ const Legend = () => {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="absolute bottom-6 left-6 z-[9999] flex flex-col items-start gap-2">
+    <div className="absolute bottom-6 left-[536px] z-[9999] flex flex-col items-start gap-2">
       {/* Toggle Button */}
       <button
         onClick={() => setOpen(!open)}

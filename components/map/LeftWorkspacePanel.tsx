@@ -7,6 +7,8 @@ import UploadTab from "@/components/workflows/upload-tab"
 import type { RequestRecord, LatLng } from "@/lib/record-types"
 import type { IndexedRecord } from "@/lib/fetchAllEsriData"
 import { useState } from "react"
+import { BookOpen } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 type Mode = "view" | "upload"
 
@@ -30,6 +32,7 @@ interface LeftWorkspacePanelProps {
   onSelectWorkArea?: (id: string | null) => void
   onZoomToRecord?: (record: IndexedRecord) => void
   onZoomToWorkArea?: (workArea: WorkArea) => void
+  onOpenIndex?: () => void
   // Upload mode props
   records?: RequestRecord[]
   setRecords?: React.Dispatch<React.SetStateAction<RequestRecord[]>>
@@ -57,6 +60,7 @@ export default function LeftWorkspacePanel({
   onSelectWorkArea,
   onZoomToRecord,
   onZoomToWorkArea,
+  onOpenIndex,
   records = [],
   setRecords,
   preloadedPolygon,
@@ -74,7 +78,7 @@ export default function LeftWorkspacePanel({
   const [searchQuery, setSearchQuery] = useState<string>("")
 
   return (
-    <div className="fixed left-[104px] top-16 h-[calc(100vh-64px)] w-[360px] bg-white shadow-xl rounded-r-2xl z-30 flex flex-col overflow-hidden border-r border-[var(--utilitx-gray-200)]">
+    <div className="fixed left-[104px] top-16 h-[calc(100vh-64px)] w-[420px] bg-white shadow-xl rounded-r-2xl z-30 flex flex-col overflow-hidden border-r border-[var(--utilitx-gray-200)]" data-panel="project-index">
       {mode === "view" ? (
         <div className="flex flex-col h-full">
           <div className="px-4 py-3 border-b border-[var(--utilitx-gray-200)]">
@@ -127,6 +131,19 @@ export default function LeftWorkspacePanel({
               </div>
             </TabsContent>
           </Tabs>
+          {/* Index Button at bottom */}
+          <div className="px-4 py-3 border-t border-[var(--utilitx-gray-200)]">
+            <Button
+              variant="outline"
+              className="w-full justify-start gap-2"
+              onClick={() => {
+                onOpenIndex?.()
+              }}
+            >
+              <BookOpen className="h-4 w-4" />
+              Index
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="flex flex-col h-full overflow-hidden">

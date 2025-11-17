@@ -53,12 +53,12 @@ export default function BottomDrawer({
     <div
       className={cn(
         "fixed bottom-0 left-0 right-0 bg-white shadow-xl border-t z-[5000]",
-        "transition-all duration-300",
+        "transition-all duration-300 flex flex-col",
         isOpen ? "h-[40vh]" : "h-0"
       )}
     >
       {/* HEADER */}
-      <div className="flex items-center justify-between px-4 py-2 border-b">
+      <div className="flex items-center justify-between px-4 py-2 border-b flex-shrink-0">
         <h2 className="font-semibold text-lg">Project Index</h2>
         <button
           onClick={onClose}
@@ -68,14 +68,16 @@ export default function BottomDrawer({
         </button>
       </div>
 
-      <Tabs defaultValue="records" className="px-4">
-        <TabsList className="grid grid-cols-2 w-[300px] my-2">
-          <TabsTrigger value="records">Records</TabsTrigger>
-          <TabsTrigger value="workareas">Work Areas</TabsTrigger>
-        </TabsList>
+      <Tabs defaultValue="records" className="flex flex-col h-full overflow-hidden">
+        <div className="px-4">
+          <TabsList className="grid grid-cols-2 w-[300px] my-2">
+            <TabsTrigger value="records">Records</TabsTrigger>
+            <TabsTrigger value="workareas">Work Areas</TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* RECORDS */}
-        <TabsContent value="records" className="mt-0">
+        <TabsContent value="records" className="mt-0 flex-1 overflow-y-auto px-4">
           <RecordsTable
             records={records}
             onZoomToRecord={onZoomToRecord}
@@ -95,7 +97,7 @@ export default function BottomDrawer({
         </TabsContent>
 
         {/* WORK AREAS */}
-        <TabsContent value="workareas" className="mt-0">
+        <TabsContent value="workareas" className="mt-0 flex-1 overflow-y-auto px-4">
           <WorkAreasTable
             workAreas={workAreas}
             onSelectWorkArea={onSelectWorkArea}

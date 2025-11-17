@@ -1,6 +1,5 @@
 "use client"
 
-import Image from "next/image"
 import Link from "next/link"
 import { Bell, HelpCircle, User } from "lucide-react"
 import {
@@ -17,14 +16,7 @@ export default function Topbar() {
       <div className="flex items-center justify-between h-full px-6">
         {/* Left: Logo */}
         <div className="flex items-center">
-          <Image
-            src="/utilitx-logo.svg"
-            alt="UTILITX"
-            width={140}
-            height={40}
-            className="h-10 w-auto"
-            priority
-          />
+          <h1 className="text-xl font-semibold text-[var(--utilitx-gray-900)]">UTILITX</h1>
         </div>
 
         {/* Center: Project Selector */}
