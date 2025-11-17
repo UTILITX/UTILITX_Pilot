@@ -132,59 +132,54 @@ const BasemapToggle = ({ map }: BasemapToggleProps) => {
   if (!map) return null;
 
   return (
-    <div 
-      className="absolute top-4 right-4 z-[9999] flex gap-2"
-      style={{ pointerEvents: "auto" }}
+    <div
+      className="
+        pointer-events-auto
+        bg-white/20 backdrop-blur-xl border border-white/40
+        rounded-full px-3 py-2 shadow-lg flex gap-2
+      "
     >
-      <div
-        className="
-          bg-white/20 backdrop-blur-xl border border-white/40
-          rounded-full px-3 py-2 shadow-lg
-          flex gap-2
-        "
+      <button
+        onClick={() => switchBasemap("Imagery")}
+        className={`
+          text-sm font-medium px-3 py-1.5 rounded-full transition-all
+          ${activeBasemap === "Imagery"
+            ? "bg-white/40 shadow-sm text-gray-900"
+            : "bg-white/10 text-gray-700 hover:bg-white/30 hover:shadow"
+          }
+          active:scale-[0.97]
+        `}
       >
-        <button
-          onClick={() => switchBasemap("Imagery")}
-          className={`
-            text-sm font-medium px-3 py-1.5 rounded-full transition-all
-            ${activeBasemap === "Imagery"
-              ? "bg-white/40 shadow-sm text-gray-900"
-              : "bg-white/10 text-gray-700 hover:bg-white/30 hover:shadow"
-            }
-            active:scale-[0.97]
-          `}
-        >
-          Imagery
-        </button>
+        Imagery
+      </button>
 
-        <button
-          onClick={() => switchBasemap("Streets")}
-          className={`
-            text-sm font-medium px-3 py-1.5 rounded-full transition-all
-            ${activeBasemap === "Streets"
-              ? "bg-white/40 shadow-sm text-gray-900"
-              : "bg-white/10 text-gray-700 hover:bg-white/30 hover:shadow"
-            }
-            active:scale-[0.97]
-          `}
-        >
-          Streets
-        </button>
+      <button
+        onClick={() => switchBasemap("Streets")}
+        className={`
+          text-sm font-medium px-3 py-1.5 rounded-full transition-all
+          ${activeBasemap === "Streets"
+            ? "bg-white/40 shadow-sm text-gray-900"
+            : "bg-white/10 text-gray-700 hover:bg-white/30 hover:shadow"
+          }
+          active:scale-[0.97]
+        `}
+      >
+        Streets
+      </button>
 
-        <button
-          onClick={() => switchBasemap("Topographic")}
-          className={`
-            text-sm font-medium px-3 py-1.5 rounded-full transition-all
-            ${activeBasemap === "Topographic"
-              ? "bg-white/40 shadow-sm text-gray-900"
-              : "bg-white/10 text-gray-700 hover:bg-white/30 hover:shadow"
-            }
-            active:scale-[0.97]
-          `}
-        >
-          Topographic
-        </button>
-      </div>
+      <button
+        onClick={() => switchBasemap("Topographic")}
+        className={`
+          text-sm font-medium px-3 py-1.5 rounded-full transition-all
+          ${activeBasemap === "Topographic"
+            ? "bg-white/40 shadow-sm text-gray-900"
+            : "bg-white/10 text-gray-700 hover:bg-white/30 hover:shadow"
+          }
+          active:scale-[0.97]
+        `}
+      >
+        Topographic
+      </button>
     </div>
   );
 };

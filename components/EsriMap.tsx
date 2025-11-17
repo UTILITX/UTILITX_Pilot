@@ -1931,15 +1931,17 @@ export default function EsriMap({
         id="map"
         className="w-full h-full"
       />
-      {/* UI overlays - placed after map container to ensure proper stacking */}
-      <BasemapToggle map={mapRef.current} />
+      {/* UI overlays */}
+      <div className="absolute bottom-4 right-4 z-[500] flex flex-col items-end gap-3 pointer-events-none">
+        <BasemapToggle map={mapRef.current} />
+        <Legend />
+      </div>
       {React.Children.map(children, (child: React.ReactNode) => {
         if (!React.isValidElement(child)) return child
         return React.cloneElement(child as React.ReactElement<{ map?: L.Map | null }>, {
           map: mapRef.current,
         })
       })}
-      <Legend />
     </div>
   );
 }

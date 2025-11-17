@@ -133,15 +133,15 @@ export default function MapPage() {
   }, [records])
 
   return (
-    <div className="pt-16 h-[calc(100vh-64px)]">
-      <div className="flex w-full h-full overflow-hidden">
+    <>
+      <div className="flex h-full w-full min-h-0 overflow-hidden bg-white">
         <LeftWorkflowPanel>
           {step === 1 && <Step1WorkArea />}
           {step === 2 && <Step2AttachRecords />}
           {step === 3 && <Step3Share />}
         </LeftWorkflowPanel>
 
-        <div className="flex-1 relative h-full">
+        <div className="flex-1 relative min-h-0">
           <MapWithDrawing
             mode="draw"
             polygon={preloadedPolygon}
@@ -242,7 +242,7 @@ export default function MapPage() {
           })
         }}
       />
-    </div>
+    </>
   )
 }
 

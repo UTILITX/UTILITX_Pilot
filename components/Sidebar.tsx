@@ -23,7 +23,10 @@ export default function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-16 bg-[var(--utilitx-navy)] flex flex-col items-center py-4 z-50" style={{ boxShadow: "var(--utilitx-shadow-light)" }}>
+    <aside
+      className="h-full w-16 flex-shrink-0 bg-[var(--utilitx-navy)] flex flex-col items-center py-4"
+      style={{ boxShadow: "var(--utilitx-shadow-light)" }}
+    >
       <nav className="flex flex-col gap-2 w-full px-2">
         {navItems.map((item) => {
           const Icon = item.icon
