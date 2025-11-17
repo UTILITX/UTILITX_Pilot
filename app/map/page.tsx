@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import type { RequestRecord, LatLng } from "@/lib/record-types"
+import type { GeorefMode } from "@/lib/types"
 import { loadStagedRecords, saveStagedRecords } from "@/lib/storage"
 import { fetchAllRecordsFromEsri, fetchAllWorkAreasFromEsri, type IndexedRecord } from "@/lib/fetchAllEsriData"
 import { WorkAreaAnalysisDrawer } from "@/components/work-areas/WorkAreaAnalysisDrawer"
@@ -19,6 +20,16 @@ type PreloadedRequest = {
   title?: string
   deadline?: string
   records?: RequestRecord[]
+}
+
+type RecordDrawingConfig = {
+  georefMode: GeorefMode
+  georefColor?: string
+  pendingRecordMetadata?: any
+  onGeorefComplete?: (
+    result: { type: "Point"; point: LatLng } | { type: "LineString" | "Polygon"; path: LatLng[] },
+    metadata?: { utilityType?: string; fileUrl?: string; filePath?: string; notes?: string }
+  ) => void
 }
 
 export default function MapPage() {
@@ -70,6 +81,8 @@ export default function MapPage() {
 
   const [workAreaDrawCommand, setWorkAreaDrawCommand] = useState(0)
   const [workAreaSelectionEnabled, setWorkAreaSelectionEnabled] = useState(false)
+  const [recordDrawingConfig, setRecordDrawingConfig] = useState<RecordDrawingConfig | null>(null)
+  const [recordDrawCommand, setRecordDrawCommand] = useState(0)
 
   const startWorkAreaDraw = () => {
     setWorkAreaSelectionEnabled(false)
@@ -85,6 +98,20 @@ export default function MapPage() {
     setPreloadedAreaSqMeters(null)
     setWorkAreaSelectionEnabled(false)
   }
+
+const startRecordDrawing = (config: RecordDrawingConfig) => {
+  setRecordDrawingConfig(config)
+  setWorkAreaSelectionEnabled(false)
+  setRecordDrawCommand((c) => c + 1)
+}
+
+const handleRecordGeorefComplete = (
+  result: { type: "Point"; point: LatLng } | { type: "LineString" | "Polygon"; path: LatLng[] },
+  metadata?: { utilityType?: string; fileUrl?: string; filePath?: string; notes?: string }
+) => {
+  recordDrawingConfig?.onGeorefComplete?.(result, metadata)
+  setRecordDrawingConfig(null)
+}
 
   // Load Esri data on mount (for Project Index drawer)
   useEffect(() => {
@@ -178,6 +205,7 @@ export default function MapPage() {
             onStartWorkAreaDraw={startWorkAreaDraw}
             onStartWorkAreaSelection={startWorkAreaSelection}
             onClearWorkArea={clearWorkArea}
+            onStartRecordDrawing={startRecordDrawing}
           />
         </div>
 
@@ -197,6 +225,12 @@ export default function MapPage() {
               setPreloadedAreaSqMeters(area ?? null)
               setWorkAreaSelectionEnabled(false)
             }}
+            georefMode={recordDrawingConfig?.georefMode ?? "none"}
+            georefColor={recordDrawingConfig?.georefColor}
+            onGeorefComplete={handleRecordGeorefComplete}
+            pickPointActive={recordDrawingConfig?.georefMode === "point"}
+            shouldStartRecordDraw={recordDrawCommand}
+            pendingRecordMetadata={recordDrawingConfig?.pendingRecordMetadata}
             zoomToFeature={zoomToFeature}
             onWorkAreaClick={(workArea) => {
               setSelectedWorkAreaForAnalysis({

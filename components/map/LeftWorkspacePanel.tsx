@@ -6,6 +6,7 @@ import { WorkAreasTable } from "@/components/tables/WorkAreasTable"
 import UploadTab from "@/components/workflows/upload-tab"
 import type { RequestRecord, LatLng } from "@/lib/record-types"
 import type { IndexedRecord } from "@/lib/fetchAllEsriData"
+import type { GeorefMode } from "@/lib/types"
 import { useState } from "react"
 import { BookOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -21,6 +22,13 @@ interface WorkArea {
   date?: string
   notes?: string
   records?: any[]
+}
+
+type RecordDrawingRequest = {
+  georefMode: GeorefMode
+  georefColor?: string
+  pendingRecordMetadata?: any
+  onGeorefComplete?: (result: any, metadata?: any) => void
 }
 
 interface LeftWorkspacePanelProps {
@@ -53,6 +61,7 @@ interface LeftWorkspacePanelProps {
   onStartWorkAreaDraw?: () => void
   onStartWorkAreaSelection?: () => void
   onClearWorkArea?: () => void
+  onStartRecordDrawing?: (request: RecordDrawingRequest) => void
 }
 
 export default function LeftWorkspacePanel({
@@ -74,6 +83,7 @@ export default function LeftWorkspacePanel({
   onStartWorkAreaDraw,
   onStartWorkAreaSelection,
   onClearWorkArea,
+  onStartRecordDrawing,
 }: LeftWorkspacePanelProps) {
   // Filter state for RecordsTable (lifted to persist across tab switches)
   const [utilityFilter, setUtilityFilter] = useState<string>("all")
@@ -176,6 +186,7 @@ export default function LeftWorkspacePanel({
                   onStartWorkAreaDraw={onStartWorkAreaDraw}
                   onStartWorkAreaSelection={onStartWorkAreaSelection}
                   onClearWorkArea={onClearWorkArea}
+                  onStartRecordDrawing={onStartRecordDrawing}
                 />
               </div>
             ) : (

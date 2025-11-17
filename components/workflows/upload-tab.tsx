@@ -66,6 +66,15 @@ type Props = {
   onStartWorkAreaDraw?: () => void
   onStartWorkAreaSelection?: () => void
   onClearWorkArea?: () => void
+  onStartRecordDrawing?: (config: {
+    georefMode: GeorefMode
+    georefColor?: string
+    pendingRecordMetadata?: any
+    onGeorefComplete: (
+      result: { type: "Point"; point: LatLng } | { type: "LineString" | "Polygon"; path: LatLng[] },
+      metadata?: { utilityType?: string; fileUrl?: string; filePath?: string; notes?: string }
+    ) => void
+  }) => void
 }
 
 export default function UploadTab({
@@ -79,6 +88,7 @@ export default function UploadTab({
   onStartWorkAreaDraw,
   onStartWorkAreaSelection,
   onClearWorkArea,
+  onStartRecordDrawing,
 }: Props) {
   const { toast } = useToast()
   const [polygon, setPolygon] = useState<LatLng[] | null>(null)
@@ -135,7 +145,7 @@ export default function UploadTab({
   // Record drawing mode (for georeferencing)
   const [recordDrawCommand, setRecordDrawCommand] = useState(0)
 
-  const usingExternalMap = Boolean(onStartWorkAreaDraw)
+  const usingExternalMap = Boolean(onStartWorkAreaDraw || onStartRecordDrawing)
 
   // Map overlays from records
   const { bubbles, shapes } = useMemo(() => {
@@ -389,12 +399,23 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
     const geoMode: GeorefMode = selectedGeometryType
     setGeorefMode(geoMode)
 
-    // Increment record draw command to trigger drawing mode
-    setRecordDrawCommand((c) => c + 1)
-    
     // Store pending record metadata (will be passed to map)
     setPendingRecordMetadata(pendingRecordMetadata)
-    
+
+    if (onStartRecordDrawing) {
+      onStartRecordDrawing({
+        georefMode: geoMode,
+        georefColor: apwaColor,
+        pendingRecordMetadata,
+        onGeorefComplete: (result, metadata) => {
+          handleGeorefComplete(result, metadata)
+        },
+      })
+    } else {
+      // Increment record draw command to trigger drawing mode in the embedded map
+      setRecordDrawCommand((c) => c + 1)
+    }
+
     if (geoMode === "point") {
       toast({ title: "Point georeference", description: "Click on the map to place the files." })
     } else if (geoMode === "line") {
