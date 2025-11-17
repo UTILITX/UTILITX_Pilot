@@ -131,6 +131,7 @@ function MapWithDrawing({
         polygon={polygon}
         onPolygonChange={onPolygonChange}
         enableWorkAreaDrawing={drawEnabled}
+        shouldStartWorkAreaDraw={shouldStartWorkAreaDraw}
         shouldStartRecordDraw={shouldStartRecordDraw}
         enableWorkAreaSelection={enableWorkAreaSelection}
         onWorkAreaSelected={onWorkAreaSelected}

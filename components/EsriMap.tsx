@@ -139,6 +139,7 @@ type EsriMapProps = {
   polygon?: LatLng[] | null;
   onPolygonChange?: (path: LatLng[], area?: number) => void;
   enableWorkAreaDrawing?: boolean;
+  shouldStartWorkAreaDraw?: number; // Command token to trigger work area drawing
   shouldStartRecordDraw?: number;
   enableWorkAreaSelection?: boolean;
   onWorkAreaSelected?: (path: LatLng[], area?: number) => void;
@@ -180,6 +181,7 @@ function EsriMap({
   polygon,
   onPolygonChange,
   enableWorkAreaDrawing = false,
+  shouldStartWorkAreaDraw = 0,
   shouldStartRecordDraw = 0,
   enableWorkAreaSelection = false,
   onWorkAreaSelected,
@@ -236,6 +238,7 @@ function EsriMap({
   const pmEditHandlerRef = useRef<(() => void) | null>(null);
   const pmResizeHandlerRef = useRef<(() => void) | null>(null);
   const mapClickHandlerRef = useRef<((e: L.LeafletMouseEvent) => void) | null>(null);
+  const editModeToggleHandlerRef = useRef<((e: any) => void) | null>(null);
 
   // Dedicated initialization effect - runs once on mount
   useEffect(() => {
@@ -995,11 +998,13 @@ function EsriMap({
                 }
 
                 // Disable drawing when edit mode is enabled to prevent overlap
+                // 🔥 Store handler in ref for proper cleanup (prevents "wrong listener type" errors)
                 const handleEditModeToggle = (e: any) => {
                   if (e.enabled) {
                     map.pm.disableDraw();
                   }
                 };
+                editModeToggleHandlerRef.current = handleEditModeToggle;
                 map.on("pm:globaleditmodetoggled", handleEditModeToggle);
               }
             } catch (err) {
@@ -1087,9 +1092,26 @@ function EsriMap({
               
               // Full kill switch
               console.log("🛑 Disabling draw");
-              map.pm.disableDraw();
-              map.pm.disableGlobalEditMode();
-              map.pm.disableGlobalRemovalMode();
+              try {
+                map.pm.disableDraw();
+              } catch (e) {
+                // Ignore if already disabled
+              }
+              // 🔥 FIX: Safely disable global modes (prevents "wrong listener type: undefined")
+              try {
+                if (map.pm && typeof map.pm.disableGlobalEditMode === 'function') {
+                  map.pm.disableGlobalEditMode();
+                }
+              } catch (e) {
+                // Ignore errors - mode might not be active
+              }
+              try {
+                if (map.pm && typeof map.pm.disableGlobalRemovalMode === 'function') {
+                  map.pm.disableGlobalRemovalMode();
+                }
+              } catch (e) {
+                // Ignore errors - mode might not be active
+              }
               
               // 🔥 FINAL FIX - close the UI loop
               // Note: setEnableWorkAreaDrawing would need to be a callback prop from parent
@@ -1575,14 +1597,31 @@ function EsriMap({
           map.off("click", mapClickHandlerRef.current);
           mapClickHandlerRef.current = null;
         }
+        if (editModeToggleHandlerRef.current) {
+          map.off("pm:globaleditmodetoggled", editModeToggleHandlerRef.current);
+          editModeToggleHandlerRef.current = null;
+        }
         
         // Disable all drawing modes before removing map
         try {
           map.pm.disableDraw();
-          map.pm.disableGlobalEditMode();
-          map.pm.disableGlobalRemovalMode();
         } catch (e) {
           // Ignore errors during cleanup
+        }
+        // 🔥 FIX: Safely disable global modes (prevents "wrong listener type: undefined")
+        try {
+          if (map.pm && typeof map.pm.disableGlobalEditMode === 'function') {
+            map.pm.disableGlobalEditMode();
+          }
+        } catch (e) {
+          // Ignore errors - mode might not be active
+        }
+        try {
+          if (map.pm && typeof map.pm.disableGlobalRemovalMode === 'function') {
+            map.pm.disableGlobalRemovalMode();
+          }
+        } catch (e) {
+          // Ignore errors - mode might not be active
         }
         
         map.remove();
@@ -1698,6 +1737,50 @@ function EsriMap({
     pendingRecordMetadataRef.current = pendingRecordMetadata;
   }, [pendingRecordMetadata]);
 
+  // 🔥 PATCH A: Respond to work area draw triggers even when memoized
+  // This ensures draw mode activates even after memoization prevents re-renders
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Only run if the counter increments (command token pattern)
+    if (shouldStartWorkAreaDraw > 0) {
+      console.log("✏️ Enabling work area draw mode (effect running)", shouldStartWorkAreaDraw);
+      
+      // Disable any other mode
+      try {
+        map.pm.disableDraw();
+      } catch (e) {
+        // Ignore if already disabled
+      }
+      // 🔥 FIX: Safely disable global modes (prevents "wrong listener type: undefined")
+      try {
+        if (map.pm && typeof map.pm.disableGlobalEditMode === 'function') {
+          map.pm.disableGlobalEditMode();
+        }
+      } catch (e) {
+        // Ignore errors - mode might not be active
+      }
+      try {
+        if (map.pm && typeof map.pm.disableGlobalRemovalMode === 'function') {
+          map.pm.disableGlobalRemovalMode();
+        }
+      } catch (e) {
+        // Ignore errors - mode might not be active
+      }
+
+      // Start polygon draw explicitly
+      map.pm.enableDraw("Polygon", {
+        allowSelfIntersection: false,
+        snappable: true,
+        snapDistance: 20,
+      });
+      
+      drawingSessionActiveRef.current = true;
+      hasActiveWorkAreaRef.current = true;
+    }
+  }, [shouldStartWorkAreaDraw]);
+
   // 🔒 Only toggle work area drawing when the prop actually changes state.
   useEffect(() => {
     const map = mapRef.current;
@@ -1741,22 +1824,37 @@ function EsriMap({
     }
   }, [enableWorkAreaDrawing]);
 
-  // 🎯 Record drawing mode - controlled by shouldStartRecordDraw command token
+  // 🔥 PATCH B: Record drawing mode - respond to draw triggers even when memoized
+  // This ensures draw mode activates even after memoization prevents re-renders
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+    if (shouldStartRecordDraw === 0) return;
 
     // Only trigger if georefMode is active and command token is set
     if (shouldStartRecordDraw > 0 && georefMode !== "none") {
-      console.log("✏️ Starting RECORD draw mode:", georefMode);
+      console.log("✏️ Starting record draw mode via effect (memo-safe):", georefMode);
 
       // Disable any active work area draw first to prevent conflicts
       try {
         map.pm.disableDraw();
-        map.pm.disableGlobalEditMode();
-        map.pm.disableGlobalRemovalMode();
       } catch (e) {
         // Ignore if already disabled
+      }
+      // 🔥 FIX: Safely disable global modes (prevents "wrong listener type: undefined")
+      try {
+        if (map.pm && typeof map.pm.disableGlobalEditMode === 'function') {
+          map.pm.disableGlobalEditMode();
+        }
+      } catch (e) {
+        // Ignore errors - mode might not be active
+      }
+      try {
+        if (map.pm && typeof map.pm.disableGlobalRemovalMode === 'function') {
+          map.pm.disableGlobalRemovalMode();
+        }
+      } catch (e) {
+        // Ignore errors - mode might not be active
       }
 
       // Ensure Geoman toolbar is removed - using custom UTILITX toolbar instead
@@ -1767,26 +1865,13 @@ function EsriMap({
       }
 
       // Enable appropriate PM draw mode based on georefMode
-      if (georefMode === "point") {
-        map.pm.enableDraw("Marker", { snappable: true });
-      } else if (georefMode === "line") {
+      if (georefMode === "line") {
         map.pm.enableDraw("Line", { snappable: true });
       } else if (georefMode === "polygon") {
-        map.pm.enableDraw("Polygon", { snappable: true });
+        map.pm.enableDraw("Polygon", { allowSelfIntersection: false, snappable: true });
+      } else if (georefMode === "point") {
+        map.pm.enableDraw("Marker", { snappable: true });
       }
-      
-      // Cleanup: disable draw mode when effect re-runs or unmounts
-      return () => {
-        if (map && mapRef.current) {
-          try {
-            map.pm.disableDraw();
-            map.pm.disableGlobalEditMode();
-            map.pm.disableGlobalRemovalMode();
-          } catch (e) {
-            // Ignore errors during cleanup
-          }
-        }
-      };
     }
   }, [shouldStartRecordDraw, georefMode]);
 
@@ -1812,7 +1897,13 @@ function EsriMap({
 
     // Cleanup: remove event listener on unmount
     return () => {
-      map.off("pm:globaleditmodetoggled", handleEditModeToggle);
+      if (map && mapRef.current && handleEditModeToggle) {
+        try {
+          map.off("pm:globaleditmodetoggled", handleEditModeToggle);
+        } catch (e) {
+          // Ignore errors during cleanup
+        }
+      }
     };
   }, [mode, georefMode]);
 
@@ -1862,7 +1953,13 @@ function EsriMap({
     }
 
     return () => {
-      workAreas.off("click", handleWorkAreaClick);
+      if (workAreas && handleWorkAreaClick) {
+        try {
+          workAreas.off("click", handleWorkAreaClick);
+        } catch (e) {
+          // Ignore errors during cleanup
+        }
+      }
     };
   }, [enableWorkAreaSelection, onWorkAreaSelected]);
 
@@ -2106,8 +2203,10 @@ function EsriMap({
       // Only cleanup if we're actually unmounting (not just re-rendering)
       if (mapRef.current) {
         try {
-          mapRef.current.off();
-          mapRef.current.remove();
+          // 🔥 FIX: Don't call off() without arguments - it causes "wrong listener type: undefined"
+          // Instead, properly remove all listeners using remove() which handles cleanup internally
+          // mapRef.current.off(); // ❌ REMOVED - causes "wrong listener type: undefined"
+          mapRef.current.remove(); // This properly cleans up all listeners
         } catch (err) {
           console.warn("Error during map cleanup:", err);
         }
