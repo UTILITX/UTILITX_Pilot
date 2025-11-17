@@ -1,0 +1,243 @@
+Absolutely — here is everything you need, polished and ready for both engineering alignment and VC/demo storytelling.
+
+Below you’ll get:
+
+✅ 1) UTILITX Map Architecture Principles (Full “Map Document”)
+
+A clean, professional, internal-architecture document describing how your map should behave, what principles guide UX, performance, state management, integrations, and long-term extensibility.
+
+You can paste this into Notion / Confluence / Google Doc.
+
+🗺️ UTILITX Map System — Architecture & Behavioural Principles
+
+Version: 1.0
+Owner: Leigh-Anne (Head of Customer & Market)
+Context: UTILITX Pilot Map (Leaflet + Esri + Geoman + Supabase)
+
+⭐ 1. Vision for the UTILITX Map
+
+The UTILITX map is the “spatial operating system” of underground utility coordination.
+It must feel:
+
+Instant (zero-delay interactions)
+
+Predictable (no jitter, no unexpected zooming or panning)
+
+Precise (GIS-grade accuracy & deterministic geometry behaviour)
+
+Workflow-first (driven by the user’s task, not by cartography)
+
+Composable & future-proof (tile providers, APIs, and frontends can be swapped)
+
+This map becomes the trusted basemap for subsurface coordination, permitting, and record review.
+
+⭐ 2. Architectural Foundations
+2.1. Core Technologies
+Layer	Technology	Purpose
+Map Engine	Leaflet	Fast, lightweight, modular, ideal for workflow-heavy UIs
+Basemap Services	Esri Vector Basemaps (esm modules)	High-quality cartography + municipal standards
+Geometry Editor	Leaflet-Geoman	Professional-grade multi-geometry editing
+Data Sources	ArcGIS Online FeatureServer	Pilot record storage + work areas
+Frontend Framework	Next.js 14 (Client Components)	Map must always render client-side
+File Storage	Supabase Bucket + RLS	Record file storage
+2.2. Key Principles
+Principle #1 — “Space-first workflow”
+
+Everything begins with the polygon (work area).
+The map is the first UI surface the user interacts with.
+
+Principle #2 — “Instant visual feedback”
+
+Map interactions MUST render immediately (100ms target), even if upstream saves take longer.
+
+Examples:
+
+Drawing a record creates an optimistic local layer instantly
+
+Uploading a PDF shows a “pending” marker
+
+Work area completes and appears right away
+
+Rendering must never wait for:
+
+Esri writes
+
+Layer refreshes
+
+Network latency
+
+Principle #3 — “Centralized map state, distributed features”
+
+All high-level map state lives in the map parent component (MapWithDrawing), including:
+
+active region
+
+active basemap
+
+active draw mode
+
+work area selection
+
+record being placed
+
+Child components receive state via props or lightweight signals.
+
+Principle #4 — “Deterministic re-renders”
+
+Map layers should not re-render unless:
+
+region changes
+
+basemap changes
+
+work area changes
+
+draw mode changes
+
+This avoids jitter and state resets.
+
+Principle #5 — “Esri layers are authoritative, but not blocking”
+
+ArcGIS FeatureServer layers remain the system of record.
+However, they never block the user:
+
+Draw → render instantly
+
+Save → background
+
+Refresh → replace local temp layers quietly
+
+Principle #6 — “Zoom behaviour MUST NOT surprise the user”
+
+Rules:
+
+Never auto-recenter unless user has explicitly asked (e.g., region selector)
+
+Drawing tools should not modify zoom level
+
+Upload flows must not zoom unless user requests “mark location”
+
+Map initialization should use last-selected region NOT a fixed zoom
+
+⭐ 3. Detailed Behavioural Specs
+3.1 Region Selector / Initial Zoom
+
+Region input uses Esri geocoding with autocomplete
+
+Selecting a region:
+
+Saves selection to localStorage
+
+Triggers controlled map.fitBounds()
+
+Does not rezoom unless user selects again
+
+On page reload:
+
+Map loads at last-selected region
+
+No flicker (map waits for region to resolve)
+
+3.2 Drawing Work Areas
+
+When user clicks “Draw Work Area”:
+
+Enable Geoman polygon mode
+
+Do NOT zoom
+
+Do NOT disable other UI elements
+
+On pm:create:
+
+A temp layer appears instantly (optimistic display)
+
+Save polygon asynchronously to ArcGIS FeatureServer
+
+On success: refresh-esri-layer silently
+
+Geoman exits draw mode automatically
+
+3.3 Drawing Records
+
+Flow: Upload file → choose type + geometry → draw on map
+
+When record drawing starts:
+
+Enable point/line/polygon mode
+
+Do NOT zoom
+
+Temp layer appears immediately
+
+Save occurs silently
+
+WORKFLOWS SHOULD NEVER REQUIRE A MANUAL ZOOM HACK
+This is guaranteed by optimistic rendering.
+
+3.4 Esri Layer Loading
+
+All layers load asynchronously
+
+Layers should not cause zoom jumps
+
+Layer refresh should NOT cause:
+
+Map reinitialization
+
+Draw mode resets
+
+Region resets
+
+3.5 Basemap Toggle
+
+Uses Esri Vector Basemaps
+
+Never reinitialize the map instance
+
+Only change layer contents
+
+Should visually update instantly
+
+3.6 File Attachment & Metadata Drawer
+
+When clicking a record:
+
+Side drawer opens
+
+Map does not shift or zoom
+
+Drawer overlays the map instead of shrinking it
+This prevents jitter and “map bounce.”
+
+⭐ 4. Performance Principles
+
+Avoid re-mounting the map component
+
+Use vector basemap layers only
+
+Use memoized handlers for draw events
+
+Always detach Geoman tool listeners during cleanup
+
+Prefer incremental layer updates to full reloads
+
+Avoid synchronous waits on external services (Esri, Supabase)
+
+⭐ 5. Long-Term Extensibility
+
+This map architecture supports:
+
+Multi-region deployments (Canada → USA → Global)
+
+Unified street segment conflict detection
+
+Extent-based conflict search
+
+Z-order depth for subsurface visualization
+
+3D mock support (Cesium layer slot already planned)
+
+Future UTILITX “Data Mode” (toggle between records, conflicts, completeness, trust score layers)
+
+It is a future-proof foundation.
