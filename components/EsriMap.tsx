@@ -536,86 +536,155 @@ function EsriMap({
           setTimeout(() => {
             try {
               if (map.getPane('overlayPane') && map.getContainer()) {
+    // Helper function to bind popup and click handler to a work area feature
+    const bindWorkAreaPopup = (feature: any, layer: L.Layer | null | undefined) => {
+      // Safety check: ensure layer exists and has required methods
+      if (!layer || typeof layer.bindPopup !== 'function') {
+        console.warn('Cannot bind popup: layer is undefined or missing bindPopup method', { feature, layer });
+        return;
+      }
+
+      const props = feature?.properties || {};
+      
+      // Format work area ID (use OBJECTID or work_area_id, format as WA-XXXX)
+      const workAreaId = props.work_area_id 
+        ? `WA-${String(props.work_area_id).padStart(4, '0')}` 
+        : props.OBJECTID 
+        ? `WA-${String(props.OBJECTID).padStart(4, '0')}` 
+        : undefined;
+      
+      // Format date
+      const date = props.timestamp || props.created_date || props.date;
+      
+      // Get work area name
+      const workAreaName = props.name || props.workarea_name || props.work_area_name || `Work Area ${workAreaId}`;
+      
+      // Create popup content using React component
+      const popupContent = renderReactPopup(
+        <WorkAreaPopup
+          workAreaId={workAreaId}
+          workAreaName={workAreaName}
+          region={props.region}
+          owner={props.owner}
+          createdBy={props.created_by || props.createdBy}
+          date={date}
+          notes={props.notes}
+          onViewRecords={() => {
+            // TODO: Implement view records functionality
+            console.log("View records for work area:", workAreaId);
+          }}
+          onCreatedByClick={(name) => {
+            // TODO: Implement user profile/view functionality
+            console.log("View profile for:", name);
+          }}
+          onOpenAnalysis={() => {
+            // Open the analysis drawer directly
+            if (onOpenWorkAreaAnalysis) {
+              onOpenWorkAreaAnalysis({
+                id: workAreaId,
+                name: workAreaName,
+                region: props.region,
+                owner: props.owner,
+                createdBy: props.created_by || props.createdBy,
+                date: date,
+                notes: props.notes,
+                geometry: feature?.geometry,
+                ...props,
+              });
+            }
+          }}
+        />
+      );
+      
+      // Bind or update popup (bindPopup can be called multiple times safely)
+      try {
+        if (typeof layer.getPopup === 'function' && layer.getPopup()) {
+          // Update existing popup content
+          if (typeof layer.setPopupContent === 'function') {
+            layer.setPopupContent(popupContent);
+          } else {
+            // Fallback: unbind and rebind
+            layer.unbindPopup();
+            layer.bindPopup(popupContent, {
+              className: "custom-popup",
+              maxWidth: 400,
+            });
+          }
+        } else {
+          // Bind new popup
+          layer.bindPopup(popupContent, {
+            className: "custom-popup",
+            maxWidth: 400,
+          });
+        }
+      } catch (err) {
+        console.warn('Error binding popup, retrying with fallback:', err);
+        // Fallback: just bind the popup (Leaflet handles duplicates)
+        try {
+          layer.bindPopup(popupContent, {
+            className: "custom-popup",
+            maxWidth: 400,
+          });
+        } catch (fallbackErr) {
+          console.error('Failed to bind popup even with fallback:', fallbackErr);
+          return;
+        }
+      }
+
+      // Remove existing click handlers and add new one
+      try {
+        if (typeof layer.off === 'function') {
+          layer.off('click');
+        }
+        if (typeof layer.on === 'function') {
+          layer.on('click', (e: L.LeafletMouseEvent) => {
+            if (onWorkAreaClick) {
+              onWorkAreaClick({
+                id: workAreaId,
+                name: props.name || props.workarea_name || props.work_area_name || `Work Area ${workAreaId}`,
+                region: props.region,
+                owner: props.owner,
+                createdBy: props.created_by || props.createdBy,
+                date: date,
+                notes: props.notes,
+                geometry: feature?.geometry,
+                ...props,
+              });
+            }
+          });
+        }
+      } catch (err) {
+        console.warn('Error binding click handler:', err);
+      }
+    };
+
     const workAreas = EL.featureLayer({
       url: process.env.NEXT_PUBLIC_WORKAREA_LAYER_URL!,
       apikey: process.env.NEXT_PUBLIC_ARCGIS_API_KEY!,
       style: () => ({ color: "#0077ff", weight: 2, fillOpacity: 0.15 }),
       onEachFeature: (feature: any, layer: L.Layer) => {
-        const props = feature.properties || {};
-        
-        // Format work area ID (use OBJECTID or work_area_id, format as WA-XXXX)
-        const workAreaId = props.work_area_id 
-          ? `WA-${String(props.work_area_id).padStart(4, '0')}` 
-          : props.OBJECTID 
-          ? `WA-${String(props.OBJECTID).padStart(4, '0')}` 
-          : undefined;
-        
-        // Format date
-        const date = props.timestamp || props.created_date || props.date;
-        
-        // Get work area name
-        const workAreaName = props.name || props.workarea_name || props.work_area_name || `Work Area ${workAreaId}`;
-        
-        // Create popup content using React component
-        const popupContent = renderReactPopup(
-          <WorkAreaPopup
-            workAreaId={workAreaId}
-            workAreaName={workAreaName}
-            region={props.region}
-            owner={props.owner}
-            createdBy={props.created_by || props.createdBy}
-            date={date}
-            notes={props.notes}
-            onViewRecords={() => {
-              // TODO: Implement view records functionality
-              console.log("View records for work area:", workAreaId);
-            }}
-            onCreatedByClick={(name) => {
-              // TODO: Implement user profile/view functionality
-              console.log("View profile for:", name);
-            }}
-            onOpenAnalysis={() => {
-              // Open the analysis drawer directly
-              if (onOpenWorkAreaAnalysis) {
-                onOpenWorkAreaAnalysis({
-                  id: workAreaId,
-                  name: workAreaName,
-                  region: props.region,
-                  owner: props.owner,
-                  createdBy: props.created_by || props.createdBy,
-                  date: date,
-                  notes: props.notes,
-                  geometry: feature.geometry,
-                  ...props,
-                });
-              }
-            }}
-          />
-        );
-        
-        layer.bindPopup(popupContent, {
-          className: "custom-popup",
-          maxWidth: 400,
-        });
-
-        // Add click handler for work area analysis
-        layer.on('click', (e: L.LeafletMouseEvent) => {
-          if (onWorkAreaClick) {
-            onWorkAreaClick({
-              id: workAreaId,
-              name: props.name || props.workarea_name || props.work_area_name || `Work Area ${workAreaId}`,
-              region: props.region,
-              owner: props.owner,
-              createdBy: props.created_by || props.createdBy,
-              date: date,
-              notes: props.notes,
-              geometry: feature.geometry,
-              ...props,
-            });
-          }
-        });
+        bindWorkAreaPopup(feature, layer);
       },
     }).addTo(map);
+
+    // 🔥 FIX: Bind popups to features after layer refresh
+    // When the layer refreshes, new features are added but onEachFeature is not called again
+    workAreas.on('load', () => {
+      // Small delay to ensure all features are fully loaded
+      setTimeout(() => {
+        try {
+          workAreas.eachFeature((feature: any, layer: L.Layer | null | undefined) => {
+            // Always rebind popup to ensure it's up-to-date (handles new features and updates)
+            // Safety check is handled inside bindWorkAreaPopup
+            if (feature && layer) {
+              bindWorkAreaPopup(feature, layer);
+            }
+          });
+        } catch (err) {
+          console.warn('Error binding popups after layer load:', err);
+        }
+      }, 100);
+    });
 
                 workAreasLayerRef.current = workAreas;
               }
