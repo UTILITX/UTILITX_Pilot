@@ -49,6 +49,14 @@ export default function RegionSearch({ map: mapProp }: RegionSearchProps) {
           const bounds = pendingBoundsRef.current instanceof L.LatLngBounds
             ? pendingBoundsRef.current
             : L.latLngBounds(pendingBoundsRef.current as any);
+          
+          // 🔥 FIX: Validate bounds before fitting
+          if (!bounds || !bounds.isValid || !bounds.isValid()) {
+            console.warn("⚠️ Invalid bounds, skipping fitBounds:", bounds);
+            pendingBoundsRef.current = null;
+            return;
+          }
+          
           console.log("🎯 Fitting bounds (from ref):", bounds);
           map.fitBounds(bounds, {
             padding: [100, 100],
@@ -58,7 +66,7 @@ export default function RegionSearch({ map: mapProp }: RegionSearchProps) {
           });
           pendingBoundsRef.current = null;
         } catch (e) {
-          console.error("❌ Error fitting bounds from ref:", e);
+          console.warn("⚠️ Error fitting bounds from ref (non-critical):", e);
           pendingBoundsRef.current = null;
         }
       }, 50);
@@ -98,6 +106,13 @@ export default function RegionSearch({ map: mapProp }: RegionSearchProps) {
                 [south, west],
                 [north, east]
               );
+              
+              // 🔥 FIX: Validate bounds before fitting
+              if (!bounds || !bounds.isValid || !bounds.isValid()) {
+                console.warn("⚠️ Invalid bounds from state, skipping fitBounds:", bounds);
+                return;
+              }
+              
               console.log("🎯 Fitting bounds (from state):", bounds);
               map.fitBounds(bounds, {
                 padding: [100, 100],
@@ -106,7 +121,7 @@ export default function RegionSearch({ map: mapProp }: RegionSearchProps) {
                 maxZoom: 15,
               });
             } catch (e) {
-              console.error("❌ Error fitting bounds from state:", e);
+              console.warn("⚠️ Error fitting bounds from state (non-critical):", e);
             }
           }
         } else if (pendingZoom.location) {
@@ -289,6 +304,14 @@ export default function RegionSearch({ map: mapProp }: RegionSearchProps) {
             
             setTimeout(() => {
               try {
+                // 🔥 FIX: Validate bounds before fitting
+                if (!bounds || !bounds.isValid || !bounds.isValid()) {
+                  console.warn("⚠️ Invalid bounds, skipping fitBounds:", bounds);
+                  pendingBoundsRef.current = null;
+                  setPendingZoom(null);
+                  return;
+                }
+                
                 console.log("🎯 Fitting bounds:", bounds);
                 map.fitBounds(bounds, {
                   padding: [100, 100],
@@ -299,7 +322,7 @@ export default function RegionSearch({ map: mapProp }: RegionSearchProps) {
                 pendingBoundsRef.current = null;
                 setPendingZoom(null);
               } catch (e) {
-                console.error("❌ Error fitting bounds:", e);
+                console.warn("⚠️ Error fitting bounds (non-critical):", e);
                 pendingBoundsRef.current = null;
                 setPendingZoom(null);
               }

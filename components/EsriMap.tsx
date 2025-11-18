@@ -34,6 +34,32 @@ declare module "leaflet" {
   }
 }
 
+// Helper function to safely disable Geoman global modes
+// Prevents "wrong listener type: undefined" errors
+function safelyDisableGeomanModes(map: L.Map) {
+  if (!map || !map.pm) return;
+  
+  try {
+    // Check if global edit mode is enabled before disabling
+    const isEditModeEnabled = map.pm.globalEditModeEnabled?.() || false;
+    if (isEditModeEnabled && typeof map.pm.disableGlobalEditMode === 'function') {
+      map.pm.disableGlobalEditMode();
+    }
+  } catch (e) {
+    // Silently ignore - mode might not be active or already disabled
+  }
+  
+  try {
+    // Check if global removal mode is enabled before disabling
+    const isRemovalModeEnabled = map.pm.globalRemovalModeEnabled?.() || false;
+    if (isRemovalModeEnabled && typeof map.pm.disableGlobalRemovalMode === 'function') {
+      map.pm.disableGlobalRemovalMode();
+    }
+  } catch (e) {
+    // Silently ignore - mode might not be active or already disabled
+  }
+}
+
 // Helper function to render React component to DOM element for Leaflet popup
 function renderReactPopup(component: React.ReactElement): HTMLElement {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -232,6 +258,7 @@ function EsriMap({
   const recordIconLayerRef = useRef<L.LayerGroup | null>(null);
   const isRestoringViewRef = useRef(false);
   const isInitializingRef = useRef(false);
+  const rebindWorkAreaPopupsRef = useRef<(() => void) | null>(null);
   
   // 🔥 Stable callback references for Geoman event listeners (prevents "wrong listener type" errors)
   const pmCreateHandlerRef = useRef<((e: any) => void) | null>(null);
@@ -362,6 +389,539 @@ function EsriMap({
 
       // Wait for map to be ready before adding layers
       map.whenReady(() => {
+        // 🔥 FIX: Inject CSS to ensure popups appear above map
+        // Add style tag to ensure Leaflet popups have high z-index
+        if (typeof document !== 'undefined') {
+          const styleId = 'leaflet-popup-z-index-fix';
+          if (!document.getElementById(styleId)) {
+            const style = document.createElement('style');
+            style.id = styleId;
+            style.textContent = `
+              .leaflet-popup-pane {
+                z-index: 10000 !important;
+              }
+              .leaflet-popup {
+                z-index: 10000 !important;
+              }
+              .leaflet-popup-content-wrapper {
+                z-index: 10000 !important;
+              }
+              .custom-popup {
+                z-index: 10000 !important;
+              }
+            `;
+            document.head.appendChild(style);
+            console.log('✅ Injected popup z-index CSS fix');
+          }
+        }
+
+        // 🔥 FIX: Set z-index on popup pane itself (critical for visibility)
+        // Also set on all other panes to ensure popup pane is highest
+        try {
+          const popupPane = map.getPane('popupPane');
+          const mapPane = map.getPane('mapPane');
+          const tilePane = map.getPane('tilePane');
+          const overlayPane = map.getPane('overlayPane');
+          const shadowPane = map.getPane('shadowPane');
+          const markerPane = map.getPane('markerPane');
+          const tooltipPane = map.getPane('tooltipPane');
+          
+          // Set popup pane to highest z-index
+          if (popupPane) {
+            (popupPane as HTMLElement).style.zIndex = '10000';
+            console.log('✅ Set popup pane z-index to 10000');
+          }
+          
+          // Set other panes to lower z-index to ensure popup is on top
+          if (mapPane) (mapPane as HTMLElement).style.zIndex = '200';
+          if (tilePane) (tilePane as HTMLElement).style.zIndex = '200';
+          if (overlayPane) (overlayPane as HTMLElement).style.zIndex = '400';
+          if (shadowPane) (shadowPane as HTMLElement).style.zIndex = '500';
+          if (markerPane) (markerPane as HTMLElement).style.zIndex = '600';
+          if (tooltipPane) (tooltipPane as HTMLElement).style.zIndex = '650';
+          
+          console.log('✅ Set all pane z-indexes', {
+            popupPane: popupPane ? (popupPane as HTMLElement).style.zIndex : 'N/A',
+            mapPane: mapPane ? (mapPane as HTMLElement).style.zIndex : 'N/A',
+            overlayPane: overlayPane ? (overlayPane as HTMLElement).style.zIndex : 'N/A',
+            markerPane: markerPane ? (markerPane as HTMLElement).style.zIndex : 'N/A',
+          });
+        } catch (err) {
+          console.warn('Could not set popup pane z-index:', err);
+        }
+
+        // 🔥 FIX: Global popupopen event listener to ensure z-index on all popups
+        // This catches newly created popups that might not have z-index set yet
+        map.on('popupopen', (e: L.PopupEvent) => {
+          try {
+            const popup = e.popup;
+            if (popup && popup.getElement) {
+              const popupElement = popup.getElement();
+              if (popupElement) {
+                // Set z-index on the popup element itself
+                popupElement.style.zIndex = '10000';
+                popupElement.style.display = 'block';
+                popupElement.style.visibility = 'visible';
+                popupElement.style.opacity = '1';
+                
+                // Also set on parent wrapper
+                const wrapper = popupElement.closest?.('.leaflet-popup');
+                if (wrapper) {
+                  (wrapper as HTMLElement).style.zIndex = '10000';
+                  (wrapper as HTMLElement).style.display = 'block';
+                  (wrapper as HTMLElement).style.visibility = 'visible';
+                  (wrapper as HTMLElement).style.opacity = '1';
+                }
+                // Set on content wrapper too
+                const contentWrapper = popupElement.querySelector?.('.leaflet-popup-content-wrapper');
+                if (contentWrapper) {
+                  (contentWrapper as HTMLElement).style.zIndex = '10000';
+                  (contentWrapper as HTMLElement).style.display = 'block';
+                  (contentWrapper as HTMLElement).style.visibility = 'visible';
+                }
+                // 🔥 FIX: Also ensure popup pane has high z-index
+                const popupPane = map.getPane('popupPane');
+                if (popupPane) {
+                  (popupPane as HTMLElement).style.zIndex = '10000';
+                }
+                
+                // Get computed styles for debugging
+                const computedStyle = window.getComputedStyle(popupElement);
+                const computedZ = computedStyle.zIndex;
+                const popupPaneZ = popupPane ? window.getComputedStyle(popupPane as HTMLElement).zIndex : 'N/A';
+                
+                console.log('✅ Set z-index to 10000 via popupopen event', {
+                  popupElement: !!popupElement,
+                  wrapper: !!wrapper,
+                  popupPane: !!popupPane,
+                  popupPaneZIndex: popupPane ? (popupPane as HTMLElement).style.zIndex : 'N/A',
+                  popupPaneComputedZ: popupPaneZ,
+                  elementComputedZ: computedZ,
+                  elementRect: popupElement.getBoundingClientRect(),
+                });
+              }
+            }
+          } catch (err) {
+            console.warn('Could not set z-index via popupopen event:', err);
+          }
+        });
+        
+        // 🔥 FIX: Listen for popupclose to debug when/why popups are being closed
+        map.on('popupclose', (e: L.PopupEvent) => {
+          const stack = new Error().stack;
+          const stackLines = stack?.split('\n') || [];
+          const relevantStack = stackLines.slice(2, 8).map(line => line.trim()).filter(Boolean);
+          
+          console.log('🔴 Popup closed:', {
+            popup: e.popup,
+            popupElement: e.popup?.getElement?.(),
+            isOpen: e.popup?.isOpen?.(),
+            source: relevantStack[0] || 'unknown',
+            fullStack: relevantStack
+          });
+        });
+
+        // Helper function to bind popup and click handler to a work area feature
+        // Defined here so it's accessible throughout the whenReady scope
+        const bindWorkAreaPopup = (feature: any, layer: L.Layer | null | undefined) => {
+          // Safety check: ensure layer exists and has required methods
+          if (!layer || typeof layer.bindPopup !== 'function') {
+            console.warn('Cannot bind popup: layer is undefined or missing bindPopup method', { feature, layer });
+            return;
+          }
+
+          const props = feature?.properties || {};
+          
+          // Format work area ID (use OBJECTID or work_area_id, format as WA-XXXX)
+          const workAreaId = props.work_area_id 
+            ? `WA-${String(props.work_area_id).padStart(4, '0')}` 
+            : props.OBJECTID 
+            ? `WA-${String(props.OBJECTID).padStart(4, '0')}` 
+            : undefined;
+          
+          // Format date
+          const date = props.timestamp || props.created_date || props.date;
+          
+          // Get work area name
+          const workAreaName = props.name || props.workarea_name || props.work_area_name || `Work Area ${workAreaId}`;
+          
+          // Create popup content using React component
+          const popupContent = renderReactPopup(
+            <WorkAreaPopup
+              workAreaId={workAreaId}
+              workAreaName={workAreaName}
+              region={props.region}
+              owner={props.owner}
+              createdBy={props.created_by || props.createdBy}
+              date={date}
+              notes={props.notes}
+              onViewRecords={() => {
+                // TODO: Implement view records functionality
+                console.log("View records for work area:", workAreaId);
+              }}
+              onCreatedByClick={(name) => {
+                // TODO: Implement user profile/view functionality
+                console.log("View profile for:", name);
+              }}
+              onOpenAnalysis={() => {
+                // Open the analysis drawer directly
+                if (onOpenWorkAreaAnalysis) {
+                  onOpenWorkAreaAnalysis({
+                    id: workAreaId,
+                    name: workAreaName,
+                    region: props.region,
+                    owner: props.owner,
+                    createdBy: props.created_by || props.createdBy,
+                    date: date,
+                    notes: props.notes,
+                    geometry: feature?.geometry,
+                    ...props,
+                  });
+                }
+              }}
+            />
+          );
+          
+          // Bind or update popup (bindPopup can be called multiple times safely)
+          try {
+            // Check if popup is currently open before unbinding
+            const existingPopup = layer.getPopup?.();
+            const isPopupOpen = existingPopup?.isOpen?.() || false;
+            const openLatLng = isPopupOpen ? existingPopup?.getLatLng?.() : null;
+            
+            // 🔥 FIX: Only unbind if popup content needs updating, or if popup is not open
+            // This prevents closing popups that are currently being viewed
+            const needsRebind = !existingPopup || !isPopupOpen;
+            
+            if (needsRebind && typeof layer.unbindPopup === 'function') {
+              layer.unbindPopup();
+            } else if (isPopupOpen && existingPopup) {
+              // Popup is open - just update the content without closing
+              try {
+                existingPopup.setContent(popupContent);
+                console.log(`✅ Updated popup content for open popup: ${workAreaId}`);
+                return; // Don't rebind, just return
+              } catch (updateErr) {
+                console.warn(`Could not update popup content, will rebind:`, updateErr);
+                // Fall through to rebind
+                if (typeof layer.unbindPopup === 'function') {
+                  layer.unbindPopup();
+                }
+              }
+            }
+            
+            // Bind popup with proper z-index and options
+            layer.bindPopup(popupContent, {
+              className: "custom-popup",
+              maxWidth: 400,
+              autoPan: true,
+              closeOnClick: false,
+              autoClose: false,
+              closeButton: true,
+              // 🔥 FIX: Prevent popup from being closed by map clicks or other events
+              keepInView: true,
+            });
+            
+            // 🔥 FIX: Ensure popup has high z-index so it appears above map
+            // Set z-index after binding to ensure it's applied
+            setTimeout(() => {
+              try {
+                const popup = layer.getPopup?.();
+                if (popup && popup.getElement) {
+                  const popupElement = popup.getElement();
+                  if (popupElement) {
+                    popupElement.style.zIndex = '10000'; // Very high z-index
+                    console.log(`✅ Set popup z-index to 10000 for work area: ${workAreaId}`);
+                  }
+                }
+              } catch (zIndexErr) {
+                console.warn('Could not set popup z-index:', zIndexErr);
+              }
+            }, 50);
+            
+            console.log(`✅ Popup bound to work area: ${workAreaId}`);
+            
+            // If popup was open before rebinding, reopen it
+            if (isPopupOpen && openLatLng && layer.openPopup && typeof layer.openPopup === 'function') {
+              setTimeout(() => {
+                try {
+                  layer.openPopup(openLatLng);
+                  console.log(`✅ Reopened popup after rebinding for: ${workAreaId}`);
+                } catch (err) {
+                  console.warn(`Could not reopen popup after rebinding:`, err);
+                }
+              }, 100);
+            }
+          } catch (err) {
+            console.error('❌ Error binding popup:', err, { workAreaId, layer });
+            // Fallback: try again with minimal options
+            try {
+              layer.bindPopup(popupContent, {
+                className: "custom-popup",
+                maxWidth: 400,
+              });
+              console.log(`✅ Popup bound with fallback for: ${workAreaId}`);
+            } catch (fallbackErr) {
+              console.error('❌ Failed to bind popup even with fallback:', fallbackErr, { workAreaId });
+              return;
+            }
+          }
+
+          // Remove existing click handlers and add new one
+          try {
+            // Ensure layer is interactive (critical for newly created features)
+            if (typeof (layer as any).setStyle === 'function') {
+              // Make sure the layer is clickable
+              (layer as any).setStyle({ interactive: true });
+              console.log(`✅ Set interactive: true for work area: ${workAreaId}`);
+            }
+            
+            // 🔥 FIX: Also try setting interactive via options if available
+            if ((layer as any).options) {
+              (layer as any).options.interactive = true;
+              (layer as any).options.bubblingMouseEvents = true;
+            }
+            
+            // 🔥 FIX: Ensure layer is brought to front so it can receive clicks
+            if (typeof (layer as any).bringToFront === 'function') {
+              (layer as any).bringToFront();
+            }
+            
+            if (typeof layer.off === 'function') {
+              layer.off('click');
+              layer.off('mousedown');
+            }
+            if (typeof layer.on === 'function') {
+              // Capture feature in closure for click handler
+              const layerFeature = feature;
+              
+              // 🔥 FIX: Test if layer can receive events at all
+              layer.on('mouseover', () => {
+                console.log(`🖱️ Work area mouseover: ${workAreaId}`);
+              });
+              
+              // Use named function for better debugging
+              const clickHandler = (e: L.LeafletMouseEvent) => {
+                console.log(`🖱️ Work area clicked: ${workAreaId}`, { 
+                  e, 
+                  layer, 
+                  hasPopup: !!layer.getPopup?.(),
+                  layerType: layer.constructor?.name,
+                  target: e.originalEvent?.target,
+                  latlng: e.latlng
+                });
+                
+                // 🔥 FIX: Prevent default and stop propagation to ensure click is handled
+                if (e.originalEvent) {
+                  e.originalEvent.preventDefault?.();
+                  e.originalEvent.stopPropagation?.();
+                }
+                
+                // 🔥 FIX: Explicitly open the popup on click and ensure z-index
+                try {
+                  // First check if popup exists
+                  const existingPopup = layer.getPopup?.();
+                  if (!existingPopup) {
+                    console.warn(`⚠️ No popup found for ${workAreaId}, attempting to rebind...`);
+                    // Get feature from layer if available (fallback to captured feature)
+                    const featureToUse = (layer as any).feature || layerFeature;
+                    if (featureToUse) {
+                      // Try to rebind the popup
+                      bindWorkAreaPopup(featureToUse, layer);
+                      // Wait a bit and try again
+                      setTimeout(() => {
+                        if (layer.openPopup && typeof layer.openPopup === 'function') {
+                          layer.openPopup(e.latlng);
+                        }
+                      }, 100);
+                    }
+                    return;
+                  }
+                  
+                  if (layer.openPopup && typeof layer.openPopup === 'function') {
+                    // Open popup at click location
+                    layer.openPopup(e.latlng);
+                    console.log(`✅ Opened popup for work area: ${workAreaId}`);
+                    
+                    // 🔥 FIX: Prevent popup from being closed immediately
+                    // Stop event propagation to prevent other handlers from closing it
+                    if (e.originalEvent) {
+                      e.originalEvent.stopPropagation?.();
+                    }
+                    
+                    // 🔥 FIX: Set z-index immediately after opening (critical for new popups)
+                    // Use multiple timeouts to catch the popup at different stages
+                    [10, 50, 100, 200, 500].forEach((delay) => {
+                      setTimeout(() => {
+                        try {
+                          const popup = layer.getPopup?.();
+                          if (popup) {
+                            // Set z-index on the popup container
+                            const popupElement = popup.getElement?.();
+                            if (popupElement) {
+                              popupElement.style.zIndex = '10000';
+                              popupElement.style.display = 'block';
+                              popupElement.style.visibility = 'visible';
+                              popupElement.style.opacity = '1';
+                              // Also set on parent wrapper if it exists
+                              const wrapper = popupElement.closest?.('.leaflet-popup');
+                              if (wrapper) {
+                                (wrapper as HTMLElement).style.zIndex = '10000';
+                                (wrapper as HTMLElement).style.display = 'block';
+                                (wrapper as HTMLElement).style.visibility = 'visible';
+                                (wrapper as HTMLElement).style.opacity = '1';
+                              }
+                              // 🔥 FIX: Also ensure popup pane has high z-index
+                              const popupPane = map.getPane('popupPane');
+                              if (popupPane) {
+                                (popupPane as HTMLElement).style.zIndex = '10000';
+                              }
+                              
+                              // 🔥 FIX: Check if popup is actually in the DOM and visible
+                              const isInDOM = document.body.contains(popupElement) || document.body.contains(wrapper as HTMLElement);
+                              const computedStyle = window.getComputedStyle(popupElement);
+                              const isVisible = computedStyle.display !== 'none' && computedStyle.visibility !== 'hidden' && computedStyle.opacity !== '0';
+                              
+                              // Get all z-index values for debugging
+                              const popupPaneZ = popupPane ? window.getComputedStyle(popupPane as HTMLElement).zIndex : 'N/A';
+                              const wrapperZ = wrapper ? window.getComputedStyle(wrapper as HTMLElement).zIndex : 'N/A';
+                              const elementZ = computedStyle.zIndex;
+                              
+                              console.log(`✅ Set z-index and visibility for opened popup (delay ${delay}ms): ${workAreaId}`, {
+                                popupPaneZIndex: popupPane ? (popupPane as HTMLElement).style.zIndex : 'N/A',
+                                popupPaneComputedZ: popupPaneZ,
+                                wrapperZIndex: wrapper ? (wrapper as HTMLElement).style.zIndex : 'N/A',
+                                wrapperComputedZ: wrapperZ,
+                                elementZIndex: popupElement.style.zIndex,
+                                elementComputedZ: elementZ,
+                                isInDOM,
+                                isVisible,
+                                computedDisplay: computedStyle.display,
+                                computedVisibility: computedStyle.visibility,
+                                computedOpacity: computedStyle.opacity,
+                                popupRect: popupElement.getBoundingClientRect(),
+                                wrapperRect: wrapper ? (wrapper as HTMLElement).getBoundingClientRect() : null,
+                              });
+                            } else {
+                              console.warn(`⚠️ Popup element not found for ${workAreaId} at delay ${delay}ms`);
+                            }
+                          } else {
+                            console.warn(`⚠️ Popup not found for ${workAreaId} at delay ${delay}ms`);
+                          }
+                        } catch (zIndexErr) {
+                          console.warn(`Could not set z-index on opened popup (delay ${delay}ms):`, zIndexErr);
+                        }
+                      }, delay);
+                    });
+                  } else if (layer.getPopup && typeof layer.getPopup === 'function') {
+                    const popup = layer.getPopup();
+                    if (popup && popup.openOn && typeof popup.openOn === 'function') {
+                      popup.openOn(map, e.latlng);
+                      console.log(`✅ Opened popup via openOn for: ${workAreaId}`);
+                      
+                      // Set z-index after opening
+                      setTimeout(() => {
+                        try {
+                          const popupElement = popup.getElement?.();
+                          if (popupElement) {
+                            popupElement.style.zIndex = '10000';
+                            const wrapper = popupElement.closest?.('.leaflet-popup');
+                            if (wrapper) {
+                              (wrapper as HTMLElement).style.zIndex = '10000';
+                            }
+                            console.log(`✅ Set z-index to 10000 for opened popup (openOn): ${workAreaId}`);
+                          }
+                        } catch (zIndexErr) {
+                          console.warn('Could not set z-index on opened popup:', zIndexErr);
+                        }
+                      }, 10);
+                    } else {
+                      console.warn(`⚠️ Could not open popup - methods not available`, { 
+                        hasOpenPopup: !!layer.openPopup,
+                        hasGetPopup: !!layer.getPopup,
+                        popup
+                      });
+                    }
+                  }
+                } catch (popupErr) {
+                  console.error('❌ Error opening popup:', popupErr, { workAreaId });
+                }
+                
+                // Also call the callback if provided
+                if (onWorkAreaClick) {
+                  onWorkAreaClick({
+                    id: workAreaId,
+                    name: props.name || props.workarea_name || props.work_area_name || `Work Area ${workAreaId}`,
+                    region: props.region,
+                    owner: props.owner,
+                    createdBy: props.created_by || props.createdBy,
+                    date: date,
+                    notes: props.notes,
+                    geometry: layerFeature?.geometry,
+                    ...props,
+                  });
+                }
+              };
+              
+              // Bind the click handler
+              layer.on('click', clickHandler);
+              
+              // Also try binding to mousedown as a fallback
+              layer.on('mousedown', (e: L.LeafletMouseEvent) => {
+                console.log(`🖱️ Work area mousedown: ${workAreaId}`, { e, layer });
+                // Trigger click programmatically if needed
+                setTimeout(() => {
+                  if (layer.getPopup && layer.openPopup) {
+                    try {
+                      layer.openPopup(e.latlng);
+                      console.log(`✅ Opened popup via mousedown fallback: ${workAreaId}`);
+                      
+                      // 🔥 FIX: Set z-index on popup pane and popup elements
+                      setTimeout(() => {
+                        try {
+                          const popup = layer.getPopup?.();
+                          if (popup) {
+                            const popupElement = popup.getElement?.();
+                            if (popupElement) {
+                              popupElement.style.zIndex = '10000';
+                              const wrapper = popupElement.closest?.('.leaflet-popup');
+                              if (wrapper) {
+                                (wrapper as HTMLElement).style.zIndex = '10000';
+                              }
+                              const popupPane = map.getPane('popupPane');
+                              if (popupPane) {
+                                (popupPane as HTMLElement).style.zIndex = '10000';
+                              }
+                            }
+                          }
+                        } catch (err) {
+                          console.warn('Could not set z-index via mousedown:', err);
+                        }
+                      }, 10);
+                    } catch (err) {
+                      console.warn('Could not open popup via mousedown:', err);
+                    }
+                  }
+                }, 50);
+              });
+              
+              console.log(`✅ Click handler bound for work area: ${workAreaId}`, {
+                hasOn: typeof layer.on === 'function',
+                hasOff: typeof layer.off === 'function',
+                hasOpenPopup: typeof layer.openPopup === 'function',
+                hasGetPopup: typeof layer.getPopup === 'function',
+              });
+            } else {
+              console.warn(`⚠️ Layer.on not available for: ${workAreaId}`, {
+                layerType: layer.constructor?.name,
+                hasOn: typeof layer.on === 'function',
+              });
+            }
+          } catch (err) {
+            console.error('❌ Error binding click handler:', err, { workAreaId, layer });
+          }
+        };
+
         // Restore view if map is remounted (rare case)
         if (lastCenterRef.current && lastZoomRef.current) {
           map.setView(lastCenterRef.current, lastZoomRef.current);
@@ -485,7 +1045,8 @@ function EsriMap({
 
           // Check if map panes are initialized
           if (!map.getPane('mapPane') || !map.getPane('tilePane')) {
-            console.error("Map panes not initialized");
+            // This is a timing issue - panes will be ready shortly, safe to ignore
+            console.warn("Map panes not initialized yet, will retry");
             return;
           }
 
@@ -536,132 +1097,12 @@ function EsriMap({
           setTimeout(() => {
             try {
               if (map.getPane('overlayPane') && map.getContainer()) {
-    // Helper function to bind popup and click handler to a work area feature
-    const bindWorkAreaPopup = (feature: any, layer: L.Layer | null | undefined) => {
-      // Safety check: ensure layer exists and has required methods
-      if (!layer || typeof layer.bindPopup !== 'function') {
-        console.warn('Cannot bind popup: layer is undefined or missing bindPopup method', { feature, layer });
-        return;
-      }
-
-      const props = feature?.properties || {};
-      
-      // Format work area ID (use OBJECTID or work_area_id, format as WA-XXXX)
-      const workAreaId = props.work_area_id 
-        ? `WA-${String(props.work_area_id).padStart(4, '0')}` 
-        : props.OBJECTID 
-        ? `WA-${String(props.OBJECTID).padStart(4, '0')}` 
-        : undefined;
-      
-      // Format date
-      const date = props.timestamp || props.created_date || props.date;
-      
-      // Get work area name
-      const workAreaName = props.name || props.workarea_name || props.work_area_name || `Work Area ${workAreaId}`;
-      
-      // Create popup content using React component
-      const popupContent = renderReactPopup(
-        <WorkAreaPopup
-          workAreaId={workAreaId}
-          workAreaName={workAreaName}
-          region={props.region}
-          owner={props.owner}
-          createdBy={props.created_by || props.createdBy}
-          date={date}
-          notes={props.notes}
-          onViewRecords={() => {
-            // TODO: Implement view records functionality
-            console.log("View records for work area:", workAreaId);
-          }}
-          onCreatedByClick={(name) => {
-            // TODO: Implement user profile/view functionality
-            console.log("View profile for:", name);
-          }}
-          onOpenAnalysis={() => {
-            // Open the analysis drawer directly
-            if (onOpenWorkAreaAnalysis) {
-              onOpenWorkAreaAnalysis({
-                id: workAreaId,
-                name: workAreaName,
-                region: props.region,
-                owner: props.owner,
-                createdBy: props.created_by || props.createdBy,
-                date: date,
-                notes: props.notes,
-                geometry: feature?.geometry,
-                ...props,
-              });
-            }
-          }}
-        />
-      );
-      
-      // Bind or update popup (bindPopup can be called multiple times safely)
-      try {
-        if (typeof layer.getPopup === 'function' && layer.getPopup()) {
-          // Update existing popup content
-          if (typeof layer.setPopupContent === 'function') {
-            layer.setPopupContent(popupContent);
-          } else {
-            // Fallback: unbind and rebind
-            layer.unbindPopup();
-            layer.bindPopup(popupContent, {
-              className: "custom-popup",
-              maxWidth: 400,
-            });
-          }
-        } else {
-          // Bind new popup
-          layer.bindPopup(popupContent, {
-            className: "custom-popup",
-            maxWidth: 400,
-          });
-        }
-      } catch (err) {
-        console.warn('Error binding popup, retrying with fallback:', err);
-        // Fallback: just bind the popup (Leaflet handles duplicates)
-        try {
-          layer.bindPopup(popupContent, {
-            className: "custom-popup",
-            maxWidth: 400,
-          });
-        } catch (fallbackErr) {
-          console.error('Failed to bind popup even with fallback:', fallbackErr);
-          return;
-        }
-      }
-
-      // Remove existing click handlers and add new one
-      try {
-        if (typeof layer.off === 'function') {
-          layer.off('click');
-        }
-        if (typeof layer.on === 'function') {
-          layer.on('click', (e: L.LeafletMouseEvent) => {
-            if (onWorkAreaClick) {
-              onWorkAreaClick({
-                id: workAreaId,
-                name: props.name || props.workarea_name || props.work_area_name || `Work Area ${workAreaId}`,
-                region: props.region,
-                owner: props.owner,
-                createdBy: props.created_by || props.createdBy,
-                date: date,
-                notes: props.notes,
-                geometry: feature?.geometry,
-                ...props,
-              });
-            }
-          });
-        }
-      } catch (err) {
-        console.warn('Error binding click handler:', err);
-      }
-    };
-
     const workAreas = EL.featureLayer({
       url: process.env.NEXT_PUBLIC_WORKAREA_LAYER_URL!,
       apikey: process.env.NEXT_PUBLIC_ARCGIS_API_KEY!,
       style: () => ({ color: "#0077ff", weight: 2, fillOpacity: 0.15 }),
+      // 🔥 FIX: Ensure features are interactive
+      interactive: true,
       onEachFeature: (feature: any, layer: L.Layer) => {
         bindWorkAreaPopup(feature, layer);
       },
@@ -669,21 +1110,127 @@ function EsriMap({
 
     // 🔥 FIX: Bind popups to features after layer refresh
     // When the layer refreshes, new features are added but onEachFeature is not called again
-    workAreas.on('load', () => {
-      // Small delay to ensure all features are fully loaded
-      setTimeout(() => {
-        try {
+    const rebindAllPopups = () => {
+      try {
+        console.log('🔄 Rebinding popups to all work area features...');
+        let featureCount = 0;
+        let skippedOpenPopups = 0;
+        
+        // Method 1: Try eachFeature if available
+        if (typeof workAreas.eachFeature === 'function') {
           workAreas.eachFeature((feature: any, layer: L.Layer | null | undefined) => {
-            // Always rebind popup to ensure it's up-to-date (handles new features and updates)
-            // Safety check is handled inside bindWorkAreaPopup
             if (feature && layer) {
+              // 🔥 FIX: Skip rebinding if popup is currently open to avoid closing it
+              const existingPopup = layer.getPopup?.();
+              const isPopupOpen = existingPopup?.isOpen?.() || false;
+              
+              if (isPopupOpen) {
+                skippedOpenPopups++;
+                console.log(`⏭️ Skipping rebind for open popup: ${feature?.properties?.workarea_id || feature?.properties?.id || 'unknown'}`);
+                return; // Skip this one
+              }
+              
+              featureCount++;
               bindWorkAreaPopup(feature, layer);
             }
           });
-        } catch (err) {
-          console.warn('Error binding popups after layer load:', err);
         }
-      }, 100);
+        
+        // Method 2: Also try accessing features directly from the layer
+        // Esri Leaflet stores features in _layers or similar
+        if (featureCount === 0) {
+          // Try to access features through the layer's internal structure
+          const layers = (workAreas as any)._layers || {};
+          Object.keys(layers).forEach((key) => {
+            const layer = layers[key];
+            if (layer && layer.feature) {
+              // 🔥 FIX: Skip rebinding if popup is currently open to avoid closing it
+              const existingPopup = layer.getPopup?.();
+              const isPopupOpen = existingPopup?.isOpen?.() || false;
+              
+              if (isPopupOpen) {
+                skippedOpenPopups++;
+                return; // Skip this one
+              }
+              
+              featureCount++;
+              bindWorkAreaPopup(layer.feature, layer);
+            }
+          });
+        }
+        
+        console.log(`✅ Rebound popups to ${featureCount} work area features${skippedOpenPopups > 0 ? ` (skipped ${skippedOpenPopups} open popups)` : ''}`);
+      } catch (err) {
+        console.warn('Error binding popups after layer load:', err);
+      }
+    };
+    
+    // Store rebind function in ref so it's accessible from record saving code
+    rebindWorkAreaPopupsRef.current = rebindAllPopups;
+
+    // Listen for load event (fires when layer loads or refreshes)
+    workAreas.on('load', () => {
+      console.log('📦 Work areas layer loaded, rebinding popups...');
+      // Use longer delay to ensure all features are fully processed
+      setTimeout(rebindAllPopups, 300);
+    });
+
+    // Also listen for when features are added (more reliable for new features)
+    workAreas.on('addfeature', (e: any) => {
+      console.log('➕ Feature added to work areas layer, binding popup...', { 
+        hasFeature: !!e.feature, 
+        hasLayer: !!e.layer,
+        layerType: e.layer?.constructor?.name 
+      });
+      
+      if (e.feature) {
+        // 🔥 FIX: Find the actual Leaflet layer from the feature layer's internal structure
+        // The e.layer might not be the interactive layer we need
+        setTimeout(() => {
+          try {
+            let actualLayer = e.layer;
+            
+            // If e.layer doesn't have the methods we need, try to find it from the feature layer
+            if (!actualLayer || typeof actualLayer.bindPopup !== 'function') {
+              // Try to find the layer by iterating through the feature layer's layers
+              const layers = (workAreas as any)._layers || {};
+              const featureId = e.feature.id || e.feature.properties?.OBJECTID || e.feature.properties?.work_area_id;
+              
+              console.log(`🔍 Searching for layer with feature ID: ${featureId}`);
+              
+              // Find the layer that matches this feature
+              for (const key in layers) {
+                const layer = layers[key];
+                if (layer && layer.feature) {
+                  const layerFeatureId = layer.feature.id || 
+                                        layer.feature.properties?.OBJECTID || 
+                                        layer.feature.properties?.work_area_id;
+                  
+                  if (layerFeatureId === featureId || 
+                      (layer.feature === e.feature) ||
+                      (layer.feature.properties?.OBJECTID === e.feature.properties?.OBJECTID)) {
+                    actualLayer = layer;
+                    console.log(`✅ Found matching layer for feature ID: ${featureId}`);
+                    break;
+                  }
+                }
+              }
+            }
+            
+            if (actualLayer && typeof actualLayer.bindPopup === 'function') {
+              bindWorkAreaPopup(e.feature, actualLayer);
+            } else {
+              console.warn('⚠️ Could not find valid layer for new feature, will retry on layer load', {
+                hasActualLayer: !!actualLayer,
+                hasBindPopup: actualLayer && typeof actualLayer.bindPopup === 'function'
+              });
+              // The layer load event will catch it
+            }
+          } catch (err) {
+            console.error('❌ Error binding popup in addfeature handler:', err);
+          }
+        }, 200); // Increased delay to ensure layer is fully initialized
+      }
     });
 
                 workAreasLayerRef.current = workAreas;
@@ -889,6 +1436,14 @@ function EsriMap({
                     // Add delayed zoom after layer loads (wait for Map Pane init)
                     pointLayer.on("load", () => {
                       console.log("Records Point layer loaded");
+                      
+                      // 🔥 FIX: Rebind work area popups after records layer loads (they might get lost)
+                      if (rebindWorkAreaPopupsRef.current) {
+                        setTimeout(() => {
+                          console.log('🔄 Rebinding work area popups after Records Point layer load...');
+                          rebindWorkAreaPopupsRef.current?.();
+                        }, 300);
+                      }
                       setTimeout(() => {
                         try {
                           // Ensure map pane is ready
@@ -926,6 +1481,14 @@ function EsriMap({
                     // Add delayed zoom after layer loads (wait for Map Pane init)
                     lineLayer.on("load", () => {
                       console.log("Records Line layer loaded");
+                      
+                      // 🔥 FIX: Rebind work area popups after records layer loads (they might get lost)
+                      if (rebindWorkAreaPopupsRef.current) {
+                        setTimeout(() => {
+                          console.log('🔄 Rebinding work area popups after Records Line layer load...');
+                          rebindWorkAreaPopupsRef.current?.();
+                        }, 300);
+                      }
                       setTimeout(() => {
                         try {
                           // Ensure map pane is ready
@@ -963,6 +1526,14 @@ function EsriMap({
                     // Add delayed zoom after layer loads (wait for Map Pane init)
                     polygonLayer.on("load", () => {
                       console.log("Records Polygon layer loaded");
+                      
+                      // 🔥 FIX: Rebind work area popups after records layer loads (they might get lost)
+                      if (rebindWorkAreaPopupsRef.current) {
+                        setTimeout(() => {
+                          console.log('🔄 Rebinding work area popups after Records Polygon layer load...');
+                          rebindWorkAreaPopupsRef.current?.();
+                        }, 300);
+                      }
                       setTimeout(() => {
                         try {
                           // Ensure map pane is ready
@@ -1127,6 +1698,46 @@ function EsriMap({
           );
               if (workAreasLayerRef.current) {
                 workAreasLayerRef.current.refresh();
+                
+                // 🔥 FIX: Manually trigger popup rebinding after refresh
+                // The load event might not fire immediately, so we also trigger it manually
+                setTimeout(() => {
+                  console.log('🔄 Manually rebinding popups after work area save...');
+                  try {
+                    // Access the rebind function if it exists in scope
+                    // We'll need to store it in a way that's accessible here
+                    if (workAreasLayerRef.current) {
+                      const workAreas = workAreasLayerRef.current;
+                      let featureCount = 0;
+                      
+                      // Try eachFeature
+                      if (typeof workAreas.eachFeature === 'function') {
+                        workAreas.eachFeature((feature: any, layer: L.Layer | null | undefined) => {
+                          if (feature && layer) {
+                            featureCount++;
+                            bindWorkAreaPopup(feature, layer);
+                          }
+                        });
+                      }
+                      
+                      // Fallback: access through _layers
+                      if (featureCount === 0) {
+                        const layers = (workAreas as any)._layers || {};
+                        Object.keys(layers).forEach((key) => {
+                          const layer = layers[key];
+                          if (layer && layer.feature) {
+                            featureCount++;
+                            bindWorkAreaPopup(layer.feature, layer);
+                          }
+                        });
+                      }
+                      
+                      console.log(`✅ Manually rebound popups to ${featureCount} features after save`);
+                    }
+                  } catch (err) {
+                    console.warn('Error manually rebinding popups:', err);
+                  }
+                }, 500); // Wait a bit longer for refresh to complete
               }
 
               // Update polygon state
@@ -1167,20 +1778,7 @@ function EsriMap({
                 // Ignore if already disabled
               }
               // 🔥 FIX: Safely disable global modes (prevents "wrong listener type: undefined")
-              try {
-                if (map.pm && typeof map.pm.disableGlobalEditMode === 'function') {
-                  map.pm.disableGlobalEditMode();
-                }
-              } catch (e) {
-                // Ignore errors - mode might not be active
-              }
-              try {
-                if (map.pm && typeof map.pm.disableGlobalRemovalMode === 'function') {
-                  map.pm.disableGlobalRemovalMode();
-                }
-              } catch (e) {
-                // Ignore errors - mode might not be active
-              }
+              safelyDisableGeomanModes(map);
               
               // 🔥 FINAL FIX - close the UI loop
               // Note: setEnableWorkAreaDrawing would need to be a callback prop from parent
@@ -1345,6 +1943,14 @@ function EsriMap({
                           try {
                             recordsPointLayerRef.current?.refresh();
                             console.log("✅ Refreshed Records_Point layer only");
+                            
+                            // 🔥 FIX: Rebind work area popups after record save (they might get lost)
+                            if (workAreasLayerRef.current && rebindWorkAreaPopupsRef.current) {
+                              setTimeout(() => {
+                                console.log('🔄 Rebinding work area popups after record save...');
+                                rebindWorkAreaPopupsRef.current?.();
+                              }, 300);
+                            }
                           } catch (err) {
                             console.warn("Could not refresh Point layer:", err);
                           }
@@ -1429,6 +2035,14 @@ function EsriMap({
                             recordsPolygonLayerRef.current.refresh();
                             console.log("✅ Refreshed Records_Polygon layer only");
                           }
+                          
+                          // 🔥 FIX: Rebind work area popups after record save (they might get lost)
+                          if (workAreasLayerRef.current && rebindWorkAreaPopupsRef.current) {
+                            setTimeout(() => {
+                              console.log('🔄 Rebinding work area popups after record save...');
+                              rebindWorkAreaPopupsRef.current?.();
+                            }, 300);
+                          }
                         } catch (err) {
                           console.warn("Could not refresh layer:", err);
                         }
@@ -1480,6 +2094,17 @@ function EsriMap({
 
           // Handle point picking for georeferencing
           const handleMapClick = (e: L.LeafletMouseEvent) => {
+            // 🔥 FIX: Don't close popups when clicking on map (unless it's a point pick)
+            // Check if click target is a popup or popup-related element
+            const target = (e.originalEvent?.target as HTMLElement);
+            if (target) {
+              const isPopupClick = target.closest?.('.leaflet-popup') || target.closest?.('.leaflet-popup-content-wrapper');
+              if (isPopupClick) {
+                // Click is on popup, don't close it
+                return;
+              }
+            }
+            
             if (pickPointActive && georefMode === "point") {
               const point: LatLng = { lat: e.latlng.lat, lng: e.latlng.lng };
               const result = { type: "Point" as const, point };
@@ -1737,20 +2362,7 @@ function EsriMap({
           // Ignore errors during cleanup
         }
         // 🔥 FIX: Safely disable global modes (prevents "wrong listener type: undefined")
-        try {
-          if (map.pm && typeof map.pm.disableGlobalEditMode === 'function') {
-            map.pm.disableGlobalEditMode();
-          }
-        } catch (e) {
-          // Ignore errors - mode might not be active
-        }
-        try {
-          if (map.pm && typeof map.pm.disableGlobalRemovalMode === 'function') {
-            map.pm.disableGlobalRemovalMode();
-          }
-        } catch (e) {
-          // Ignore errors - mode might not be active
-        }
+        safelyDisableGeomanModes(map);
         
         map.remove();
         mapRef.current = null;
@@ -1882,20 +2494,7 @@ function EsriMap({
         // Ignore if already disabled
       }
       // 🔥 FIX: Safely disable global modes (prevents "wrong listener type: undefined")
-      try {
-        if (map.pm && typeof map.pm.disableGlobalEditMode === 'function') {
-          map.pm.disableGlobalEditMode();
-        }
-      } catch (e) {
-        // Ignore errors - mode might not be active
-      }
-      try {
-        if (map.pm && typeof map.pm.disableGlobalRemovalMode === 'function') {
-          map.pm.disableGlobalRemovalMode();
-        }
-      } catch (e) {
-        // Ignore errors - mode might not be active
-      }
+      safelyDisableGeomanModes(map);
 
       // Start polygon draw explicitly
       map.pm.enableDraw("Polygon", {
@@ -1970,20 +2569,7 @@ function EsriMap({
         // Ignore if already disabled
       }
       // 🔥 FIX: Safely disable global modes (prevents "wrong listener type: undefined")
-      try {
-        if (map.pm && typeof map.pm.disableGlobalEditMode === 'function') {
-          map.pm.disableGlobalEditMode();
-        }
-      } catch (e) {
-        // Ignore errors - mode might not be active
-      }
-      try {
-        if (map.pm && typeof map.pm.disableGlobalRemovalMode === 'function') {
-          map.pm.disableGlobalRemovalMode();
-        }
-      } catch (e) {
-        // Ignore errors - mode might not be active
-      }
+      safelyDisableGeomanModes(map);
 
       // Ensure Geoman toolbar is removed - using custom UTILITX toolbar instead
       try {
