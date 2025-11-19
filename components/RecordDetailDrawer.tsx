@@ -250,7 +250,7 @@ export function RecordDetailDrawer({
               {(thumbnailUrl || fileUrl || filePath) && (
                 <div className="animate-slideUpFade" style={{ animationDelay: "0.1s" }}>
                   <h3 className="text-sm font-medium text-[var(--utilitx-gray-700)] mb-3">Preview</h3>
-                  <div className="relative w-full h-64 bg-[var(--utilitx-gray-50)] rounded-lg overflow-hidden border border-[var(--utilitx-gray-200)] group">
+                  <div className="relative w-full h-[320px] sm:h-[380px] bg-white rounded-xl overflow-hidden border border-[var(--utilitx-gray-200)] shadow-[0_8px_30px_rgba(1,30,49,0.08)] group transition-all">
                     {imageLoading && (
                       <div className="absolute inset-0 flex items-center justify-center bg-[var(--utilitx-gray-50)] z-10">
                         <Skeleton className="h-full w-full" />
