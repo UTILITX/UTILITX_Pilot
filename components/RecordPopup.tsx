@@ -19,6 +19,7 @@ type RecordPopupProps = {
   onViewFile?: () => void;
   onDownload?: () => void;
   onUploadedByClick?: (name: string) => void;
+  onMoreDetails?: () => void;
 };
 
 export function RecordPopup({
@@ -35,6 +36,7 @@ export function RecordPopup({
   onViewFile,
   onDownload,
   onUploadedByClick,
+  onMoreDetails,
 }: RecordPopupProps) {
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return null;
@@ -111,32 +113,47 @@ export function RecordPopup({
       </div>
 
       {/* Action Buttons */}
-      <div className="flex gap-2">
-        <Button
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (onViewFile) onViewFile();
-          }}
-          variant="outline"
-          disabled={!onViewFile || (!filePath && !fileUrl)}
-          className="flex-1 bg-white text-black border-gray-300 hover:bg-gray-50 rounded-md h-9 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Eye className="h-4 w-4 mr-2" />
-          View File
-        </Button>
-        <Button
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (onDownload) onDownload();
-          }}
-          disabled={!onDownload || (!filePath && !fileUrl)}
-          className="flex-1 bg-black text-white hover:bg-gray-800 rounded-md h-9 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Download className="h-4 w-4 mr-2" />
-          Download
-        </Button>
+      <div className="flex flex-col gap-2">
+        {onMoreDetails && (
+          <Button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (onMoreDetails) onMoreDetails();
+            }}
+            className="w-full bg-[#011e31] text-white hover:bg-[#0c4160] rounded-md h-9 text-sm font-medium"
+          >
+            <FileText className="h-4 w-4 mr-2" />
+            More Details
+          </Button>
+        )}
+        <div className="flex gap-2">
+          <Button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (onViewFile) onViewFile();
+            }}
+            variant="outline"
+            disabled={!onViewFile || (!filePath && !fileUrl)}
+            className="flex-1 bg-white text-black border-gray-300 hover:bg-gray-50 rounded-md h-9 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Eye className="h-4 w-4 mr-2" />
+            View File
+          </Button>
+          <Button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (onDownload) onDownload();
+            }}
+            disabled={!onDownload || (!filePath && !fileUrl)}
+            className="flex-1 bg-black text-white hover:bg-gray-800 rounded-md h-9 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Download
+          </Button>
+        </div>
       </div>
     </div>
   );

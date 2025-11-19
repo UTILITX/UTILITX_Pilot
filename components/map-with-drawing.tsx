@@ -18,6 +18,10 @@ export type MapBubble = {
   filePath?: string;
   fileUrl?: string;
   fileName?: string;
+  // Cloudinary thumbnail support
+  cloudinaryId?: string;
+  cloudinary_id?: string;
+  cloudinary_public_id?: string;
   // Record metadata for popup
   recordTypePath?: string;
   source?: string;

@@ -18,6 +18,7 @@ import type { GeorefMode } from "@/lib/types";
 import type { MapBubble, GeorefShape } from "@/components/map-with-drawing";
 import { WorkAreaPopup } from "@/components/WorkAreaPopup";
 import { RecordPopup } from "@/components/RecordPopup";
+import { RecordDetailDrawer } from "@/components/RecordDetailDrawer";
 import { getApwaColor } from "@/lib/apwaColors";
 import { getFeatureGeometry } from "@/lib/geoUtils";
 import { zoomToEsriFeature } from "@/lib/zoomToFeature";
@@ -259,6 +260,11 @@ function EsriMap({
   const isRestoringViewRef = useRef(false);
   const isInitializingRef = useRef(false);
   const rebindWorkAreaPopupsRef = useRef<(() => void) | null>(null);
+  
+  // Record detail drawer state
+  const [recordDrawerOpen, setRecordDrawerOpen] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState<any>(null);
+  const [recordDrawerLoading, setRecordDrawerLoading] = useState(false);
   
   // 🔥 Stable callback references for Geoman event listeners (prevents "wrong listener type" errors)
   const pmCreateHandlerRef = useRef<((e: any) => void) | null>(null);
@@ -1356,6 +1362,37 @@ function EsriMap({
                       filePath = fileUrl;
                     }
                     
+                    // Helper function to open drawer with record data
+                    const openRecordDrawer = () => {
+                      setRecordDrawerLoading(true);
+                      setSelectedRecord({
+                        recordId,
+                        filename: props.file_name || props.filename,
+                        thumbnail: props.thumbnail,
+                        fileUrl: fileUrl && fileUrl.startsWith("http") ? fileUrl : undefined,
+                        filePath,
+                        cloudinaryId: props.cloudinary_id || props.cloudinaryId || props.cloudinary_public_id,
+                        intersectionGuess: props.intersection_guess || props.intersectionGuess || props.intersection,
+                        trustScore: props.trust_score !== undefined ? props.trust_score : (props.trustScore !== undefined ? props.trustScore : undefined),
+                        utilityType: props.utility_type,
+                        city: props.city,
+                        textBlob: props.text_blob || props.textBlob || props.ai_summary || props.aiSummary,
+                        geometryType: props.geometry_type || props.geometryType || "Point",
+                        recordType: props.record_type,
+                        organization: props.source,
+                        processedDate,
+                        uploadedBy: props.Creator || props.created_by || props.uploaded_by || props.createdBy,
+                        feature: feature,
+                        layer: layer,
+                      });
+                      setRecordDrawerOpen(true);
+                      
+                      // Simulate loading delay (remove in production if not needed)
+                      setTimeout(() => {
+                        setRecordDrawerLoading(false);
+                      }, 300);
+                    };
+                    
                     // Create popup content using React component
                     const popupContent = renderReactPopup(
                       <RecordPopup
@@ -1369,6 +1406,7 @@ function EsriMap({
                         notes={props.notes}
                         filePath={filePath}
                         fileUrl={fileUrl && fileUrl.startsWith("http") ? fileUrl : undefined}
+                        onMoreDetails={openRecordDrawer}
                         onViewFile={async () => {
                           if (filePath) {
                             try {
@@ -2749,6 +2787,43 @@ function EsriMap({
           recordTypeForPopup = parts[1] || undefined;
         }
         
+        // Helper function to open drawer with bubble data
+        const openBubbleDrawer = () => {
+          setRecordDrawerLoading(true);
+          setSelectedRecord({
+            recordId,
+            filename: bubble.fileName,
+            thumbnail: undefined, // Bubbles don't have thumbnails yet
+            fileUrl: bubbleFileUrl && bubbleFileUrl.startsWith("http") ? bubbleFileUrl : undefined,
+            filePath: bubbleFilePath,
+            cloudinaryId: bubble.cloudinaryId || bubble.cloudinary_id || bubble.cloudinary_public_id,
+            intersectionGuess: undefined, // Not available in bubbles yet
+            trustScore: undefined, // Not available in bubbles yet
+            utilityType: utilityTypeForPopup,
+            city: undefined, // Not available in bubbles yet
+            textBlob: undefined, // Not available in bubbles yet
+            geometryType: "Point", // Bubbles are always points
+            recordType: recordTypeForPopup,
+            organization: bubble.orgName,
+            processedDate: bubble.processedDate || bubble.uploadedAt,
+            uploadedBy: bubble.uploadedBy,
+            feature: {
+              type: "Feature",
+              geometry: {
+                type: "Point",
+                coordinates: [bubble.position.lng, bubble.position.lat],
+              },
+            },
+            layer: marker,
+          });
+          setRecordDrawerOpen(true);
+          
+          // Simulate loading delay (remove in production if not needed)
+          setTimeout(() => {
+            setRecordDrawerLoading(false);
+          }, 300);
+        };
+        
         // Create popup using React component with fresh data
         const popupContent = renderReactPopup(
           <RecordPopup
@@ -2761,6 +2836,7 @@ function EsriMap({
             organization={bubble.orgName}
             filePath={bubbleFilePath}
             fileUrl={bubbleFileUrl && bubbleFileUrl.startsWith("http") ? bubbleFileUrl : undefined}
+            onMoreDetails={openBubbleDrawer}
             onViewFile={async () => {
               if (bubbleFilePath) {
                 try {
@@ -2816,12 +2892,6 @@ function EsriMap({
           maxWidth: 400,
         });
         markersGroupRef.current.addLayer(marker);
-        
-        // Ensure popup is properly initialized (force Leaflet to recognize the popup)
-        // This ensures new bubbles have working popups even after map stability improvements
-        if (marker.getPopup) {
-          marker.getPopup(); // Force popup initialization
-        }
       });
     }
 
@@ -2958,6 +3028,56 @@ function EsriMap({
           })
         })}
       </MapProvider>
+      
+      {/* Record Detail Drawer */}
+      <RecordDetailDrawer
+        open={recordDrawerOpen}
+        onOpenChange={setRecordDrawerOpen}
+        recordId={selectedRecord?.recordId}
+        filename={selectedRecord?.filename}
+        thumbnail={selectedRecord?.thumbnail}
+        fileUrl={selectedRecord?.fileUrl}
+        filePath={selectedRecord?.filePath}
+        cloudinaryId={selectedRecord?.cloudinaryId}
+        intersectionGuess={selectedRecord?.intersectionGuess}
+        trustScore={selectedRecord?.trustScore}
+        utilityType={selectedRecord?.utilityType}
+        city={selectedRecord?.city}
+        textBlob={selectedRecord?.textBlob}
+        geometryType={selectedRecord?.geometryType}
+        recordType={selectedRecord?.recordType}
+        organization={selectedRecord?.organization}
+        processedDate={selectedRecord?.processedDate}
+        uploadedBy={selectedRecord?.uploadedBy}
+        isLoading={recordDrawerLoading}
+        onZoomToRecord={() => {
+          if (selectedRecord?.feature && mapRef.current) {
+            try {
+              const geometry = selectedRecord.feature.geometry;
+              zoomToEsriFeature(mapRef.current, geometry);
+              console.log("✅ Zoomed to record:", selectedRecord.recordId);
+            } catch (error) {
+              console.error("Error zooming to record:", error);
+            }
+          }
+        }}
+        onViewFile={async () => {
+          const record = selectedRecord;
+          if (!record) return;
+          
+          if (record.filePath) {
+            try {
+              const signedUrl = await getSignedUrl(record.filePath, 3600);
+              window.open(signedUrl, "_blank");
+            } catch (error: any) {
+              console.error("Error generating signed URL:", error);
+              alert(`Failed to open file: ${error.message}`);
+            }
+          } else if (record.fileUrl && record.fileUrl.startsWith("http")) {
+            window.open(record.fileUrl, "_blank");
+          }
+        }}
+      />
     </div>
   );
 }
