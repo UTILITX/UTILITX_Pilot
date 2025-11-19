@@ -4,7 +4,6 @@ import { GeistMono } from 'geist/font/mono'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 import Sidebar from '@/components/Sidebar'
-import Topbar from '@/components/Topbar'
 
 export const metadata: Metadata = {
   title: 'v0 App',
@@ -24,7 +23,6 @@ export default function RootLayout({
           <div className="flex h-full w-full">
             <Sidebar />
             <div className="flex flex-col flex-1">
-              <Topbar />
               <main className="flex-1 bg-[var(--utilitx-gray-50)]">
                 <div className="h-full w-full overflow-auto">
                   {children}

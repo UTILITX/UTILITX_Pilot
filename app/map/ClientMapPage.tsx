@@ -7,6 +7,8 @@ import type { GeorefMode } from "@/lib/types"
 import { loadStagedRecords, saveStagedRecords } from "@/lib/storage"
 import { fetchAllRecordsFromEsri, fetchAllWorkAreasFromEsri, type IndexedRecord } from "@/lib/fetchAllEsriData"
 import { WorkAreaAnalysisDrawer } from "@/components/work-areas/WorkAreaAnalysisDrawer"
+import { NavigationPanel } from "@/components/navigation/NavigationPanel"
+import Topbar from "@/components/Topbar"
 import { computeWorkAreaCompleteness } from "@/lib/completeness"
 import { queryRecordsInPolygon } from "@/lib/esri-records"
 import RegionSearch from "@/components/RegionSearch"
@@ -81,6 +83,17 @@ export default function MapPage() {
   // Bottom Drawer (Project Index) state
   const [bottomDrawerOpen, setBottomDrawerOpen] = useState(false)
 
+  // Navigation mode state (for left sidebar navigation)
+  const [navigationMode, setNavigationMode] = useState<"workareas" | "records" | "insights" | "share" | "settings">("workareas")
+  const [navigationPanelOpen, setNavigationPanelOpen] = useState(false)
+
+  // When navigation mode changes, open the navigation panel (unless a work area is selected)
+  useEffect(() => {
+    if (!analysisOpen && !selectedWorkAreaForAnalysis) {
+      setNavigationPanelOpen(true)
+    }
+  }, [navigationMode, analysisOpen, selectedWorkAreaForAnalysis])
+
   // Esri data for drawer (separate from workflow records)
   const [esriRecords, setEsriRecords] = useState<IndexedRecord[]>([])
   const [workAreas, setWorkAreas] = useState<
@@ -128,6 +141,22 @@ const handleRecordGeorefComplete = (
 ) => {
   recordDrawingConfig?.onGeorefComplete?.(result, metadata)
   setRecordDrawingConfig(null)
+}
+
+const handleSelectProject = (id: string) => {
+  const workArea = workAreas.find((w) => w.id === id)
+  if (workArea) {
+    setSelectedWorkArea(workArea)
+    // Open the work area analysis drawer
+    setSelectedWorkAreaForAnalysis({
+      id: workArea.id,
+      name: workArea.name,
+      polygon: null, // Will be loaded when work area is clicked on map or geometry is fetched
+      data: workArea,
+    })
+    setAnalysisOpen(true)
+    setNavigationPanelOpen(false)
+  }
 }
 
   // Load Esri data on mount (for Project Index drawer)
@@ -190,8 +219,13 @@ const handleRecordGeorefComplete = (
 
   return (
     <UploadSectionProvider>
-      <>
-      <div className="relative h-full w-full overflow-hidden bg-white">
+      <div className="flex flex-col h-full w-full">
+        <Topbar
+          workAreas={workAreas}
+          selectedWorkArea={selectedWorkArea}
+          handleSelectProject={handleSelectProject}
+        />
+        <div className="relative flex-1 w-full overflow-hidden bg-white">
         <div className="absolute inset-0 z-[5]">
           {/* 🔥 PATCH 3: Memoize MapWithDrawing to prevent remounts on state changes */}
           {useMemo(() => (
@@ -283,37 +317,9 @@ const handleRecordGeorefComplete = (
         <div className="relative z-10 flex h-full w-full items-start justify-start pointer-events-none">
           <div className="pointer-events-auto">
             <LeftWorkspacePanel
-              mode="upload"
-              records={records}
-              setRecords={setRecords}
-              preloadedPolygon={preloadedPolygon}
-              preloadedAreaSqMeters={preloadedAreaSqMeters}
-              zoomToFeature={zoomToFeature}
-              onWorkAreaClick={(workArea) => {
-                setSelectedWorkAreaForAnalysis({
-                  id: workArea.id,
-                  name: workArea.name,
-                  polygon: workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null,
-                  data: workArea,
-                })
-              }}
-              onOpenWorkAreaAnalysis={(workArea) => {
-                setSelectedWorkAreaForAnalysis({
-                  id: workArea.id,
-                  name: workArea.name,
-                  polygon: workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null,
-                  data: {
-                    ...workArea,
-                    completenessLoading: true,
-                  },
-                })
-                setAnalysisOpen(true)
-              }}
-              onStartWorkAreaDraw={startWorkAreaDraw}
-              onStartWorkAreaSelection={startWorkAreaSelection}
-              onClearWorkArea={clearWorkArea}
-              onStartRecordDrawing={startRecordDrawing}
-              onOpenIndex={() => setBottomDrawerOpen(true)}
+              selectedMode={navigationMode}
+              onSelect={setNavigationMode}
+              projectName="Toronto, ON"
             />
           </div>
         </div>
@@ -330,6 +336,43 @@ const handleRecordGeorefComplete = (
         loading={completenessLoading}
         onStartRecordDrawing={startRecordDrawing}
         setRecords={setRecords}
+      />
+
+      <NavigationPanel
+        open={navigationPanelOpen && !analysisOpen}
+        onOpenChange={setNavigationPanelOpen}
+        mode={navigationMode}
+        esriRecords={esriRecords}
+        workAreas={workAreas}
+        onSelectWorkArea={(id) => {
+          const workArea = workAreas.find((w) => w.id === id)
+          if (workArea) {
+            setSelectedWorkAreaForAnalysis({
+              id: workArea.id,
+              name: workArea.name,
+              polygon: null, // Will be loaded when work area is clicked on map
+              data: workArea,
+            })
+            setAnalysisOpen(true)
+            setNavigationPanelOpen(false)
+          }
+        }}
+        onZoomToRecord={(rec) => {
+          setZoomSequence((prev: number) => {
+            const newVersion = prev + 1
+            setZoomToFeature({ feature: rec, version: newVersion })
+            setTimeout(() => setZoomToFeature(null), 150)
+            return newVersion
+          })
+        }}
+        onZoomToWorkArea={(wa) => {
+          setZoomSequence((prev: number) => {
+            const newVersion = prev + 1
+            setZoomToFeature({ feature: wa, version: newVersion })
+            setTimeout(() => setZoomToFeature(null), 150)
+            return newVersion
+          })
+        }}
       />
 
       <BottomDrawer
@@ -358,7 +401,7 @@ const handleRecordGeorefComplete = (
           })
         }}
         />
-      </>
+      </div>
     </UploadSectionProvider>
   )
 }

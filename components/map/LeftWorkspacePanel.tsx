@@ -1,203 +1,58 @@
 "use client"
 
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { RecordsTable } from "@/components/tables/RecordsTable"
-import { WorkAreasTable } from "@/components/tables/WorkAreasTable"
-import UploadTab from "@/components/workflows/upload-tab"
-import type { RequestRecord, LatLng } from "@/lib/record-types"
-import type { IndexedRecord } from "@/lib/fetchAllEsriData"
-import type { GeorefMode } from "@/lib/types"
-import { useState } from "react"
-import { BookOpen } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
-type Mode = "view" | "upload"
-
-interface WorkArea {
-  id: string
-  name: string
-  region?: string
-  owner?: string
-  createdBy?: string
-  date?: string
-  notes?: string
-  records?: any[]
-}
-
-type RecordDrawingRequest = {
-  georefMode: GeorefMode
-  georefColor?: string
-  pendingRecordMetadata?: any
-  onGeorefComplete?: (result: any, metadata?: any) => void
-}
+type NavigationMode = "workareas" | "records" | "insights" | "share" | "settings"
 
 interface LeftWorkspacePanelProps {
-  mode: Mode
-  // View mode props
-  esriRecords?: IndexedRecord[]
-  workAreas?: WorkArea[]
-  selectedWorkArea?: WorkArea | null
-  onSelectWorkArea?: (id: string | null) => void
-  onZoomToRecord?: (record: IndexedRecord) => void
-  onZoomToWorkArea?: (workArea: WorkArea) => void
-  onOpenIndex?: () => void
-  // Upload mode props
-  records?: RequestRecord[]
-  setRecords?: React.Dispatch<React.SetStateAction<RequestRecord[]>>
-  preloadedPolygon?: LatLng[] | null
-  preloadedAreaSqMeters?: number | null
-  zoomToFeature?: any | null
-  onWorkAreaClick?: (workArea: {
-    id?: string
-    name?: string
-    [key: string]: any
-  }) => void
-  onOpenWorkAreaAnalysis?: (workArea: {
-    id?: string
-    name?: string
-    geometry?: any
-    [key: string]: any
-  }) => void
-  onStartWorkAreaDraw?: () => void
-  onStartWorkAreaSelection?: () => void
-  onClearWorkArea?: () => void
-  onStartRecordDrawing?: (request: RecordDrawingRequest) => void
+  selectedMode?: NavigationMode
+  onSelect?: (mode: NavigationMode) => void
+  projectName?: string
 }
 
 export default function LeftWorkspacePanel({
-  mode,
-  esriRecords = [],
-  workAreas = [],
-  selectedWorkArea = null,
-  onSelectWorkArea,
-  onZoomToRecord,
-  onZoomToWorkArea,
-  onOpenIndex,
-  records = [],
-  setRecords,
-  preloadedPolygon,
-  preloadedAreaSqMeters,
-  zoomToFeature,
-  onWorkAreaClick,
-  onOpenWorkAreaAnalysis,
-  onStartWorkAreaDraw,
-  onStartWorkAreaSelection,
-  onClearWorkArea,
-  onStartRecordDrawing,
+  selectedMode = "workareas",
+  onSelect,
+  projectName = "Toronto, ON",
 }: LeftWorkspacePanelProps) {
-  // Filter state for RecordsTable (lifted to persist across tab switches)
-  const [utilityFilter, setUtilityFilter] = useState<string>("all")
-  const [typeFilter, setTypeFilter] = useState<string>("all")
-  const [orgFilter, setOrgFilter] = useState<string>("all")
-  const [geometryFilter, setGeometryFilter] = useState<string>("all")
-  const [hasFileFilter, setHasFileFilter] = useState<string>("all")
-  const [searchQuery, setSearchQuery] = useState<string>("")
+  const navItems: Array<{ mode: NavigationMode; label: string }> = [
+    { mode: "workareas", label: "Work Areas" },
+    { mode: "records", label: "Records" },
+    { mode: "insights", label: "Insights" },
+    { mode: "share", label: "Share" },
+    { mode: "settings", label: "Settings" },
+  ]
 
   return (
-    <div className="fixed left-[72px] top-[56px] h-[calc(100vh-64px)] w-[420px] bg-white shadow-xl rounded-r-2xl z-30 flex flex-col overflow-hidden border-r border-[var(--utilitx-gray-200)]" data-panel="project-index">
-      {mode === "view" ? (
-        <div className="flex flex-col h-full">
-          <div className="px-4 py-3 border-b border-[var(--utilitx-gray-200)]">
-            <h2 className="font-semibold text-lg text-[var(--utilitx-gray-900)]">Project Index</h2>
-          </div>
-          <Tabs defaultValue="workareas" className="flex-1 flex flex-col overflow-hidden">
-            <TabsList className="grid grid-cols-3 mx-4 mt-3 mb-2">
-              <TabsTrigger value="workareas">Work Areas</TabsTrigger>
-              <TabsTrigger value="records">Records</TabsTrigger>
-              <TabsTrigger value="layers">Layers</TabsTrigger>
-            </TabsList>
+    <aside className="fixed left-[72px] top-[56px] h-[calc(100vh-64px)] w-[256px] bg-white shadow-xl rounded-r-2xl z-30 flex flex-col border-r border-[var(--utilitx-gray-200)]">
+      {/* Project Header */}
+      <div className="px-4 py-6 border-b border-[var(--utilitx-gray-200)]">
+        <h2 className="text-xs text-[var(--utilitx-gray-600)] mb-1">Project</h2>
+        <p className="text-lg font-semibold text-[var(--utilitx-gray-900)]">{projectName}</p>
+      </div>
 
-            <TabsContent value="workareas" className="flex-1 overflow-hidden flex flex-col mt-0 px-4">
-              <div className="flex-1 overflow-y-auto">
-                <WorkAreasTable
-                  workAreas={workAreas}
-                  onSelectWorkArea={(id) => onSelectWorkArea?.(id)}
-                  onZoomToWorkArea={(wa) => onZoomToWorkArea?.(wa)}
-                />
-              </div>
-            </TabsContent>
-
-            <TabsContent value="records" className="flex-1 overflow-hidden flex flex-col mt-0 px-4">
-              <div className="flex-1 overflow-y-auto">
-                <RecordsTable
-                  records={esriRecords}
-                  onZoomToRecord={(rec) => onZoomToRecord?.(rec)}
-                  utilityFilter={utilityFilter}
-                  setUtilityFilter={setUtilityFilter}
-                  typeFilter={typeFilter}
-                  setTypeFilter={setTypeFilter}
-                  orgFilter={orgFilter}
-                  setOrgFilter={setOrgFilter}
-                  geometryFilter={geometryFilter}
-                  setGeometryFilter={setGeometryFilter}
-                  hasFileFilter={hasFileFilter}
-                  setHasFileFilter={setHasFileFilter}
-                  searchQuery={searchQuery}
-                  setSearchQuery={setSearchQuery}
-                />
-              </div>
-            </TabsContent>
-
-            <TabsContent value="layers" className="flex-1 overflow-hidden flex flex-col mt-0 px-4">
-              <div className="flex-1 overflow-y-auto">
-                <div className="p-4 text-sm text-[var(--utilitx-gray-600)]">
-                  <p className="font-medium mb-2">Map Layers</p>
-                  <p className="text-xs">Layer controls coming soon...</p>
-                </div>
-              </div>
-            </TabsContent>
-          </Tabs>
-          {/* Index Button at bottom */}
-          <div className="px-4 py-3 border-t border-[var(--utilitx-gray-200)]">
-            <Button
-              variant="outline"
-              className="w-full justify-start gap-2"
-              onClick={() => {
-                onOpenIndex?.()
-              }}
-            >
-              <BookOpen className="h-4 w-4" />
-              Index
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-col h-full overflow-hidden">
-          <style
-            dangerouslySetInnerHTML={{
-              __html: `
-                .upload-drawer-wrapper [class*="md:grid-cols-3"] {
-                  grid-template-columns: 1fr !important;
-                }
-              `,
-            }}
-          />
-          <div className="flex-1 overflow-y-auto">
-            {setRecords ? (
-              <div className="p-4 upload-drawer-wrapper">
-                <UploadTab
-                  records={records}
-                  setRecords={setRecords}
-                  preloadedPolygon={preloadedPolygon}
-                  preloadedAreaSqMeters={preloadedAreaSqMeters}
-                  zoomToFeature={zoomToFeature}
-                  onWorkAreaClick={onWorkAreaClick}
-                  onOpenWorkAreaAnalysis={onOpenWorkAreaAnalysis}
-                  onStartWorkAreaDraw={onStartWorkAreaDraw}
-                  onStartWorkAreaSelection={onStartWorkAreaSelection}
-                  onClearWorkArea={onClearWorkArea}
-                  onStartRecordDrawing={onStartRecordDrawing}
-                  onOpenIndex={onOpenIndex}
-                />
-              </div>
-            ) : (
-              <div className="p-4 text-sm text-[var(--utilitx-gray-600)]">
-                Upload functionality requires setRecords prop.
-              </div>
+      {/* Navigation */}
+      <nav className="flex-1 px-2 py-4 space-y-1">
+        {navItems.map((item) => (
+          <button
+            key={item.mode}
+            className={cn(
+              "w-full text-left py-2.5 px-3 rounded-md text-sm font-medium transition-colors",
+              selectedMode === item.mode
+                ? "bg-[var(--utilitx-gray-100)] text-[var(--utilitx-gray-900)]"
+                : "text-[var(--utilitx-gray-700)] hover:bg-[var(--utilitx-gray-50)]"
             )}
-          </div>
-        </div>
-      )}
-    </div>
+            onClick={() => onSelect?.(item.mode)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </nav>
+
+      {/* Footer */}
+      <div className="px-4 py-4 border-t border-[var(--utilitx-gray-200)]">
+        <div className="text-xs text-[var(--utilitx-gray-600)] font-medium">UTILITX</div>
+      </div>
+    </aside>
   )
 }

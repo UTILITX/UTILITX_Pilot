@@ -10,7 +10,24 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-export default function Topbar() {
+interface WorkArea {
+  id: string
+  name: string
+  region?: string
+  owner?: string
+  createdBy?: string
+  date?: string
+  notes?: string
+  records?: any[]
+}
+
+interface TopbarProps {
+  workAreas?: WorkArea[]
+  selectedWorkArea?: WorkArea | null
+  handleSelectProject?: (id: string) => void
+}
+
+export default function Topbar({ workAreas = [], selectedWorkArea = null, handleSelectProject }: TopbarProps) {
   return (
     <header className="sticky top-0 z-40 w-full h-16 bg-white border-b border-[var(--utilitx-gray-200)] shadow-sm">
       <div className="flex items-center justify-between h-full px-6">
@@ -21,14 +38,19 @@ export default function Topbar() {
 
         {/* Center: Project Selector */}
         <div className="flex-1 flex justify-center">
-          <Select>
+          <Select
+            value={selectedWorkArea?.id}
+            onValueChange={(id) => handleSelectProject?.(id)}
+          >
             <SelectTrigger className="w-[280px]">
-              <SelectValue placeholder="Select Project / Municipality" />
+              <SelectValue placeholder="Select Project / Work Area" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="project1">Project 1</SelectItem>
-              <SelectItem value="project2">Project 2</SelectItem>
-              <SelectItem value="municipality1">Municipality 1</SelectItem>
+              {workAreas.map((wa) => (
+                <SelectItem key={wa.id} value={wa.id}>
+                  {wa.name || wa.id}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
