@@ -40,17 +40,20 @@ export default function Topbar({ workAreas = [], selectedWorkArea = null, handle
         {/* Center: Project Selector */}
         <div className="flex-1 flex justify-center">
           <div className="flex items-center gap-3">
+            {/* Current Project Label */}
             <span className="text-sm text-muted-foreground whitespace-nowrap">
-              {selectedWorkArea ? "Current Project:" : "Select Project:"}
+              {selectedWorkArea
+                ? `Current Project: ${selectedWorkArea.name || selectedWorkArea.id}`
+                : "Select Project:"}
             </span>
 
-            {/* SELECT EXISTING – reuse your existing dropdown trigger */}
+            {/* Switch project dropdown */}
             <Select
               value={selectedWorkArea?.id}
               onValueChange={(id) => handleSelectProject?.(id)}
             >
               <SelectTrigger className="w-[220px]">
-                <SelectValue placeholder="Select Existing" />
+                <SelectValue placeholder="Switch Project" />
               </SelectTrigger>
               <SelectContent>
                 {workAreas.map((wa) => (
@@ -61,10 +64,10 @@ export default function Topbar({ workAreas = [], selectedWorkArea = null, handle
               </SelectContent>
             </Select>
 
-            {/* CREATE NEW – this triggers DRAW MODE */}
+            {/* Create New Project */}
             <button
               onClick={onCreateNew}
-              className="px-3 py-2 rounded-md border border-primary text-primary text-sm hover:bg-primary hover:text-primary-foreground transition-colors"
+              className="rounded-md bg-primary text-primary-foreground text-sm px-3 py-2 hover:bg-primary/90 transition-colors"
             >
               + Create New
             </button>

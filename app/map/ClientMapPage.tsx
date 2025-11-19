@@ -147,6 +147,10 @@ const handleSelectProject = (id: string) => {
   const workArea = workAreas.find((w) => w.id === id)
   if (workArea) {
     setSelectedWorkArea(workArea)
+    // Persist selection to localStorage
+    if (typeof window !== "undefined") {
+      localStorage.setItem("utilitx-current-work-area", workArea.id)
+    }
     // Open the work area analysis drawer
     setSelectedWorkAreaForAnalysis({
       id: workArea.id,
@@ -186,6 +190,31 @@ const handleSelectProject = (id: string) => {
 
     loadData();
   }, []);
+
+  // Restore saved project on page load
+  useEffect(() => {
+    if (!workAreas || workAreas.length === 0) return;
+    if (typeof window === "undefined") return;
+    if (selectedWorkArea) return; // Don't restore if already selected
+
+    const savedId = localStorage.getItem("utilitx-current-work-area");
+    if (!savedId) return;
+
+    const wa = workAreas.find((w) => w.id === savedId);
+    if (wa) {
+      console.log("🔄 Restoring saved project:", savedId);
+      // Restore the saved project state
+      setSelectedWorkArea(wa);
+      setSelectedWorkAreaForAnalysis({
+        id: wa.id,
+        name: wa.name,
+        polygon: null, // Will be loaded when work area is clicked on map or geometry is fetched
+        data: wa,
+      });
+      setAnalysisOpen(true);
+      setNavigationPanelOpen(false);
+    }
+  }, [workAreas, selectedWorkArea]);
 
   // Load staged records for workflow (separate from Esri data)
   useEffect(() => {
@@ -245,6 +274,7 @@ const handleSelectProject = (id: string) => {
                 setPreloadedAreaSqMeters(area ?? null)
                 setWorkAreaSelectionEnabled(false)
               }}
+              selectedWorkArea={selectedWorkArea}
               georefMode={recordDrawingConfig?.georefMode ?? "none"}
               georefColor={recordDrawingConfig?.georefColor}
               onGeorefComplete={handleRecordGeorefComplete}
@@ -320,7 +350,7 @@ const handleSelectProject = (id: string) => {
             <LeftWorkspacePanel
               selectedMode={navigationMode}
               onSelect={setNavigationMode}
-              projectName="Toronto, ON"
+              selectedWorkArea={selectedWorkArea}
             />
           </div>
         </div>

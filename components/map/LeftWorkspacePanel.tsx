@@ -7,13 +7,17 @@ type NavigationMode = "workareas" | "records" | "insights" | "share" | "settings
 interface LeftWorkspacePanelProps {
   selectedMode?: NavigationMode
   onSelect?: (mode: NavigationMode) => void
-  projectName?: string
+  selectedWorkArea?: {
+    id: string
+    name: string
+    [key: string]: any
+  } | null
 }
 
 export default function LeftWorkspacePanel({
   selectedMode = "workareas",
   onSelect,
-  projectName = "Toronto, ON",
+  selectedWorkArea = null,
 }: LeftWorkspacePanelProps) {
   const navItems: Array<{ mode: NavigationMode; label: string }> = [
     { mode: "workareas", label: "Work Areas" },
@@ -28,7 +32,13 @@ export default function LeftWorkspacePanel({
       {/* Project Header */}
       <div className="px-4 py-6 border-b border-[var(--utilitx-gray-200)]">
         <h2 className="text-xs text-[var(--utilitx-gray-600)] mb-1">Project</h2>
-        <p className="text-lg font-semibold text-[var(--utilitx-gray-900)]">{projectName}</p>
+        {selectedWorkArea ? (
+          <p className="text-lg font-semibold text-[var(--utilitx-gray-900)]">
+            {selectedWorkArea.name || selectedWorkArea.id}
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">No Project Selected</p>
+        )}
       </div>
 
       {/* Navigation */}

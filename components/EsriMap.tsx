@@ -181,6 +181,11 @@ type EsriMapProps = {
     geometry?: any;
     [key: string]: any;
   }) => void;
+  selectedWorkArea?: {
+    id: string;
+    name?: string;
+    [key: string]: any;
+  } | null;
   georefMode?: GeorefMode;
   georefColor?: string;
   onGeorefComplete?: (
@@ -214,6 +219,7 @@ function EsriMap({
   onWorkAreaSelected,
   onWorkAreaClick,
   onOpenWorkAreaAnalysis,
+  selectedWorkArea = null,
   georefMode = "none",
   georefColor,
   onGeorefComplete,
@@ -260,6 +266,28 @@ function EsriMap({
   const isRestoringViewRef = useRef(false);
   const isInitializingRef = useRef(false);
   const rebindWorkAreaPopupsRef = useRef<(() => void) | null>(null);
+  const selectedWorkAreaRef = useRef(selectedWorkArea);
+  
+  // Keep selectedWorkArea ref in sync with prop
+  useEffect(() => {
+    selectedWorkAreaRef.current = selectedWorkArea;
+  }, [selectedWorkArea]);
+
+  // Default work area style (keep existing)
+  const defaultWorkAreaStyle = {
+    color: "#0077ff",
+    weight: 2,
+    fillOpacity: 0.15,
+  };
+
+  // Selected work area highlight style
+  const selectedWorkAreaStyle = {
+    color: "#0057FF",            // UTILITX blue outline
+    weight: 4,                   // thicker border
+    fillColor: "#0057FF20",      // very light transparent fill
+    fillOpacity: 0.15,           // subtle so the map still shows
+    opacity: 1,
+  };
   
   // Record detail drawer state
   const [recordDrawerOpen, setRecordDrawerOpen] = useState(false);
@@ -1106,11 +1134,20 @@ function EsriMap({
     const workAreas = EL.featureLayer({
       url: process.env.NEXT_PUBLIC_WORKAREA_LAYER_URL!,
       apikey: process.env.NEXT_PUBLIC_ARCGIS_API_KEY!,
-      style: () => ({ color: "#0077ff", weight: 2, fillOpacity: 0.15 }),
+      style: () => defaultWorkAreaStyle,
       // 🔥 FIX: Ensure features are interactive
       interactive: true,
       onEachFeature: (feature: any, layer: L.Layer) => {
         bindWorkAreaPopup(feature, layer);
+        
+        // Apply highlight if this feature is the selected work area
+        const currentSelected = selectedWorkAreaRef.current;
+        if (currentSelected && feature.properties?.id === currentSelected.id) {
+          layer.setStyle(selectedWorkAreaStyle);
+        } else {
+          // Keep existing style
+          layer.setStyle(defaultWorkAreaStyle);
+        }
       },
     }).addTo(map);
 
@@ -2980,6 +3017,45 @@ function EsriMap({
       }
     }
   }, [bubbles, shapes]);
+
+  // Reapply styles when selectedWorkArea changes
+  useEffect(() => {
+    if (!workAreasLayerRef.current) return;
+
+    const workAreas = workAreasLayerRef.current;
+    const currentSelected = selectedWorkAreaRef.current;
+
+    try {
+      // Method 1: Try eachFeature if available
+      if (typeof workAreas.eachFeature === 'function') {
+        workAreas.eachFeature((feature: any, layer: L.Layer | null | undefined) => {
+          if (!feature || !layer) return;
+          
+          if (currentSelected && feature.properties?.id === currentSelected.id) {
+            layer.setStyle(selectedWorkAreaStyle);
+          } else {
+            layer.setStyle(defaultWorkAreaStyle);
+          }
+        });
+      } else {
+        // Method 2: Access through _layers
+        const layers = (workAreas as any)._layers || {};
+        Object.keys(layers).forEach((key) => {
+          const layer = layers[key];
+          if (layer && layer.feature) {
+            const feature = layer.feature;
+            if (currentSelected && feature.properties?.id === currentSelected.id) {
+              layer.setStyle(selectedWorkAreaStyle);
+            } else {
+              layer.setStyle(defaultWorkAreaStyle);
+            }
+          }
+        });
+      }
+    } catch (err) {
+      console.warn("Error reapplying work area styles:", err);
+    }
+  }, [selectedWorkArea]);
 
   // Cleanup effect for proper map teardown on hot reloads
   useEffect(() => {
