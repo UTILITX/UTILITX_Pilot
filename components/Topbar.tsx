@@ -25,9 +25,10 @@ interface TopbarProps {
   workAreas?: WorkArea[]
   selectedWorkArea?: WorkArea | null
   handleSelectProject?: (id: string) => void
+  onCreateNew?: () => void
 }
 
-export default function Topbar({ workAreas = [], selectedWorkArea = null, handleSelectProject }: TopbarProps) {
+export default function Topbar({ workAreas = [], selectedWorkArea = null, handleSelectProject, onCreateNew }: TopbarProps) {
   return (
     <header className="sticky top-0 z-40 w-full h-16 bg-white border-b border-[var(--utilitx-gray-200)] shadow-sm">
       <div className="flex items-center justify-between h-full px-6">
@@ -38,21 +39,36 @@ export default function Topbar({ workAreas = [], selectedWorkArea = null, handle
 
         {/* Center: Project Selector */}
         <div className="flex-1 flex justify-center">
-          <Select
-            value={selectedWorkArea?.id}
-            onValueChange={(id) => handleSelectProject?.(id)}
-          >
-            <SelectTrigger className="w-[280px]">
-              <SelectValue placeholder="Select Project / Work Area" />
-            </SelectTrigger>
-            <SelectContent>
-              {workAreas.map((wa) => (
-                <SelectItem key={wa.id} value={wa.id}>
-                  {wa.name || wa.id}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground whitespace-nowrap">
+              {selectedWorkArea ? "Current Project:" : "Select Project:"}
+            </span>
+
+            {/* SELECT EXISTING – reuse your existing dropdown trigger */}
+            <Select
+              value={selectedWorkArea?.id}
+              onValueChange={(id) => handleSelectProject?.(id)}
+            >
+              <SelectTrigger className="w-[220px]">
+                <SelectValue placeholder="Select Existing" />
+              </SelectTrigger>
+              <SelectContent>
+                {workAreas.map((wa) => (
+                  <SelectItem key={wa.id} value={wa.id}>
+                    {wa.name || wa.id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* CREATE NEW – this triggers DRAW MODE */}
+            <button
+              onClick={onCreateNew}
+              className="px-3 py-2 rounded-md border border-primary text-primary text-sm hover:bg-primary hover:text-primary-foreground transition-colors"
+            >
+              + Create New
+            </button>
+          </div>
         </div>
 
         {/* Right: Actions */}

@@ -224,6 +224,7 @@ const handleSelectProject = (id: string) => {
           workAreas={workAreas}
           selectedWorkArea={selectedWorkArea}
           handleSelectProject={handleSelectProject}
+          onCreateNew={startWorkAreaDraw}
         />
         <div className="relative flex-1 w-full overflow-hidden bg-white">
         <div className="absolute inset-0 z-[5]">
