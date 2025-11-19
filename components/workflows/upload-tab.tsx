@@ -27,6 +27,9 @@ const MapWithDrawing = dynamic(() => import("@/components/map-with-drawing"), {
 import type { MapBubble, GeorefShape } from "@/components/map-with-drawing";
 
 import { UtilityOverviewPanel } from "@/components/utility-overview-panel"
+import { UploadSection } from "@/components/upload/UploadSection"
+import { useUploadSection } from "@/components/upload/UploadSectionContext"
+import { utilityTypeOptions, recordTypeOptions, geometryTypeOptions } from "@/components/upload/upload-options"
 import type { UtilityType, RecordType } from "@/components/dual-record-selector"
 import { addFeatureToLayer } from "@/lib/esriUtils"
 import { getUtilityColorsFromPath, getUtilityColorsFromUtilityType } from "@/lib/utility-colors"
@@ -98,7 +101,6 @@ export default function UploadTab({
 
   const [selectedType, setSelectedType] = useState<SelectedType>(null)
   const [orgName, setOrgName] = useState<string>("")
-  const [files, setFiles] = useState<FileList | null>(null)
   const [uploaderName, setUploaderName] = useState<string>("")
 
   // New: secure sharing link flow
@@ -117,22 +119,31 @@ export default function UploadTab({
   const [pendingDropMeta, setPendingDropMeta] = useState<PendingDropMeta | null>(null)
   const [pendingRecordMetadata, setPendingRecordMetadata] = useState<any>(null)
 
-  const [pendingDrop, setPendingDrop] = useState<File[] | null>(null)
-  const [pendingManualFiles, setPendingManualFiles] = useState<File[] | null>(null)
   const [focusPoint, setFocusPoint] = useState<LatLng | null>(null)
 
   const [isDraggingSide, setIsDraggingSide] = useState(false)
   const sideDragDepthRef = useRef(0)
 
-  const [isDraggingAttach, setIsDraggingAttach] = useState(false)
-  const attachDragDepthRef = useRef(0)
-
-  const [selectedUtilityType, setSelectedUtilityType] = useState<UtilityType | null>(null)
-  const [selectedRecordType, setSelectedRecordType] = useState<RecordType | null>(null)
-  const [selectedGeometryType, setSelectedGeometryType] = useState<GeometryType | null>(null)
-
-  const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
-  const [fileUrls, setFileUrls] = useState<Map<File, { url: string; path: string }>>(new Map())
+  const {
+    selectedUtilityType,
+    setSelectedUtilityType,
+    selectedRecordType,
+    setSelectedRecordType,
+    selectedGeometryType,
+    setSelectedGeometryType,
+    uploadedFiles,
+    setUploadedFiles,
+    files,
+    setFiles,
+    fileUrls,
+    setFileUrls,
+    isDraggingAttach,
+    onAttachDrop,
+    onAttachDragOver,
+    onAttachDragLeave,
+    onFileInputChange,
+    resetUploadFlow,
+  } = useUploadSection()
   const [notes, setNotes] = useState<string>("")
 
   const [isGeometryComplete, setIsGeometryComplete] = useState(false)
@@ -842,56 +853,9 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
     })
   }
 
-  async function onAttachDrop(e: React.DragEvent<HTMLDivElement>) {
-    e.preventDefault()
-    setIsDraggingAttach(false)
-    const droppedFiles = extractFiles(e.dataTransfer)
-
-    // Upload files to Supabase storage
-    try {
-      toast({
-        title: "Uploading files...",
-        description: `Uploading ${droppedFiles.length} file(s) to storage...`,
-      })
-
-      const uploadResults = await uploadFilesToSupabase(droppedFiles)
-      
-      // Store files with their URLs
-      setUploadedFiles((prev) => [...prev, ...droppedFiles])
-      setFiles(e.dataTransfer.files)
-      
-      // Store file URLs in map
-      setFileUrls((prev) => {
-        const newMap = new Map(prev)
-        uploadResults.forEach((result) => {
-          newMap.set(result.file, { url: result.url, path: result.path })
-        })
-        return newMap
-      })
-
-      toast({
-        title: "Files uploaded",
-        description: `${droppedFiles.length} file(s) uploaded to storage. Update metadata and click "Draw on Map" to georeference.`,
-        variant: "default",
-      })
-    } catch (error: any) {
-      console.error("Error uploading files to Supabase:", error)
-      toast({
-        title: "Upload failed",
-        description: error.message || "Failed to upload files to storage. Please try again.",
-        variant: "destructive",
-      })
-    }
-  }
-
   function completeUpload() {
     // Reset all form state for new upload
-    setSelectedUtilityType(null)
-    setSelectedRecordType(null)
-    setSelectedGeometryType(null)
-    setUploadedFiles([])
-    setFileUrls(new Map())
-    setFiles(null)
+    resetUploadFlow()
     setOrgName("")
     setNotes("")
     setUploaderName("")
@@ -910,6 +874,7 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
       description: "Ready to start a new upload. Select utility type, record type, and upload files.",
     })
   }
+
 
   async function generateSecureLink() {
     if (!polygon || polygon.length < 3) {
@@ -1135,123 +1100,24 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
             <CardContent
               className={cn("space-y-4", !polygon || polygon.length < 3 ? "opacity-50 pointer-events-none" : "")}
             >
-              <div className="grid gap-3">
-                <Label className="text-sm font-medium">Utility Type</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    {
-                      value: "water",
-                      label: "Water",
-                    },
-                    {
-                      value: "wastewater",
-                      label: "Wastewater",
-                    },
-                    {
-                      value: "storm",
-                      label: "Storm",
-                    },
-                    {
-                      value: "gas",
-                      label: "Gas",
-                    },
-                    {
-                      value: "telecom",
-                      label: "Telecom",
-                    },
-                    {
-                      value: "electric",
-                      label: "Electric",
-                    },
-                  ].map((utility) => (
-                    <Button
-                      key={utility.value}
-                      variant="outline"
-                      className={cn(
-                        "h-auto p-3 flex items-center justify-center border-2 transition-all text-xs",
-                        selectedUtilityType === utility.value
-                          ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
-                          : "hover:bg-muted",
-                      )}
-                      onClick={() => setSelectedUtilityType(utility.value as UtilityType)}
-                    >
-                      <span className="font-medium">{utility.label}</span>
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid gap-3">
-                <Label className="text-sm font-medium">Record Type</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { value: "as built", label: "As Built" },
-                    { value: "permit", label: "Permit" },
-                    { value: "locate", label: "Locate" },
-                    { value: "other", label: "Other" },
-                  ].map((record) => (
-                    <Button
-                      key={record.value}
-                      variant="outline"
-                      className={cn(
-                        "h-auto p-3 flex items-center justify-center border-2 transition-all text-xs",
-                        selectedRecordType === record.value
-                          ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
-                          : "hover:bg-muted",
-                      )}
-                      onClick={() => setSelectedRecordType(record.value as RecordType)}
-                      disabled={!selectedUtilityType}
-                    >
-                      <span className="font-medium">{record.label}</span>
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid gap-3">
-                <Label className="text-sm font-medium">Geometry Type</Label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { value: "point", label: "Point", icon: "●" },
-                    { value: "line", label: "Line", icon: "━" },
-                    { value: "polygon", label: "Polygon", icon: "▢" },
-                  ].map((geometry) => (
-                    <Button
-                      key={geometry.value}
-                      variant="outline"
-                      className={cn(
-                        "h-auto p-3 flex flex-col items-center gap-2 border-2 transition-all text-xs",
-                        selectedGeometryType === geometry.value
-                          ? "bg-primary/10 text-primary border-primary hover:bg-primary/20"
-                          : "hover:bg-muted/50",
-                      )}
-                      onClick={() => setSelectedGeometryType(geometry.value as GeometryType)}
-                      disabled={!selectedRecordType}
-                    >
-                      <div
-                        className={cn(
-                          "w-6 h-6 rounded-full flex items-center justify-center text-lg font-bold border",
-                          selectedGeometryType === geometry.value
-                            ? "bg-primary/20 text-primary border-primary"
-                            : "bg-muted border-muted-foreground/20",
-                        )}
-                      >
-                        {geometry.icon}
-                      </div>
-                      <span className="font-medium">{geometry.label}</span>
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
-              {selectedUtilityType && selectedRecordType && selectedGeometryType && (
-                <div className="rounded-md border border-emerald-200 bg-emerald-50 text-emerald-800 p-3 text-sm">
-                  <span className="font-medium">Selection:</span>{" "}
-                  <span className="font-medium">
-                    {selectedUtilityType} • {selectedRecordType} • {selectedGeometryType}
-                  </span>
-                </div>
-              )}
+              <UploadSection
+                utilityTypes={utilityTypeOptions}
+                recordTypes={recordTypeOptions}
+                geometryTypes={geometryTypeOptions}
+                selectedUtilityType={selectedUtilityType}
+                selectedRecordType={selectedRecordType}
+                selectedGeometryType={selectedGeometryType}
+                onUtilityTypeSelect={(value) => setSelectedUtilityType(value as UtilityType)}
+                onRecordTypeSelect={(value) => setSelectedRecordType(value as RecordType)}
+                onGeometryTypeSelect={(value) => setSelectedGeometryType(value as GeometryType)}
+                onAttachDrop={onAttachDrop}
+                onAttachDragOver={onAttachDragOver}
+                onAttachDragLeave={onAttachDragLeave}
+                isDraggingAttach={isDraggingAttach}
+                onFileInputChange={onFileInputChange}
+                uploadedFiles={uploadedFiles}
+                files={files}
+              />
 
               <div className="grid gap-3">
                 <Label htmlFor="upl-org">Organization</Label>
@@ -1271,136 +1137,6 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                 />
-              </div>
-
-              <div
-                className="relative grid gap-3 rounded-md"
-                onDragEnter={(e) => e.preventDefault()}
-                onDragOver={(e) => e.preventDefault()}
-                onDragLeave={(e) => e.preventDefault()}
-                onDrop={onAttachDrop}
-              >
-                <Label htmlFor="upload-file-input">Files (PDF/Images/CAD)</Label>
-                <div
-                  className={cn(
-                    "rounded-md border p-2 transition-colors",
-                    isDraggingAttach ? "border-emerald-500 bg-emerald-50/40" : "border-muted",
-                  )}
-                >
-                  <Input
-                    id="upload-file-input"
-                    type="file"
-                    accept="application/pdf,image/png,image/jpeg,.dwg,.dxf,.tiff,.tif"
-                    multiple
-                    onChange={async (e) => {
-                      if (e.target.files) {
-                        const newFiles = Array.from(e.target.files)
-                        
-                        // Upload files to Supabase storage
-                        try {
-                          toast({
-                            title: "Uploading files...",
-                            description: `Uploading ${newFiles.length} file(s) to storage...`,
-                          })
-
-                          const uploadResults = await uploadFilesToSupabase(newFiles)
-                          
-                          // Store files with their URLs
-                          setUploadedFiles((prev) => [...prev, ...newFiles])
-                          setFiles(e.target.files)
-                          
-                          // Store file URLs in map
-                          setFileUrls((prev) => {
-                            const newMap = new Map(prev)
-                            uploadResults.forEach((result) => {
-                              newMap.set(result.file, { url: result.url, path: result.path })
-                            })
-                            return newMap
-                          })
-
-                          toast({
-                            title: "Files uploaded",
-                            description: `${newFiles.length} file(s) uploaded to storage. Update metadata and click "Draw on Map" to georeference.`,
-                            variant: "default",
-                          })
-                        } catch (error: any) {
-                          console.error("Error uploading files to Supabase:", error)
-                          toast({
-                            title: "Upload failed",
-                            description: error.message || "Failed to upload files to storage. Please try again.",
-                            variant: "destructive",
-                          })
-                        }
-                      }
-                    }}
-                  />
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    Drag files here to start the flow, or use the picker.
-                  </div>
-                </div>
-                {uploadedFiles.length > 0 ? (
-                  <div className="text-xs text-muted-foreground">
-                    {uploadedFiles.length} file(s) uploaded: {uploadedFiles.map((f) => f.name).join(", ")}
-                  </div>
-                ) : files && files.length > 0 ? (
-                  <div className="text-xs text-muted-foreground">{files.length} file(s) selected</div>
-                ) : null}
-
-                <div
-                  className={cn(
-                    "pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 rounded-md px-3 py-1 text-xs font-medium shadow-sm transition-opacity",
-                    isDraggingAttach ? "opacity-100 bg-emerald-600 text-white" : "opacity-0",
-                  )}
-                  aria-hidden={!isDraggingAttach}
-                >
-                  Drop files to start flow
-                </div>
-              </div>
-
-              <div
-                className={cn(
-                  "relative rounded-lg border-2 border-dashed p-8 text-center transition-all",
-                  isDraggingAttach
-                    ? "border-emerald-500 bg-emerald-50/50"
-                    : "border-muted-foreground/25 hover:border-muted-foreground/50",
-                  selectedUtilityType && selectedRecordType && selectedGeometryType
-                    ? "opacity-100"
-                    : "opacity-50 pointer-events-none",
-                )}
-                onDragEnter={(e) => e.preventDefault()}
-                onDragOver={(e) => e.preventDefault()}
-                onDragLeave={(e) => e.preventDefault()}
-                onDrop={onAttachDrop}
-              >
-                <div className="flex flex-col items-center gap-3">
-                  <div className="rounded-full bg-muted p-3">
-                    <svg
-                      className="h-6 w-6 text-muted-foreground"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                      />
-                    </svg>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">Drop files here to upload</p>
-                    <p className="text-xs text-muted-foreground">PDF, Images, CAD files supported</p>
-                  </div>
-                </div>
-
-                {isDraggingAttach && (
-                  <div className="absolute inset-0 rounded-lg bg-emerald-500/10 border-2 border-emerald-500 flex items-center justify-center">
-                    <div className="bg-emerald-600 text-white px-4 py-2 rounded-md text-sm font-medium">
-                      Drop files to start upload flow
-                    </div>
-                  </div>
-                )}
               </div>
 
               <div className="flex items-center gap-2">
@@ -1620,31 +1356,6 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
 
     </div>
   )
-}
-
-function hasFiles(dt: DataTransfer | null | undefined) {
-  if (!dt) return false
-  if (dt.types) {
-    for (const t of Array.from(dt.types)) {
-      if (t === "Files") return true
-    }
-  }
-  return (dt.files && dt.files.length > 0) || (dt.items && dt.items.length > 0)
-}
-
-function extractFiles(dt: DataTransfer | null): File[] {
-  if (!dt) return []
-  if (dt.items && dt.items.length) {
-    const files: File[] = []
-    for (const item of Array.from(dt.items)) {
-      if (item.kind === "file") {
-        const file = item.getAsFile()
-        if (file) files.push(file)
-      }
-    }
-    return files
-  }
-  return Array.from(dt.files || [])
 }
 
 function centroidOfPath(path: LatLng[]): LatLng {

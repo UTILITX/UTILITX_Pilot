@@ -10,6 +10,7 @@ import { WorkAreaAnalysisDrawer } from "@/components/work-areas/WorkAreaAnalysis
 import { computeWorkAreaCompleteness } from "@/lib/completeness"
 import { queryRecordsInPolygon } from "@/lib/esri-records"
 import RegionSearch from "@/components/RegionSearch"
+import { UploadSectionProvider } from "@/components/upload/UploadSectionContext"
 
 // Dynamically import map components to avoid SSR issues with Leaflet
 const MapWithDrawing = nextDynamic(() => import("@/components/map-with-drawing"), {
@@ -188,7 +189,8 @@ const handleRecordGeorefComplete = (
   }, [records])
 
   return (
-    <>
+    <UploadSectionProvider>
+      <>
       <div className="relative h-full w-full overflow-hidden bg-white">
         <div className="absolute inset-0 z-[5]">
           {/* 🔥 PATCH 3: Memoize MapWithDrawing to prevent remounts on state changes */}
@@ -326,6 +328,8 @@ const handleRecordGeorefComplete = (
         records={records}
         data={selectedWorkAreaForAnalysis?.data}
         loading={completenessLoading}
+        onStartRecordDrawing={startRecordDrawing}
+        setRecords={setRecords}
       />
 
       <BottomDrawer
@@ -353,8 +357,9 @@ const handleRecordGeorefComplete = (
             return newVersion
           })
         }}
-      />
-    </>
+        />
+      </>
+    </UploadSectionProvider>
   )
 }
 
