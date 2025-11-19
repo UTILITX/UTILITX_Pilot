@@ -1,13 +1,15 @@
 "use client"
 
 import * as React from "react"
+import * as SheetPrimitive from "@radix-ui/react-dialog"
 import {
   Sheet,
-  SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import { XIcon } from "@/lib/icons"
+import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -45,6 +47,43 @@ type WorkAreaAnalysisDrawerProps = {
   onStartRecordDrawing?: (config: RecordDrawingConfig) => void
   setRecords?: React.Dispatch<React.SetStateAction<RequestRecord[]>>
 }
+
+// Custom SheetContent without overlay for GIS-style right panel
+// Prevents closing on outside clicks so map remains interactive
+const RightPanelSheetContent = React.forwardRef<
+  React.ElementRef<typeof SheetPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content>
+>(({ className, children, ...props }, ref) => (
+  <SheetPrimitive.Portal>
+    {/* NO OVERLAY - this is the key change for GIS apps */}
+    <SheetPrimitive.Content
+      ref={ref}
+      data-slot="sheet-content"
+      className={cn(
+        "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-[3000] flex flex-col gap-4 shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
+        "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-full w-full sm:w-[420px] lg:w-[480px] border-l border-[var(--utilitx-gray-200)]",
+        className,
+      )}
+      onInteractOutside={(e) => {
+        // Prevent closing when clicking on map or other elements outside
+        // Panel should only close via the X button
+        e.preventDefault()
+      }}
+      onPointerDownOutside={(e) => {
+        // Prevent closing on pointer down outside (map clicks)
+        e.preventDefault()
+      }}
+      {...props}
+    >
+      {children}
+      <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none">
+        <XIcon className="size-4" />
+        <span className="sr-only">Close</span>
+      </SheetPrimitive.Close>
+    </SheetPrimitive.Content>
+  </SheetPrimitive.Portal>
+))
+RightPanelSheetContent.displayName = "RightPanelSheetContent"
 
 export function WorkAreaAnalysisDrawer({
   open,
@@ -246,10 +285,13 @@ export function WorkAreaAnalysisDrawer({
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="group w-full sm:w-[420px] lg:w-[480px] overflow-y-auto p-6 bg-white border-l border-[var(--utilitx-gray-200)] animate-slideInRight animate-fadeIn"
+    <Sheet 
+      open={open} 
+      onOpenChange={onOpenChange}
+      modal={false}
+    >
+      <RightPanelSheetContent
+        className="group overflow-y-auto p-6 bg-white animate-slideInRight animate-fadeIn"
         style={{ boxShadow: "var(--utilitx-shadow-md)" }}
       >
         {/* Wrap all content in a div to avoid ref issues */}
@@ -414,7 +456,7 @@ export function WorkAreaAnalysisDrawer({
             </Button>
           </div>
         </div>
-      </SheetContent>
+      </RightPanelSheetContent>
     </Sheet>
   )
 }
