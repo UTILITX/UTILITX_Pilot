@@ -163,6 +163,31 @@ const handleSelectProject = (id: string) => {
   }
 }
 
+// Handle panel mode changes from left sidebar
+const handleSetPanelMode = (mode: "overview" | "records" | "insights" | "share" | "settings") => {
+  if (!selectedWorkArea) return // Don't open panels if no project selected
+  
+  if (mode === "overview") {
+    // Open work area analysis panel
+    setSelectedWorkAreaForAnalysis({
+      id: selectedWorkArea.id,
+      name: selectedWorkArea.name,
+      polygon: null,
+      data: selectedWorkArea,
+    })
+    setAnalysisOpen(true)
+    setNavigationPanelOpen(false)
+  } else {
+    // For other modes, update navigation mode and open navigation panel
+    const navMode = mode === "records" ? "records" : 
+                   mode === "insights" ? "insights" : 
+                   mode === "share" ? "share" : "settings"
+    setNavigationMode(navMode)
+    setNavigationPanelOpen(true)
+    setAnalysisOpen(false)
+  }
+}
+
   // Load Esri data on mount (for Project Index drawer)
   useEffect(() => {
     // Don't run during SSR
@@ -400,9 +425,9 @@ const handleSelectProject = (id: string) => {
         <div className="relative z-10 flex h-full w-full items-start justify-start pointer-events-none">
           <div className="pointer-events-auto">
             <LeftWorkspacePanel
-              selectedMode={navigationMode}
-              onSelect={setNavigationMode}
-              selectedWorkArea={selectedWorkArea}
+              currentProject={selectedWorkArea}
+              setPanelMode={handleSetPanelMode}
+              selectedMode={analysisOpen ? "overview" : navigationMode === "workareas" ? "overview" : navigationMode}
             />
           </div>
         </div>
