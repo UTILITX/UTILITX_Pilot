@@ -282,6 +282,20 @@ const handleSelectProject = (id: string) => {
               shouldStartRecordDraw={recordDrawCommand}
               pendingRecordMetadata={recordDrawingConfig?.pendingRecordMetadata}
               zoomToFeature={zoomToFeature}
+              onWorkAreaSelect={(workArea) => {
+                console.log("🖱️ Work area selected from click:", workArea.id);
+                // Update selected work area and open analysis panel
+                const workAreaToSelect = {
+                  id: workArea.id,
+                  name: workArea.name || workArea.id,
+                  region: workArea.region,
+                  owner: workArea.owner,
+                  createdBy: workArea.createdBy,
+                  date: workArea.date,
+                  notes: workArea.notes,
+                };
+                handleSelectProject(workArea.id);
+              }}
               onWorkAreaClick={(workArea) => {
                 setSelectedWorkAreaForAnalysis({
                   id: workArea.id,
@@ -289,6 +303,44 @@ const handleSelectProject = (id: string) => {
                   polygon: workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null,
                   data: workArea,
                 })
+              }}
+              onNewWorkAreaCreated={(newWorkArea) => {
+                // Immediately make new work area the selected project
+                console.log("🎉 New work area created, setting as active:", newWorkArea.id);
+                
+                // Add to work areas list if not already there
+                const workAreaToAdd = {
+                  id: newWorkArea.id,
+                  name: newWorkArea.name || newWorkArea.id,
+                  region: newWorkArea.region,
+                  owner: newWorkArea.owner,
+                  createdBy: newWorkArea.created_by || newWorkArea.createdBy,
+                  date: newWorkArea.timestamp || newWorkArea.date,
+                  notes: newWorkArea.notes,
+                };
+                
+                setWorkAreas((prev) => {
+                  if (prev.find((wa) => wa.id === newWorkArea.id)) {
+                    return prev;
+                  }
+                  return [...prev, workAreaToAdd];
+                });
+                
+                // Set as selected work area AND open analysis panel
+                setSelectedWorkArea(workAreaToAdd);
+                setSelectedWorkAreaForAnalysis({
+                  id: workAreaToAdd.id,
+                  name: workAreaToAdd.name,
+                  polygon: newWorkArea.geometry ? convertGeometryToPolygon(newWorkArea.geometry) : null,
+                  data: workAreaToAdd,
+                });
+                setAnalysisOpen(true);
+                setNavigationPanelOpen(false);
+                
+                // Persist to localStorage
+                if (typeof window !== "undefined") {
+                  localStorage.setItem("utilitx-current-work-area", workAreaToAdd.id);
+                }
               }}
               onOpenWorkAreaAnalysis={async (workArea) => {
                 const polygon = workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null

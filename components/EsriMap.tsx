@@ -181,6 +181,17 @@ type EsriMapProps = {
     geometry?: any;
     [key: string]: any;
   }) => void;
+  onNewWorkAreaCreated?: (workArea: {
+    id: string;
+    name?: string;
+    geometry?: any;
+    [key: string]: any;
+  }) => void;
+  onWorkAreaSelect?: (workArea: {
+    id: string;
+    name?: string;
+    [key: string]: any;
+  }) => void;
   selectedWorkArea?: {
     id: string;
     name?: string;
@@ -219,6 +230,8 @@ function EsriMap({
   onWorkAreaSelected,
   onWorkAreaClick,
   onOpenWorkAreaAnalysis,
+  onNewWorkAreaCreated,
+  onWorkAreaSelect,
   selectedWorkArea = null,
   georefMode = "none",
   georefColor,
@@ -273,19 +286,22 @@ function EsriMap({
     selectedWorkAreaRef.current = selectedWorkArea;
   }, [selectedWorkArea]);
 
-  // Default work area style (keep existing)
+  // Default work area style (de-emphasized for non-selected)
   const defaultWorkAreaStyle = {
-    color: "#0077ff",
+    color: "#3B82F6",
     weight: 2,
+    fillColor: "#3B82F622",
     fillOpacity: 0.15,
+    opacity: 0.6,
   };
 
-  // Selected work area highlight style
+  // Selected work area highlight style (stronger, dashed border)
   const selectedWorkAreaStyle = {
-    color: "#0057FF",            // UTILITX blue outline
-    weight: 4,                   // thicker border
-    fillColor: "#0057FF20",      // very light transparent fill
-    fillOpacity: 0.15,           // subtle so the map still shows
+    color: "#0047FF",
+    weight: 4,
+    dashArray: "4,3",
+    fillColor: "#0047FF33",
+    fillOpacity: 0.25,
     opacity: 1,
   };
   
@@ -879,6 +895,22 @@ function EsriMap({
                   }
                 } catch (popupErr) {
                   console.error('❌ Error opening popup:', popupErr, { workAreaId });
+                }
+                
+                // Update selection when work area is clicked
+                if (onWorkAreaSelect) {
+                  console.log("🖱️ Work area clicked, updating selection:", workAreaId);
+                  onWorkAreaSelect({
+                    id: workAreaId,
+                    name: props.name || props.workarea_name || props.work_area_name || `Work Area ${workAreaId}`,
+                    region: props.region,
+                    owner: props.owner,
+                    createdBy: props.created_by || props.createdBy,
+                    date: date,
+                    notes: props.notes,
+                    geometry: layerFeature?.geometry,
+                    ...props,
+                  });
                 }
                 
                 // Also call the callback if provided
@@ -1766,11 +1798,32 @@ function EsriMap({
       };
 
       try {
-          await addFeatureToLayer(
+          const saveResult = await addFeatureToLayer(
             process.env.NEXT_PUBLIC_WORKAREA_LAYER_URL!,
             geometry,
             attributes
           );
+              
+              // Get the new work area ID from the save result
+              // ArcGIS returns objectId in the addResults[0] object
+              let newWorkAreaId: string | undefined;
+              if (saveResult && saveResult.objectId !== undefined) {
+                // Format as WA-XXXX
+                newWorkAreaId = `WA-${String(saveResult.objectId).padStart(4, '0')}`;
+              }
+              
+              // Notify parent about new work area creation
+              if (onNewWorkAreaCreated && newWorkAreaId) {
+                const newWorkArea = {
+                  id: newWorkAreaId,
+                  name: `Work Area ${newWorkAreaId}`,
+                  geometry: geometry,
+                  ...attributes,
+                };
+                console.log("🎉 Notifying parent of new work area:", newWorkArea);
+                onNewWorkAreaCreated(newWorkArea);
+              }
+              
               if (workAreasLayerRef.current) {
                 workAreasLayerRef.current.refresh();
                 
@@ -3018,44 +3071,61 @@ function EsriMap({
     }
   }, [bubbles, shapes]);
 
-  // Reapply styles when selectedWorkArea changes
+  // Reapply styles when selectedWorkArea changes - wait for all layers to be loaded
   useEffect(() => {
-    if (!workAreasLayerRef.current) return;
+    if (!workAreasLayerRef.current || !selectedWorkArea) return;
 
-    const workAreas = workAreasLayerRef.current;
-    const currentSelected = selectedWorkAreaRef.current;
+    // Use a small delay to ensure all layer rebinding is complete
+    const timeoutId = setTimeout(() => {
+      console.log("🎨 Applying highlight style to selected WA:", selectedWorkArea.id);
 
-    try {
-      // Method 1: Try eachFeature if available
-      if (typeof workAreas.eachFeature === 'function') {
-        workAreas.eachFeature((feature: any, layer: L.Layer | null | undefined) => {
-          if (!feature || !layer) return;
-          
-          if (currentSelected && feature.properties?.id === currentSelected.id) {
-            layer.setStyle(selectedWorkAreaStyle);
-          } else {
-            layer.setStyle(defaultWorkAreaStyle);
-          }
-        });
-      } else {
-        // Method 2: Access through _layers
-        const layers = (workAreas as any)._layers || {};
-        Object.keys(layers).forEach((key) => {
-          const layer = layers[key];
-          if (layer && layer.feature) {
-            const feature = layer.feature;
-            if (currentSelected && feature.properties?.id === currentSelected.id) {
+      const workAreas = workAreasLayerRef.current;
+      const currentSelected = selectedWorkAreaRef.current;
+
+      if (!workAreas) return;
+
+      try {
+        // Method 1: Try eachFeature if available
+        if (typeof workAreas.eachFeature === 'function') {
+          workAreas.eachFeature((feature: any, layer: L.Layer | null | undefined) => {
+            if (!feature || !layer) return;
+            
+            const featureId = feature.properties?.id || feature.properties?.work_area_id || 
+              (feature.properties?.OBJECTID ? `WA-${String(feature.properties.OBJECTID).padStart(4, '0')}` : undefined);
+            
+            if (currentSelected && featureId === currentSelected.id) {
               layer.setStyle(selectedWorkAreaStyle);
+              console.log("✨ Styled as SELECTED:", featureId);
             } else {
               layer.setStyle(defaultWorkAreaStyle);
             }
-          }
-        });
+          });
+        } else {
+          // Method 2: Access through _layers
+          const layers = (workAreas as any)._layers || {};
+          Object.keys(layers).forEach((key) => {
+            const layer = layers[key];
+            if (layer && layer.feature) {
+              const feature = layer.feature;
+              const featureId = feature.properties?.id || feature.properties?.work_area_id || 
+                (feature.properties?.OBJECTID ? `WA-${String(feature.properties.OBJECTID).padStart(4, '0')}` : undefined);
+              
+              if (currentSelected && featureId === currentSelected.id) {
+                layer.setStyle(selectedWorkAreaStyle);
+                console.log("✨ Styled as SELECTED:", featureId);
+              } else {
+                layer.setStyle(defaultWorkAreaStyle);
+              }
+            }
+          });
+        }
+      } catch (err) {
+        console.warn("Error reapplying work area styles:", err);
       }
-    } catch (err) {
-      console.warn("Error reapplying work area styles:", err);
-    }
-  }, [selectedWorkArea]);
+    }, 100); // Small delay to ensure rebinding is complete
+
+    return () => clearTimeout(timeoutId);
+  }, [selectedWorkArea?.id]);
 
   // Cleanup effect for proper map teardown on hot reloads
   useEffect(() => {
