@@ -20,8 +20,13 @@ export async function GET(req: NextRequest) {
   const clientId = ARCGIS_CLIENT_ID || process.env.ARCGIS_CLIENT_ID;
   const clientSecret = process.env.ARCGIS_CLIENT_SECRET;
   
-  // 🚨 HARD-CODE redirect URI — must match exactly what was sent in login request
-  const redirectUri = "https://localhost:3000/api/auth/callback";
+  // Determine redirect URI - must match exactly what was sent in login request
+  const redirectUri = 
+    process.env.NEXT_PUBLIC_ARCGIS_REDIRECT_URI ||
+    (process.env.NODE_ENV === "production" 
+      ? `${req.nextUrl.origin}/api/auth/callback`
+      : "https://localhost:3000/api/auth/callback"
+    );
 
   // Debug logging
   console.log("🔍 DEBUG CLIENT_ID:", clientId ? `${clientId.substring(0, 10)}...` : "undefined");

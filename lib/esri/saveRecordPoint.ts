@@ -11,33 +11,40 @@ export async function saveRecordPoint(
     throw new Error("saveRecordPoint can only be called in the browser");
   }
 
-  // Dynamically import ArcGIS modules to avoid SSR issues
-  const FeatureLayer = (await import("@arcgis/core/layers/FeatureLayer")).default;
-  const IdentityManager = (await import("@arcgis/core/identity/IdentityManager")).default;
+  console.log("🔍 [saveRecordPoint] Getting OAuth token from API...");
 
-  // Register services domain
-  IdentityManager.registerServers([{ url: "https://services7.arcgis.com" }]);
-
-  const portalUrl = process.env.NEXT_PUBLIC_ARCGIS_PORTAL_URL || "https://indib78f3690c643.maps.arcgis.com";
-
-  const credential =
-    IdentityManager.findCredential(recordUrl) ||
-    IdentityManager.findCredential("https://services7.arcgis.com") ||
-    IdentityManager.findCredential(portalUrl);
-
-  // Create FeatureLayer
-  const layer = new FeatureLayer({
-    url: recordUrl,
-    outFields: ["*"],
-  });
-
-  // Attach credential if found
-  if (credential) {
-    layer.credential = credential;
+  // Get token from API (since it's in httpOnly cookie)
+  let token: string | null = null;
+  let username: string | null = null;
+  try {
+    const response = await fetch("/api/auth/check");
+    if (response.ok) {
+      const data = await response.json();
+      if (data.authenticated && data.token) {
+        token = data.token;
+        username = data.username || null;
+        console.log("✅ [saveRecordPoint] Got OAuth token from API");
+        console.log("🔍 [saveRecordPoint] Token length:", token?.length || 0);
+        console.log("🔍 [saveRecordPoint] Username:", username);
+      } else {
+        console.error("❌ [saveRecordPoint] Token check returned:", data);
+      }
+    } else {
+      const errorText = await response.text();
+      console.error("❌ [saveRecordPoint] Token check failed:", response.status, errorText);
+    }
+  } catch (err) {
+    console.error("❌ [saveRecordPoint] Failed to get token from API:", err);
+    throw new Error("Authentication required. Please log in.");
   }
 
+  if (!token) {
+    console.error("❌ [saveRecordPoint] No token available");
+    throw new Error("No authentication token available. Please log in.");
+  }
+
+  // Prepare geometry in ArcGIS format
   const geometry = {
-    type: "point",
     x: lng,
     y: lat,
     spatialReference: { wkid: 4326 },
@@ -48,22 +55,60 @@ export async function saveRecordPoint(
     created_at: new Date().toISOString(),
   };
 
-  console.log("💾 Saving record point with OAuth authentication...");
-  
-  const response = await layer.applyEdits({
-    addFeatures: [{ geometry, attributes }],
-  });
+  console.log("💾 [saveRecordPoint] Saving record point via direct REST API...");
+  console.log("🔍 [saveRecordPoint] Layer URL:", recordUrl);
+  console.log("🔍 [saveRecordPoint] Token present:", !!token);
 
-  // Check for errors
-  if (response.addFeatureResults && response.addFeatureResults.length > 0) {
-    const result = response.addFeatureResults[0];
-    if (!result.success) {
-      console.error("❌ Failed to save record point:", result.error);
-      throw new Error(result.error?.description || "Failed to save record point");
+  // CRITICAL: Make direct REST API call to bypass IdentityManager
+  // IdentityManager intercepts FeatureLayer requests and uses cached tokens
+  // By calling the REST API directly with fetch, we use the correct token
+  try {
+    const applyEditsUrl = `${recordUrl}/applyEdits`;
+    const formData = new FormData();
+    formData.append("f", "json");
+    formData.append("token", token || "");
+    formData.append("adds", JSON.stringify([{
+      geometry: geometry,
+      attributes: attributes,
+    }]));
+
+    console.log("🔍 [saveRecordPoint] Making direct REST API call to:", applyEditsUrl);
+
+    const response = await fetch(applyEditsUrl, {
+      method: "POST",
+      body: formData,
+    });
+
+    const result = await response.json();
+
+    console.log("✅ [saveRecordPoint] Direct REST API response:", result);
+
+    if (result.error) {
+      console.error("❌ [saveRecordPoint] Direct REST API error:", result.error);
+      throw new Error(
+        `ArcGIS applyEdits failed: ${result.error.message || "Unknown error"} (code ${result.error.code || "unknown"})`
+      );
     }
-    console.log("✅ Record point saved successfully:", result.objectId);
+
+    const addResult = result.addResults?.[0];
+    if (addResult?.error) {
+      console.error("❌ [saveRecordPoint] addResults error:", addResult.error);
+      throw new Error(
+        `ArcGIS applyEdits failed: ${addResult.error.message} (code ${addResult.error.code})`
+      );
+    }
+
+    if (!addResult?.success) {
+      console.error("❌ [saveRecordPoint] Save was not successful:", addResult);
+      throw new Error("Failed to save record point: Save operation returned unsuccessful");
+    }
+
+    console.log("✅ [saveRecordPoint] Successfully saved record point via direct REST API!");
+    console.log("🔍 [saveRecordPoint] Feature ID:", addResult?.objectId);
+    
+    return addResult;
+  } catch (fetchError: any) {
+    console.error("❌ [saveRecordPoint] Direct REST API call failed:", fetchError);
+    throw fetchError;
   }
-
-  return response;
 }
-

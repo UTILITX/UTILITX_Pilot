@@ -1,13 +1,28 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { ARCGIS_PORTAL_URL, ARCGIS_CLIENT_ID } from "@/lib/arcgis/config";
 
-export function GET() {
+export function GET(req: NextRequest) {
   const clientId = ARCGIS_CLIENT_ID || process.env.ARCGIS_CLIENT_ID;
 
-  // 🚨 HARD-CODE redirect URI — no more fallbacks or environment issues
-  const redirectUri = "https://localhost:3000/api/auth/callback";
+  // Determine redirect URI based on environment
+  // For production, use environment variable or derive from request
+  // For local development, use hardcoded localhost URL
+  const redirectUri = 
+    process.env.NEXT_PUBLIC_ARCGIS_REDIRECT_URI ||
+    (process.env.NODE_ENV === "production" 
+      ? `${req.nextUrl.origin}/api/auth/callback`
+      : "https://localhost:3000/api/auth/callback"
+    );
 
   console.log("🔍 LOGIN USING REDIRECT URI:", redirectUri);
+
+  if (!clientId) {
+    console.error("❌ Missing ArcGIS Client ID");
+    return NextResponse.json(
+      { error: "Missing OAuth client ID" },
+      { status: 500 }
+    );
+  }
 
   // Request both openid scope (for user identity) and feature layer access
   // The token needs to be valid for accessing feature services

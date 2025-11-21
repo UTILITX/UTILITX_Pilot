@@ -12,36 +12,43 @@ export async function saveRecordPolygon(
     throw new Error("saveRecordPolygon can only be called in the browser");
   }
 
-  // Dynamically import ArcGIS modules to avoid SSR issues
-  const FeatureLayer = (await import("@arcgis/core/layers/FeatureLayer")).default;
-  const IdentityManager = (await import("@arcgis/core/identity/IdentityManager")).default;
+  console.log("🔍 [saveRecordPolygon] Getting OAuth token from API...");
 
-  // Register services domain
-  IdentityManager.registerServers([{ url: "https://services7.arcgis.com" }]);
-
-  const portalUrl = process.env.NEXT_PUBLIC_ARCGIS_PORTAL_URL || "https://indib78f3690c643.maps.arcgis.com";
-
-  const credential =
-    IdentityManager.findCredential(polygonUrl) ||
-    IdentityManager.findCredential("https://services7.arcgis.com") ||
-    IdentityManager.findCredential(portalUrl);
-
-  // Create FeatureLayer
-  const layer = new FeatureLayer({
-    url: polygonUrl,
-    outFields: ["*"],
-  });
-
-  // Attach credential if found
-  if (credential) {
-    layer.credential = credential;
+  // Get token from API (since it's in httpOnly cookie)
+  let token: string | null = null;
+  let username: string | null = null;
+  try {
+    const response = await fetch("/api/auth/check");
+    if (response.ok) {
+      const data = await response.json();
+      if (data.authenticated && data.token) {
+        token = data.token;
+        username = data.username || null;
+        console.log("✅ [saveRecordPolygon] Got OAuth token from API");
+        console.log("🔍 [saveRecordPolygon] Token length:", token?.length || 0);
+        console.log("🔍 [saveRecordPolygon] Username:", username);
+      } else {
+        console.error("❌ [saveRecordPolygon] Token check returned:", data);
+      }
+    } else {
+      const errorText = await response.text();
+      console.error("❌ [saveRecordPolygon] Token check failed:", response.status, errorText);
+    }
+  } catch (err) {
+    console.error("❌ [saveRecordPolygon] Failed to get token from API:", err);
+    throw new Error("Authentication required. Please log in.");
   }
 
+  if (!token) {
+    console.error("❌ [saveRecordPolygon] No token available");
+    throw new Error("No authentication token available. Please log in.");
+  }
+
+  // Prepare geometry in ArcGIS format
   const rings = [coords.map((p) => [p.lng, p.lat])];
 
   const geometry = {
-    type: "polygon",
-    rings,
+    rings: rings,
     spatialReference: { wkid: 4326 },
   };
 
@@ -50,22 +57,60 @@ export async function saveRecordPolygon(
     created_at: new Date().toISOString(),
   };
 
-  console.log("💾 Saving record polygon with OAuth authentication...");
-  
-  const response = await layer.applyEdits({
-    addFeatures: [{ geometry, attributes }],
-  });
+  console.log("💾 [saveRecordPolygon] Saving record polygon via direct REST API...");
+  console.log("🔍 [saveRecordPolygon] Layer URL:", polygonUrl);
+  console.log("🔍 [saveRecordPolygon] Token present:", !!token);
 
-  // Check for errors
-  if (response.addFeatureResults && response.addFeatureResults.length > 0) {
-    const result = response.addFeatureResults[0];
-    if (!result.success) {
-      console.error("❌ Failed to save record polygon:", result.error);
-      throw new Error(result.error?.description || "Failed to save record polygon");
+  // CRITICAL: Make direct REST API call to bypass IdentityManager
+  // IdentityManager intercepts FeatureLayer requests and uses cached tokens
+  // By calling the REST API directly with fetch, we use the correct token
+  try {
+    const applyEditsUrl = `${polygonUrl}/applyEdits`;
+    const formData = new FormData();
+    formData.append("f", "json");
+    formData.append("token", token || "");
+    formData.append("adds", JSON.stringify([{
+      geometry: geometry,
+      attributes: attributes,
+    }]));
+
+    console.log("🔍 [saveRecordPolygon] Making direct REST API call to:", applyEditsUrl);
+
+    const response = await fetch(applyEditsUrl, {
+      method: "POST",
+      body: formData,
+    });
+
+    const result = await response.json();
+
+    console.log("✅ [saveRecordPolygon] Direct REST API response:", result);
+
+    if (result.error) {
+      console.error("❌ [saveRecordPolygon] Direct REST API error:", result.error);
+      throw new Error(
+        `ArcGIS applyEdits failed: ${result.error.message || "Unknown error"} (code ${result.error.code || "unknown"})`
+      );
     }
-    console.log("✅ Record polygon saved successfully:", result.objectId);
+
+    const addResult = result.addResults?.[0];
+    if (addResult?.error) {
+      console.error("❌ [saveRecordPolygon] addResults error:", addResult.error);
+      throw new Error(
+        `ArcGIS applyEdits failed: ${addResult.error.message} (code ${addResult.error.code})`
+      );
+    }
+
+    if (!addResult?.success) {
+      console.error("❌ [saveRecordPolygon] Save was not successful:", addResult);
+      throw new Error("Failed to save record polygon: Save operation returned unsuccessful");
+    }
+
+    console.log("✅ [saveRecordPolygon] Successfully saved record polygon via direct REST API!");
+    console.log("🔍 [saveRecordPolygon] Feature ID:", addResult?.objectId);
+    
+    return addResult;
+  } catch (fetchError: any) {
+    console.error("❌ [saveRecordPolygon] Direct REST API call failed:", fetchError);
+    throw fetchError;
   }
-
-  return response;
 }
-
