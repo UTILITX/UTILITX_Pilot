@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { ARCGIS_PORTAL_URL } from "@/lib/arcgis/config";
 
 /**
  * OAuth Callback Route
@@ -23,6 +24,7 @@ export async function GET(req: NextRequest) {
   console.log("🔍 DEBUG CLIENT_ID:", clientId ? `${clientId.substring(0, 10)}...` : "undefined");
   console.log("🔍 DEBUG SECRET:", clientSecret ? "present" : "missing");
   console.log("🔍 DEBUG REDIRECT_URI:", redirectUri);
+  console.log("🔍 DEBUG PORTAL_URL:", ARCGIS_PORTAL_URL);
 
   if (!clientId || !clientSecret) {
     console.error("❌ Missing ArcGIS OAuth credentials");
@@ -33,8 +35,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Exchange code for token - use your org portal
-    const tokenResponse = await fetch("https://indib78f3690c643.maps.arcgis.com/sharing/rest/oauth2/token", {
+    // Exchange code for token - use your org portal from config
+    const tokenResponse = await fetch(`${ARCGIS_PORTAL_URL}/sharing/rest/oauth2/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({

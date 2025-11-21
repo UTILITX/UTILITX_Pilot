@@ -13,6 +13,8 @@
  * to prevent conflicts between API key and OAuth token.
  */
 
+import { ARCGIS_PORTAL_URL } from "./arcgis/config";
+
 export function initBasemapApiKey() {
   // Only run in browser (not SSR)
   if (typeof window === "undefined") {
@@ -29,8 +31,8 @@ export function initBasemapApiKey() {
   import("@arcgis/core/config").then((esriConfigModule) => {
     const esriConfig = esriConfigModule.default;
     
-    // Set portal URL to your org portal
-    esriConfig.portalUrl = "https://indib78f3690c643.maps.arcgis.com/sharing/rest";
+    // Set portal URL to your org portal (with /sharing/rest suffix)
+    esriConfig.portalUrl = `${ARCGIS_PORTAL_URL}/sharing/rest`;
     
     // Only set if not already set (to avoid overriding OAuth)
     if (!esriConfig.apiKey) {
@@ -39,7 +41,7 @@ export function initBasemapApiKey() {
     } else {
       console.log("ℹ️ ArcGIS API key already set (possibly by another component)");
     }
-    console.log("✅ ArcGIS portal URL set to org portal");
+    console.log("✅ ArcGIS portal URL set to org portal:", ARCGIS_PORTAL_URL);
   }).catch((error) => {
     console.error("❌ Error initializing ArcGIS API key:", error);
   });

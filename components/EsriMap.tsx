@@ -12,7 +12,7 @@ import * as EL from "esri-leaflet";
 import { useToast } from "@/hooks/use-toast";
 import { getRecordsLayerUrl } from "@/lib/getRecordsLayerUrl";
 import { WORKAREA_URL, RECORDS_POINT_URL, RECORDS_LINE_URL, RECORDS_POLYGON_URL } from "@/lib/esriLayers";
-import { saveWorkArea } from "@/lib/esri/saveWorkArea";
+import { saveWorkArea } from "@/lib/arcgis/saveWorkArea";
 import { saveRecordPoint } from "@/lib/esri/saveRecordPoint";
 import { saveRecordLine } from "@/lib/esri/saveRecordLine";
 import { saveRecordPolygon } from "@/lib/esri/saveRecordPolygon";

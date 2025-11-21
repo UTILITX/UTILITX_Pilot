@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ARCGIS_PORTAL_URL } from "@/lib/arcgis/config";
 
 /**
  * OAuth Login Route
@@ -18,9 +19,10 @@ export function GET() {
 
   console.log("🔍 LOGIN DEBUG CLIENT_ID:", clientId ? `${clientId.substring(0, 10)}...` : "undefined");
   console.log("🔍 LOGIN DEBUG REDIRECT_URI:", redirectUri);
+  console.log("🔍 LOGIN DEBUG PORTAL_URL:", ARCGIS_PORTAL_URL);
 
-  // Build OAuth authorization URL - use your org portal
-  const authUrl = `https://indib78f3690c643.maps.arcgis.com/sharing/rest/oauth2/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&expiration=7200&scope=openid`;
+  // Build OAuth authorization URL - use your org portal from config
+  const authUrl = `${ARCGIS_PORTAL_URL}/sharing/rest/oauth2/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&expiration=7200&scope=openid`;
 
   return NextResponse.redirect(authUrl);
 }

@@ -1,84 +1,93 @@
+// contexts/ArcGISAuthContext.tsx
 "use client";
 
-import React, { createContext, useContext, useEffect, useLayoutEffect, useState, ReactNode } from "react";
-import { getToken, isAuthenticated } from "@/lib/arcgis-auth";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
+import type Credential from "@arcgis/core/identity/Credential";
+import { getCredential, setupIdentity, signOut } from "@/lib/arcgis/setupIdentity";
 
-interface ArcGISAuthContextType {
-  token: string | null;
+type ArcGISAuthContextValue = {
+  credential: Credential | null;
   isAuthenticated: boolean;
-  isLoading: boolean;
-  checkAuth: () => Promise<void>;
+  loading: boolean;
+  login: () => Promise<void>;
+  logout: () => void;
+};
+
+const ArcGISAuthContext = createContext<ArcGISAuthContextValue>({
+  credential: null,
+  isAuthenticated: false,
+  loading: true,
+  login: async () => {},
+  logout: () => {},
+});
+
+export function useArcGISAuth() {
+  return useContext(ArcGISAuthContext);
 }
 
-const ArcGISAuthContext = createContext<ArcGISAuthContextType | undefined>(undefined);
-
 export function ArcGISAuthProvider({ children }: { children: ReactNode }) {
-  // Setup ArcGIS IdentityManager to recognize OAuth tokens from cookies
-  // Use dynamic import to prevent SSR from loading @arcgis/core
-  // Use useLayoutEffect to run synchronously before any FeatureLayer components mount
-  useLayoutEffect(() => {
-    async function load() {
-      // Dynamic import ensures @arcgis/core is only loaded in the browser
-      const { setupIdentity } = await import("@/lib/esri/setupIdentity");
+  const [credential, setCredential] = useState<Credential | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function init() {
       try {
-        await setupIdentity();
-      } catch (error) {
-        console.error("Error setting up ArcGIS OAuth:", error);
+        console.log("🔐 ArcGISAuthProvider: initializing IdentityManager");
+        setupIdentity();
+        const cred = await getCredential();
+        if (!cancelled) {
+          setCredential(cred);
+        }
+      } catch (err) {
+        console.error("Error setting up ArcGIS OAuth:", err);
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     }
-    load();
+
+    init();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const [token, setToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const checkAuth = async () => {
-    setIsLoading(true);
+  const login = async () => {
     try {
-      // Get token from API route (which reads from HTTP-only cookies)
-      const response = await fetch("/api/auth/check");
-      if (response.ok) {
-        const data = await response.json();
-        if (data.authenticated && data.token) {
-          setToken(data.token);
-        } else {
-          setToken(null);
-        }
-      } else {
-        // Not authenticated
-        setToken(null);
-      }
-    } catch (error) {
-      console.error("Error checking auth:", error);
-      setToken(null);
-    } finally {
-      setIsLoading(false);
+      const cred = await getCredential();
+      setCredential(cred);
+    } catch (err) {
+      console.error("ArcGIS login failed:", err);
     }
   };
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
+  const logout = () => {
+    signOut();
+    setCredential(null);
+  };
 
   return (
     <ArcGISAuthContext.Provider
       value={{
-        token,
-        isAuthenticated: token !== null,
-        isLoading,
-        checkAuth,
+        credential,
+        isAuthenticated: !!credential,
+        loading,
+        login,
+        logout,
       }}
     >
       {children}
     </ArcGISAuthContext.Provider>
   );
-}
-
-export function useArcGISAuth() {
-  const context = useContext(ArcGISAuthContext);
-  if (context === undefined) {
-    throw new Error("useArcGISAuth must be used within an ArcGISAuthProvider");
-  }
-  return context;
 }
 
