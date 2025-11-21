@@ -335,6 +335,10 @@ async function saveWorkAreaInternal({ geometry, attributes }: SaveWorkAreaOption
       );
     }
 
+    console.log("✅ [saveWorkArea] Successfully saved work area via direct REST API!");
+    console.log("🔍 [saveWorkArea] Feature ID:", addResult?.objectId);
+    console.log("🔍 [saveWorkArea] Success:", addResult?.success);
+
     return addResult;
   } catch (fetchError: any) {
     console.error("❌ [saveWorkArea] Direct REST API call failed:", fetchError);
