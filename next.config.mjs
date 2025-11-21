@@ -34,6 +34,8 @@ const nextConfig = {
   // DO NOT use output: 'export' - it breaks next start and dynamic routes.
   // This configuration is required for Blaze plan networking (Supabase, Esri, GPT, Flask).
   
+  transpilePackages: ["@arcgis/core"],
+  
   typescript: {
     ignoreBuildErrors: true,
   },

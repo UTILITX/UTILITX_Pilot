@@ -1,10 +1,11 @@
 // lib/fetchAllEsriData.ts
 import { queryEsriLayer } from "./esriQuery";
+import { RECORDS_POINT_URL, RECORDS_LINE_URL, RECORDS_POLYGON_URL, WORKAREA_URL } from "./esriLayers";
 
-const RECORDS_POINT = process.env.NEXT_PUBLIC_RECORDS_POINT_LAYER_URL!;
-const RECORDS_LINE = process.env.NEXT_PUBLIC_RECORDS_LINE_LAYER_URL!;
-const RECORDS_POLYGON = process.env.NEXT_PUBLIC_RECORDS_POLYGON_LAYER_URL!;
-const WORKAREAS = process.env.NEXT_PUBLIC_WORKAREA_LAYER_URL!;
+const RECORDS_POINT = RECORDS_POINT_URL;
+const RECORDS_LINE = RECORDS_LINE_URL;
+const RECORDS_POLYGON = RECORDS_POLYGON_URL;
+const WORKAREAS = WORKAREA_URL;
 
 export interface IndexedRecord {
   id: string;
@@ -18,11 +19,11 @@ export interface IndexedRecord {
   fileUrl: string | null;
 }
 
-export async function fetchAllRecordsFromEsri(): Promise<IndexedRecord[]> {
+export async function fetchAllRecordsFromEsri(token?: string | null): Promise<IndexedRecord[]> {
   const [points, lines, polygons] = await Promise.all([
-    queryEsriLayer(RECORDS_POINT),
-    queryEsriLayer(RECORDS_LINE),
-    queryEsriLayer(RECORDS_POLYGON),
+    queryEsriLayer(RECORDS_POINT, token),
+    queryEsriLayer(RECORDS_LINE, token),
+    queryEsriLayer(RECORDS_POLYGON, token),
   ]);
 
   // Store original features with attributes for sorting
@@ -123,8 +124,8 @@ export async function fetchAllRecordsFromEsri(): Promise<IndexedRecord[]> {
   return allFeatures.map(f => f.record);
 }
 
-export async function fetchAllWorkAreasFromEsri() {
-  const features = await queryEsriLayer(WORKAREAS);
+export async function fetchAllWorkAreasFromEsri(token?: string | null) {
+  const features = await queryEsriLayer(WORKAREAS, token);
 
   return features.map((f: any) => {
     const attrs = f.attributes || {};

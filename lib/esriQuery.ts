@@ -1,10 +1,31 @@
-export async function queryEsriLayer(layerUrl: string) {
+export async function queryEsriLayer(layerUrl: string, token?: string | null) {
   // Prevent SSR
   if (typeof window === "undefined") {
     return [];
   }
 
-  const apiKey = process.env.NEXT_PUBLIC_ARCGIS_API_KEY!;
+  // Use provided token, or fall back to API key, or try to get from cookies
+  let authToken = token;
+  if (!authToken) {
+    // Try to get token from API route (reads from HTTP-only cookies)
+    try {
+      const tokenResponse = await fetch("/api/auth/check");
+      if (tokenResponse.ok) {
+        const tokenData = await tokenResponse.json();
+        if (tokenData.authenticated && tokenData.token) {
+          authToken = tokenData.token;
+        }
+      }
+    } catch (error) {
+      console.warn("Could not fetch token from API, falling back to API key");
+    }
+  }
+  
+  // Fall back to API key if no token
+  if (!authToken) {
+    authToken = process.env.NEXT_PUBLIC_ARCGIS_API_KEY!;
+  }
+
   const cleanUrl = layerUrl.replace(/\/$/, "");
   
   // Use ArcGIS REST API directly to ensure we get attributes
@@ -14,7 +35,7 @@ export async function queryEsriLayer(layerUrl: string) {
     where: "1=1", // Get all features
     outFields: "*", // Get all fields
     returnGeometry: "true",
-    token: apiKey,
+    token: authToken,
   });
 
   try {

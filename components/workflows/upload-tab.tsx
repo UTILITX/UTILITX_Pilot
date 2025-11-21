@@ -659,8 +659,22 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
           // Save to ArcGIS Point layer
           const targetUrl = getRecordsLayerUrl("Point");
           if (targetUrl) {
+            // Try to get token from API route
+            let authToken: string | null = null;
+            try {
+              const tokenResponse = await fetch("/api/auth/check");
+              if (tokenResponse.ok) {
+                const tokenData = await tokenResponse.json();
+                if (tokenData.authenticated && tokenData.token) {
+                  authToken = tokenData.token;
+                }
+              }
+            } catch (error) {
+              console.warn("Could not fetch token, using API key fallback");
+            }
+            
             savePromises.push(
-              addFeatureToLayer(targetUrl, geometry, attributes)
+              addFeatureToLayer(targetUrl, geometry, attributes, authToken)
                 .then((saveResult) => {
                   console.log(`✅ Feature added successfully:`, saveResult)
                   return saveResult

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import nextDynamic from "next/dynamic"
 import type { RequestRecord, LatLng } from "@/lib/record-types"
 import type { GeorefMode } from "@/lib/types"
@@ -13,6 +14,7 @@ import { computeWorkAreaCompleteness } from "@/lib/completeness"
 import { queryRecordsInPolygon } from "@/lib/esri-records"
 import RegionSearch from "@/components/RegionSearch"
 import { UploadSectionProvider } from "@/components/upload/UploadSectionContext"
+import { useArcGISAuth } from "@/contexts/ArcGISAuthContext"
 
 // Dynamically import map components to avoid SSR issues with Leaflet
 const MapWithDrawing = nextDynamic(() => import("@/components/map-with-drawing"), {
@@ -52,6 +54,13 @@ type RecordDrawingConfig = {
 }
 
 export default function MapPage() {
+  // ============================================
+  // ALL HOOKS MUST BE DECLARED FIRST (before any returns)
+  // ============================================
+  
+  const router = useRouter()
+  const { token, isAuthenticated, isLoading } = useArcGISAuth()
+  
   // Shared records state for the unified workflow (used by UploadTab)
   const [records, setRecords] = useState<RequestRecord[]>([])
   const [preloadedPolygon, setPreloadedPolygon] = useState<LatLng[] | null>(null)
@@ -87,13 +96,6 @@ export default function MapPage() {
   const [navigationMode, setNavigationMode] = useState<"workareas" | "records" | "insights" | "share" | "settings">("workareas")
   const [navigationPanelOpen, setNavigationPanelOpen] = useState(false)
 
-  // When navigation mode changes, open the navigation panel (unless a work area is selected)
-  useEffect(() => {
-    if (!analysisOpen && !selectedWorkAreaForAnalysis) {
-      setNavigationPanelOpen(true)
-    }
-  }, [navigationMode, analysisOpen, selectedWorkAreaForAnalysis])
-
   // Esri data for drawer (separate from workflow records)
   const [esriRecords, setEsriRecords] = useState<IndexedRecord[]>([])
   const [workAreas, setWorkAreas] = useState<
@@ -113,6 +115,21 @@ export default function MapPage() {
   const [workAreaSelectionEnabled, setWorkAreaSelectionEnabled] = useState(false)
   const [recordDrawingConfig, setRecordDrawingConfig] = useState<RecordDrawingConfig | null>(null)
   const [recordDrawCommand, setRecordDrawCommand] = useState(0)
+
+  // Check authentication on mount
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      // Redirect to login if not authenticated
+      router.push("/api/auth/login")
+    }
+  }, [isLoading, isAuthenticated, router])
+
+  // When navigation mode changes, open the navigation panel (unless a work area is selected)
+  useEffect(() => {
+    if (!analysisOpen && !selectedWorkAreaForAnalysis) {
+      setNavigationPanelOpen(true)
+    }
+  }, [navigationMode, analysisOpen, selectedWorkAreaForAnalysis])
 
   const startWorkAreaDraw = () => {
     setWorkAreaSelectionEnabled(false)
@@ -196,8 +213,8 @@ const handleSetPanelMode = (mode: "overview" | "records" | "insights" | "share" 
     async function loadData() {
       try {
         const [r, wa] = await Promise.all([
-          fetchAllRecordsFromEsri(),
-          fetchAllWorkAreasFromEsri(),
+          fetchAllRecordsFromEsri(token),
+          fetchAllWorkAreasFromEsri(token),
         ]);
 
         console.log("📥 Loaded records from Esri:", r.length);
@@ -214,7 +231,7 @@ const handleSetPanelMode = (mode: "overview" | "records" | "insights" | "share" 
     }
 
     loadData();
-  }, []);
+  }, [token]);
 
   // Restore saved project on page load
   useEffect(() => {
@@ -271,6 +288,38 @@ const handleSetPanelMode = (mode: "overview" | "records" | "insights" | "share" 
     saveStagedRecords(records)
   }, [records])
 
+  // ============================================
+  // CONDITIONAL RETURNS (after all hooks)
+  // ============================================
+
+  // Show loading state while checking auth
+  if (isLoading) {
+    return (
+      <div className="h-full w-full flex items-center justify-center bg-gray-100">
+        <div className="text-center">
+          <div className="text-lg font-medium text-gray-700">Checking authentication...</div>
+        </div>
+      </div>
+    )
+  }
+
+  // Show login prompt if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="h-full w-full flex items-center justify-center bg-gray-100">
+        <div className="text-center">
+          <div className="text-lg font-medium text-gray-700 mb-4">Authentication required</div>
+          <button
+            onClick={() => router.push("/api/auth/login")}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            Sign in with ArcGIS
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <UploadSectionProvider>
       <div className="flex flex-col h-full w-full">
@@ -300,6 +349,7 @@ const handleSetPanelMode = (mode: "overview" | "records" | "insights" | "share" 
                 setWorkAreaSelectionEnabled(false)
               }}
               selectedWorkArea={selectedWorkArea}
+              arcgisToken={token}
               georefMode={recordDrawingConfig?.georefMode ?? "none"}
               georefColor={recordDrawingConfig?.georefColor}
               onGeorefComplete={handleRecordGeorefComplete}

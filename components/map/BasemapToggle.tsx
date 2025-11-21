@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import * as EL from "esri-leaflet";
 import L from "leaflet";
+import { initBasemapApiKey } from "@/lib/esriConfigPublic";
 
 type BasemapToggleProps = {
   map: L.Map | null;
@@ -11,6 +12,9 @@ type BasemapToggleProps = {
 type BasemapType = "Imagery" | "Streets" | "Topographic";
 
 const BasemapToggle = ({ map }: BasemapToggleProps) => {
+  // Initialize API key for basemaps (ONLY for basemaps, not for FeatureLayers)
+  initBasemapApiKey();
+
   const [activeBasemap, setActiveBasemap] = useState<BasemapType>("Streets");
   const basemapLayersRef = useRef<Record<string, L.TileLayer>>({}); // Kept for compatibility but not used for switching
   const currentBasemapRef = useRef<L.TileLayer | null>(null);
@@ -20,7 +24,7 @@ const BasemapToggle = ({ map }: BasemapToggleProps) => {
 
     const apiKey = process.env.NEXT_PUBLIC_ARCGIS_API_KEY;
     if (!apiKey) {
-      console.warn("ArcGIS API key not found");
+      console.warn("⚠️ ArcGIS API key not found. Basemaps may not load correctly.");
       return;
     }
 
@@ -109,7 +113,7 @@ const BasemapToggle = ({ map }: BasemapToggleProps) => {
     // Create and add new basemap
     const apiKey = process.env.NEXT_PUBLIC_ARCGIS_API_KEY;
     if (!apiKey) {
-      console.warn("ArcGIS API key not found");
+      console.warn("⚠️ ArcGIS API key not found. Basemaps may not load correctly.");
       return;
     }
 

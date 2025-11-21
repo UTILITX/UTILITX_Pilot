@@ -12,6 +12,7 @@
     "firebase:serve": "npm run build && firebase serve"
   },
   "dependencies": {
+    "@arcgis/core": "^4.34.8",
     "@geoman-io/leaflet-geoman-free": "^2.18.3",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "latest",
