@@ -27,6 +27,9 @@ const MapWithDrawing = dynamic(() => import("@/components/map-with-drawing"), {
 import type { MapBubble, GeorefShape } from "@/components/map-with-drawing";
 
 import { UtilityOverviewPanel } from "@/components/utility-overview-panel"
+import { UploadSection } from "@/components/upload/UploadSection"
+import { useUploadSection } from "@/components/upload/UploadSectionContext"
+import { utilityTypeOptions, recordTypeOptions, geometryTypeOptions } from "@/components/upload/upload-options"
 import type { UtilityType, RecordType } from "@/components/dual-record-selector"
 import { addFeatureToLayer } from "@/lib/esriUtils"
 import { getUtilityColorsFromPath, getUtilityColorsFromUtilityType } from "@/lib/utility-colors"
@@ -98,7 +101,6 @@ export default function UploadTab({
 
   const [selectedType, setSelectedType] = useState<SelectedType>(null)
   const [orgName, setOrgName] = useState<string>("")
-  const [files, setFiles] = useState<FileList | null>(null)
   const [uploaderName, setUploaderName] = useState<string>("")
 
   // New: secure sharing link flow
@@ -117,22 +119,31 @@ export default function UploadTab({
   const [pendingDropMeta, setPendingDropMeta] = useState<PendingDropMeta | null>(null)
   const [pendingRecordMetadata, setPendingRecordMetadata] = useState<any>(null)
 
-  const [pendingDrop, setPendingDrop] = useState<File[] | null>(null)
-  const [pendingManualFiles, setPendingManualFiles] = useState<File[] | null>(null)
   const [focusPoint, setFocusPoint] = useState<LatLng | null>(null)
 
   const [isDraggingSide, setIsDraggingSide] = useState(false)
   const sideDragDepthRef = useRef(0)
 
-  const [isDraggingAttach, setIsDraggingAttach] = useState(false)
-  const attachDragDepthRef = useRef(0)
-
-  const [selectedUtilityType, setSelectedUtilityType] = useState<UtilityType | null>(null)
-  const [selectedRecordType, setSelectedRecordType] = useState<RecordType | null>(null)
-  const [selectedGeometryType, setSelectedGeometryType] = useState<GeometryType | null>(null)
-
-  const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
-  const [fileUrls, setFileUrls] = useState<Map<File, { url: string; path: string }>>(new Map())
+  const {
+    selectedUtilityType,
+    setSelectedUtilityType,
+    selectedRecordType,
+    setSelectedRecordType,
+    selectedGeometryType,
+    setSelectedGeometryType,
+    uploadedFiles,
+    setUploadedFiles,
+    files,
+    setFiles,
+    fileUrls,
+    setFileUrls,
+    isDraggingAttach,
+    onAttachDrop,
+    onAttachDragOver,
+    onAttachDragLeave,
+    onFileInputChange,
+    resetUploadFlow,
+  } = useUploadSection()
   const [notes, setNotes] = useState<string>("")
 
   const [isGeometryComplete, setIsGeometryComplete] = useState(false)
@@ -648,8 +659,22 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
           // Save to ArcGIS Point layer
           const targetUrl = getRecordsLayerUrl("Point");
           if (targetUrl) {
+            // Try to get token from API route
+            let authToken: string | null = null;
+            try {
+              const tokenResponse = await fetch("/api/auth/check");
+              if (tokenResponse.ok) {
+                const tokenData = await tokenResponse.json();
+                if (tokenData.authenticated && tokenData.token) {
+                  authToken = tokenData.token;
+                }
+              }
+            } catch (error) {
+              console.warn("Could not fetch token, using API key fallback");
+            }
+            
             savePromises.push(
-              addFeatureToLayer(targetUrl, geometry, attributes)
+              addFeatureToLayer(targetUrl, geometry, attributes, authToken)
                 .then((saveResult) => {
                   console.log(`✅ Feature added successfully:`, saveResult)
                   return saveResult
@@ -842,56 +867,9 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
     })
   }
 
-  async function onAttachDrop(e: React.DragEvent<HTMLDivElement>) {
-    e.preventDefault()
-    setIsDraggingAttach(false)
-    const droppedFiles = extractFiles(e.dataTransfer)
-
-    // Upload files to Supabase storage
-    try {
-      toast({
-        title: "Uploading files...",
-        description: `Uploading ${droppedFiles.length} file(s) to storage...`,
-      })
-
-      const uploadResults = await uploadFilesToSupabase(droppedFiles)
-      
-      // Store files with their URLs
-      setUploadedFiles((prev) => [...prev, ...droppedFiles])
-      setFiles(e.dataTransfer.files)
-      
-      // Store file URLs in map
-      setFileUrls((prev) => {
-        const newMap = new Map(prev)
-        uploadResults.forEach((result) => {
-          newMap.set(result.file, { url: result.url, path: result.path })
-        })
-        return newMap
-      })
-
-      toast({
-        title: "Files uploaded",
-        description: `${droppedFiles.length} file(s) uploaded to storage. Update metadata and click "Draw on Map" to georeference.`,
-        variant: "default",
-      })
-    } catch (error: any) {
-      console.error("Error uploading files to Supabase:", error)
-      toast({
-        title: "Upload failed",
-        description: error.message || "Failed to upload files to storage. Please try again.",
-        variant: "destructive",
-      })
-    }
-  }
-
   function completeUpload() {
     // Reset all form state for new upload
-    setSelectedUtilityType(null)
-    setSelectedRecordType(null)
-    setSelectedGeometryType(null)
-    setUploadedFiles([])
-    setFileUrls(new Map())
-    setFiles(null)
+    resetUploadFlow()
     setOrgName("")
     setNotes("")
     setUploaderName("")
@@ -910,6 +888,7 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
       description: "Ready to start a new upload. Select utility type, record type, and upload files.",
     })
   }
+
 
   async function generateSecureLink() {
     if (!polygon || polygon.length < 3) {
@@ -966,685 +945,14 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
     setDrawCommand(0)
   }, [])
 
+  // Step 3: Upload flow UI removed - now lives in Work Area panel
+  // All functionality remains intact via UploadSectionContext
   return (
-    <div className="space-y-4">
-      <header className="flex flex-col w-full px-4 pt-4 pb-2 border-b border-gray-200">
-        <div className="mb-2">
-          <h2 className="text-lg font-semibold leading-tight">Unified utility records workflow</h2>
-          <p className="text-sm text-muted-foreground leading-snug">
-            Space-first Records: One workflow to draw, upload, and share.
-          </p>
-        </div>
-        <div className="flex items-center gap-1 text-xs">
-          <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700">Upload</span>
-          <span className="px-2 py-0.5 rounded bg-sky-50 text-sky-700">Share</span>
-        </div>
-      </header>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        {/* Left Column - Define Work Area and Attach Records */}
-        <div className="space-y-4 md:col-span-1 md:h-[calc(100vh-12rem)] md:overflow-y-auto md:pr-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-          {/* Define Work Area - Step 1 */}
-          <Card className="relative z-10 bg-white rounded-xl border border-[var(--utilitx-gray-200)]" style={{ boxShadow: "var(--utilitx-shadow-light)" }}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-xl font-semibold text-[var(--utilitx-gray-900)]">
-                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-sm font-bold">
-                  1
-                </span>
-                Define Work Area
-              </CardTitle>
-              <CardDescription>Draw a polygon on the map to define your work area first.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="text-sm text-muted-foreground">
-                Click on the map to start drawing your work area polygon. This defines the boundary for your utility
-                records project.
-              </div>
-
-              {polygon && polygon.length >= 3 ? (
-                <div className="rounded-md border border-emerald-200 bg-emerald-50 text-emerald-800 p-3">
-                  <div className="flex items-center gap-2">
-                    <svg className="h-4 w-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span className="font-medium text-sm">Work area defined</span>
-                  </div>
-                  <div className="mt-1 text-xs">
-                    {polygon.length} vertices •{" "}
-                    {typeof areaSqMeters === "number"
-                      ? `${(areaSqMeters / 1_000_000).toFixed(3)} km²`
-                      : "Area calculated"}
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-md border border-amber-200 bg-amber-50 text-amber-800 p-3">
-                  <div className="flex items-center gap-2">
-                    <svg className="h-4 w-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
-                      />
-                    </svg>
-                    <span className="font-medium text-sm">Draw work area on map</span>
-                  </div>
-                  <div className="mt-1 text-xs">Click the button below to start drawing your polygon boundary</div>
-                </div>
-              )}
-
-              {!polygon || polygon.length < 3 ? (
-                <div className="space-y-2">
-                  <Button
-                    onClick={() => {
-                      if (usingExternalMap && onStartWorkAreaDraw) {
-                        onStartWorkAreaDraw()
-                      } else {
-                        setDrawCommand((c) => c + 1)
-                      }
-                      setIsDrawingWorkArea(true)
-                      setIsSelectingWorkArea(false)
-                      toast({
-                        title: "Drawing mode activated",
-                        description: "Click on the map to start drawing your work area polygon. Double-click to finish.",
-                      })
-                    }}
-                    className="w-full"
-                    disabled={isDrawingWorkArea}
-                  >
-                    {isDrawingWorkArea ? "Drawing... Click on map" : "Draw Work Area"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      if (usingExternalMap && onStartWorkAreaSelection) {
-                        onStartWorkAreaSelection()
-                      }
-                      setIsSelectingWorkArea(true)
-                      setIsDrawingWorkArea(false)
-                      toast({
-                        title: "Selection mode activated",
-                        description: "Click on an existing work area polygon on the map to select it.",
-                      })
-                    }}
-                    className="w-full"
-                    disabled={isSelectingWorkArea}
-                  >
-                    {isSelectingWorkArea ? "Selecting... Click on map" : "Select Existing Work Area"}
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      onClearWorkArea?.()
-                      setPolygon(null)
-                      setAreaSqMeters(null)
-                      setIsDrawingWorkArea(false)
-                      setIsSelectingWorkArea(false)
-                    }}
-                    className="flex-1"
-                  >
-                    Clear Work Area
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      onClearWorkArea?.()
-                      if (usingExternalMap && onStartWorkAreaDraw) {
-                        onStartWorkAreaDraw()
-                      } else {
-                        setDrawCommand((c) => c + 1)
-                      }
-                      setIsDrawingWorkArea(true)
-                      toast({
-                        title: "Redraw mode activated",
-                        description: "Click on the map to draw a new work area polygon.",
-                      })
-                    }}
-                    className="flex-1"
-                  >
-                    Redraw
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Attach Records - Step 2 */}
-          <Card className="relative z-10 bg-white rounded-xl border border-[var(--utilitx-gray-200)]" style={{ boxShadow: "var(--utilitx-shadow-light)" }}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-xl font-semibold text-[var(--utilitx-gray-900)]">
-                <span
-                  className={cn(
-                    "flex items-center justify-center w-6 h-6 rounded-full text-sm font-bold",
-                    polygon && polygon.length >= 3 ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-400",
-                  )}
-                >
-                  2
-                </span>
-                Attach Records
-              </CardTitle>
-              <CardDescription>
-                {polygon && polygon.length >= 3
-                  ? "Follow the steps to attach your utility records."
-                  : "Define work area first, then attach records."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent
-              className={cn("space-y-4", !polygon || polygon.length < 3 ? "opacity-50 pointer-events-none" : "")}
-            >
-              <div className="grid gap-3">
-                <Label className="text-sm font-medium">Utility Type</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    {
-                      value: "water",
-                      label: "Water",
-                    },
-                    {
-                      value: "wastewater",
-                      label: "Wastewater",
-                    },
-                    {
-                      value: "storm",
-                      label: "Storm",
-                    },
-                    {
-                      value: "gas",
-                      label: "Gas",
-                    },
-                    {
-                      value: "telecom",
-                      label: "Telecom",
-                    },
-                    {
-                      value: "electric",
-                      label: "Electric",
-                    },
-                  ].map((utility) => (
-                    <Button
-                      key={utility.value}
-                      variant="outline"
-                      className={cn(
-                        "h-auto p-3 flex items-center justify-center border-2 transition-all text-xs",
-                        selectedUtilityType === utility.value
-                          ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
-                          : "hover:bg-muted",
-                      )}
-                      onClick={() => setSelectedUtilityType(utility.value as UtilityType)}
-                    >
-                      <span className="font-medium">{utility.label}</span>
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid gap-3">
-                <Label className="text-sm font-medium">Record Type</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { value: "as built", label: "As Built" },
-                    { value: "permit", label: "Permit" },
-                    { value: "locate", label: "Locate" },
-                    { value: "other", label: "Other" },
-                  ].map((record) => (
-                    <Button
-                      key={record.value}
-                      variant="outline"
-                      className={cn(
-                        "h-auto p-3 flex items-center justify-center border-2 transition-all text-xs",
-                        selectedRecordType === record.value
-                          ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
-                          : "hover:bg-muted",
-                      )}
-                      onClick={() => setSelectedRecordType(record.value as RecordType)}
-                      disabled={!selectedUtilityType}
-                    >
-                      <span className="font-medium">{record.label}</span>
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid gap-3">
-                <Label className="text-sm font-medium">Geometry Type</Label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { value: "point", label: "Point", icon: "●" },
-                    { value: "line", label: "Line", icon: "━" },
-                    { value: "polygon", label: "Polygon", icon: "▢" },
-                  ].map((geometry) => (
-                    <Button
-                      key={geometry.value}
-                      variant="outline"
-                      className={cn(
-                        "h-auto p-3 flex flex-col items-center gap-2 border-2 transition-all text-xs",
-                        selectedGeometryType === geometry.value
-                          ? "bg-primary/10 text-primary border-primary hover:bg-primary/20"
-                          : "hover:bg-muted/50",
-                      )}
-                      onClick={() => setSelectedGeometryType(geometry.value as GeometryType)}
-                      disabled={!selectedRecordType}
-                    >
-                      <div
-                        className={cn(
-                          "w-6 h-6 rounded-full flex items-center justify-center text-lg font-bold border",
-                          selectedGeometryType === geometry.value
-                            ? "bg-primary/20 text-primary border-primary"
-                            : "bg-muted border-muted-foreground/20",
-                        )}
-                      >
-                        {geometry.icon}
-                      </div>
-                      <span className="font-medium">{geometry.label}</span>
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
-              {selectedUtilityType && selectedRecordType && selectedGeometryType && (
-                <div className="rounded-md border border-emerald-200 bg-emerald-50 text-emerald-800 p-3 text-sm">
-                  <span className="font-medium">Selection:</span>{" "}
-                  <span className="font-medium">
-                    {selectedUtilityType} • {selectedRecordType} • {selectedGeometryType}
-                  </span>
-                </div>
-              )}
-
-              <div className="grid gap-3">
-                <Label htmlFor="upl-org">Organization</Label>
-                <Input
-                  id="upl-org"
-                  placeholder="e.g., City of Example"
-                  value={orgName}
-                  onChange={(e) => setOrgName(e.target.value)}
-                />
-              </div>
-
-              <div className="grid gap-3">
-                <Label htmlFor="upl-notes">Notes (optional)</Label>
-                <Input
-                  id="upl-notes"
-                  placeholder="e.g., Emergency repair work, located near main intersection"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                />
-              </div>
-
-              <div
-                className="relative grid gap-3 rounded-md"
-                onDragEnter={(e) => e.preventDefault()}
-                onDragOver={(e) => e.preventDefault()}
-                onDragLeave={(e) => e.preventDefault()}
-                onDrop={onAttachDrop}
-              >
-                <Label htmlFor="upload-file-input">Files (PDF/Images/CAD)</Label>
-                <div
-                  className={cn(
-                    "rounded-md border p-2 transition-colors",
-                    isDraggingAttach ? "border-emerald-500 bg-emerald-50/40" : "border-muted",
-                  )}
-                >
-                  <Input
-                    id="upload-file-input"
-                    type="file"
-                    accept="application/pdf,image/png,image/jpeg,.dwg,.dxf,.tiff,.tif"
-                    multiple
-                    onChange={async (e) => {
-                      if (e.target.files) {
-                        const newFiles = Array.from(e.target.files)
-                        
-                        // Upload files to Supabase storage
-                        try {
-                          toast({
-                            title: "Uploading files...",
-                            description: `Uploading ${newFiles.length} file(s) to storage...`,
-                          })
-
-                          const uploadResults = await uploadFilesToSupabase(newFiles)
-                          
-                          // Store files with their URLs
-                          setUploadedFiles((prev) => [...prev, ...newFiles])
-                          setFiles(e.target.files)
-                          
-                          // Store file URLs in map
-                          setFileUrls((prev) => {
-                            const newMap = new Map(prev)
-                            uploadResults.forEach((result) => {
-                              newMap.set(result.file, { url: result.url, path: result.path })
-                            })
-                            return newMap
-                          })
-
-                          toast({
-                            title: "Files uploaded",
-                            description: `${newFiles.length} file(s) uploaded to storage. Update metadata and click "Draw on Map" to georeference.`,
-                            variant: "default",
-                          })
-                        } catch (error: any) {
-                          console.error("Error uploading files to Supabase:", error)
-                          toast({
-                            title: "Upload failed",
-                            description: error.message || "Failed to upload files to storage. Please try again.",
-                            variant: "destructive",
-                          })
-                        }
-                      }
-                    }}
-                  />
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    Drag files here to start the flow, or use the picker.
-                  </div>
-                </div>
-                {uploadedFiles.length > 0 ? (
-                  <div className="text-xs text-muted-foreground">
-                    {uploadedFiles.length} file(s) uploaded: {uploadedFiles.map((f) => f.name).join(", ")}
-                  </div>
-                ) : files && files.length > 0 ? (
-                  <div className="text-xs text-muted-foreground">{files.length} file(s) selected</div>
-                ) : null}
-
-                <div
-                  className={cn(
-                    "pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 rounded-md px-3 py-1 text-xs font-medium shadow-sm transition-opacity",
-                    isDraggingAttach ? "opacity-100 bg-emerald-600 text-white" : "opacity-0",
-                  )}
-                  aria-hidden={!isDraggingAttach}
-                >
-                  Drop files to start flow
-                </div>
-              </div>
-
-              <div
-                className={cn(
-                  "relative rounded-lg border-2 border-dashed p-8 text-center transition-all",
-                  isDraggingAttach
-                    ? "border-emerald-500 bg-emerald-50/50"
-                    : "border-muted-foreground/25 hover:border-muted-foreground/50",
-                  selectedUtilityType && selectedRecordType && selectedGeometryType
-                    ? "opacity-100"
-                    : "opacity-50 pointer-events-none",
-                )}
-                onDragEnter={(e) => e.preventDefault()}
-                onDragOver={(e) => e.preventDefault()}
-                onDragLeave={(e) => e.preventDefault()}
-                onDrop={onAttachDrop}
-              >
-                <div className="flex flex-col items-center gap-3">
-                  <div className="rounded-full bg-muted p-3">
-                    <svg
-                      className="h-6 w-6 text-muted-foreground"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                      />
-                    </svg>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">Drop files here to upload</p>
-                    <p className="text-xs text-muted-foreground">PDF, Images, CAD files supported</p>
-                  </div>
-                </div>
-
-                {isDraggingAttach && (
-                  <div className="absolute inset-0 rounded-lg bg-emerald-500/10 border-2 border-emerald-500 flex items-center justify-center">
-                    <div className="bg-emerald-600 text-white px-4 py-2 rounded-md text-sm font-medium">
-                      Drop files to start upload flow
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  onClick={startDrawingGeometry}
-                  disabled={
-                    !selectedUtilityType || !selectedRecordType || !selectedGeometryType || uploadedFiles.length === 0
-                  }
-                  className="flex-1"
-                >
-                  Draw on Map
-                </Button>
-                {uploadedFiles.length > 0 && !isGeometryComplete && (
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setUploadedFiles([])
-                      setFiles(null)
-                    }}
-                  >
-                    Clear Files
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {records.some((r) => Array.isArray(r.files) && r.files.some((f) => f.status === "Georeferenced")) && (
-            <Card className="relative z-10 bg-white rounded-xl border border-[var(--utilitx-gray-200)]" style={{ boxShadow: "var(--utilitx-shadow-light)" }}>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium text-[var(--utilitx-gray-700)]">Quick Actions</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    const georefRecord = records.find((r) => Array.isArray(r.files) && r.files.some((f) => f.status === "Georeferenced"))
-                    if (georefRecord && Array.isArray(georefRecord.files)) {
-                      const georeferencedFile = georefRecord.files.find((f) => f.status === "Georeferenced")
-                      if (georeferencedFile) {
-                        startRedrawGeometry({ recordId: georefRecord.id, fileId: georeferencedFile.id })
-                      }
-                    }
-                  }}
-                  className="w-full"
-                >
-                  <Edit className="w-4 h-4 mr-2" />
-                  Redraw Geometry
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        {!usingExternalMap && (
-          <Card className="relative z-10 bg-white md:col-span-2 rounded-xl border border-[var(--utilitx-gray-200)]" style={{ boxShadow: "var(--utilitx-shadow-light)" }}>
-            <CardHeader>
-              <CardTitle className="text-xl font-semibold text-[var(--utilitx-gray-900)]">Work Area</CardTitle>
-              <CardDescription>Single map for drawing, georeferencing, and sharing.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="relative rounded-xl overflow-hidden border border-[var(--utilitx-gray-200)]" style={{ boxShadow: "var(--utilitx-shadow-light)" }}>
-                <div className="aspect-[4/3] w-full">
-                  <MapWithDrawing
-                    mode="draw"
-                    polygon={memoPolygon}
-                    onPolygonChange={handlePolygonChange}
-                    onWorkAreaSelected={(path, area) => {
-                      setPolygon(path)
-                      setAreaSqMeters(area ?? null)
-                      setIsSelectingWorkArea(false)
-                      toast({
-                        title: "Work area selected",
-                        description: "Selected work area from the map. You can now upload records.",
-                      })
-                    }}
-                    onWorkAreaClick={onWorkAreaClick}
-                    onOpenWorkAreaAnalysis={onOpenWorkAreaAnalysis}
-                    georefMode={georefMode}
-                    georefColor={georefColor}
-                    onGeorefComplete={handleGeorefComplete}
-                    pickPointActive={georefMode === "point"}
-                    pickZoom={16}
-                    bubbles={memoBubbles}
-                    shapes={memoShapes}
-                    enableDrop
-                    onDropFilesAt={handleDropFilesAt}
-                    focusPoint={focusPoint}
-                    focusZoom={16}
-                    zoomToFeature={zoomToFeature}
-                    shouldStartWorkAreaDraw={drawCommand}
-                    shouldStartRecordDraw={recordDrawCommand}
-                    pendingRecordMetadata={pendingRecordMetadata}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {records.length > 0 && <UtilityOverviewPanel records={records} className="mt-4 md:col-span-2" />}
-
-        <div className="flex flex-col gap-2 md:col-span-2">
-          <Button
-            variant="outline"
-            disabled={!polygon || polygon.length < 3}
-            onClick={() => {
-              onClearWorkArea?.()
-              setPolygon(null)
-              setAreaSqMeters(null)
-            }}
-          >
-            Remove polygon
-          </Button>
-
-          <Button
-            variant="outline"
-            onClick={() => setGenOpen(true)}
-            disabled={!polygon || polygon.length < 3}
-          >
-            Generate secure sharing link
-          </Button>
-
-          <Button
-            onClick={handleCompleteUpload}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white"
-            disabled={!polygon || polygon.length < 3}
-          >
-            Complete Upload & Start New
-          </Button>
-
-          <Button
-            variant="outline"
-            onClick={() => onOpenIndex?.()}
-            className="justify-center gap-2"
-          >
-            Project Index
-          </Button>
-        </div>
-      </div>
-
-      {/* Secure link dialogs */}
-      <Dialog open={genOpen} onOpenChange={setGenOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Generate secure sharing link</DialogTitle>
-            <DialogDescription>
-              Set details and a passcode. We encrypt the request in the URL for a secure share.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3">
-            <div className="grid gap-2">
-              <Label htmlFor="share-title">Work ID / Project Name (optional)</Label>
-              <Input
-                id="share-title"
-                placeholder="e.g., Main St. Corridor — Phase 2"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="share-deadline">Deadline (optional)</Label>
-              <Input id="share-deadline" type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="share-passcode">Passcode (required)</Label>
-              <Input
-                id="share-passcode"
-                type="password"
-                placeholder="Set a passcode to protect this link"
-                value={passcode}
-                onChange={(e) => setPasscode(e.target.value)}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setGenOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={generateSecureLink}>Create link</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={linkOpen} onOpenChange={setLinkOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Secure link ready</DialogTitle>
-            <DialogDescription>
-              The receiver will open the platform with your polygon preloaded and can contribute records.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-2">
-            <Label htmlFor="secure-link">Secure link</Label>
-            <Input id="secure-link" value={linkUrl} readOnly onFocus={(e) => e.currentTarget.select()} />
-            <div className="text-xs text-muted-foreground">Tip: We already copied this link to your clipboard.</div>
-          </div>
-          <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                navigator.clipboard.writeText(linkUrl).catch(() => {})
-              }}
-            >
-              Copy link
-            </Button>
-            <Button
-              onClick={() => {
-                window.open(linkUrl, "_blank", "noopener,noreferrer")
-              }}
-            >
-              Open link
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
+    <div className="p-4 text-xs text-muted-foreground space-y-2">
+      <p>Uploads now live in the Work Area panel.</p>
+      <p>Select a Work Area on the map to view completeness and attach records.</p>
     </div>
   )
-}
-
-function hasFiles(dt: DataTransfer | null | undefined) {
-  if (!dt) return false
-  if (dt.types) {
-    for (const t of Array.from(dt.types)) {
-      if (t === "Files") return true
-    }
-  }
-  return (dt.files && dt.files.length > 0) || (dt.items && dt.items.length > 0)
-}
-
-function extractFiles(dt: DataTransfer | null): File[] {
-  if (!dt) return []
-  if (dt.items && dt.items.length) {
-    const files: File[] = []
-    for (const item of Array.from(dt.items)) {
-      if (item.kind === "file") {
-        const file = item.getAsFile()
-        if (file) files.push(file)
-      }
-    }
-    return files
-  }
-  return Array.from(dt.files || [])
 }
 
 function centroidOfPath(path: LatLng[]): LatLng {

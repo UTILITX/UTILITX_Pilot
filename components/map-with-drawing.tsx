@@ -60,6 +60,23 @@ type MapWithDrawingProps = {
     geometry?: any;
     [key: string]: any;
   }) => void;
+  onNewWorkAreaCreated?: (workArea: {
+    id: string;
+    name?: string;
+    geometry?: any;
+    [key: string]: any;
+  }) => void;
+  onWorkAreaSelect?: (workArea: {
+    id: string;
+    name?: string;
+    [key: string]: any;
+  }) => void;
+  selectedWorkArea?: {
+    id: string;
+    name?: string;
+    [key: string]: any;
+  } | null;
+  arcgisToken?: string | null;
   georefMode?: GeorefMode;
   georefColor?: string;
   onGeorefComplete?: (
@@ -90,6 +107,10 @@ function MapWithDrawing({
   onWorkAreaSelected,
   onWorkAreaClick,
   onOpenWorkAreaAnalysis,
+  onNewWorkAreaCreated,
+  onWorkAreaSelect,
+  selectedWorkArea = null,
+  arcgisToken = null,
   georefMode = "none",
   georefColor,
   onGeorefComplete,
@@ -141,6 +162,10 @@ function MapWithDrawing({
         onWorkAreaSelected={onWorkAreaSelected}
         onWorkAreaClick={onWorkAreaClick}
         onOpenWorkAreaAnalysis={onOpenWorkAreaAnalysis}
+        onNewWorkAreaCreated={onNewWorkAreaCreated}
+        onWorkAreaSelect={onWorkAreaSelect}
+        selectedWorkArea={selectedWorkArea}
+        arcgisToken={arcgisToken}
         georefMode={georefMode}
         georefColor={georefColor}
         onGeorefComplete={onGeorefComplete}

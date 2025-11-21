@@ -1,8 +1,10 @@
 // lib/esri-records.ts
 
-const RECORDS_POINT = process.env.NEXT_PUBLIC_RECORDS_POINT_LAYER_URL!;
-const RECORDS_LINE = process.env.NEXT_PUBLIC_RECORDS_LINE_LAYER_URL!;
-const RECORDS_POLYGON = process.env.NEXT_PUBLIC_RECORDS_POLYGON_LAYER_URL!;
+import { RECORDS_POINT_URL, RECORDS_LINE_URL, RECORDS_POLYGON_URL } from "./esriLayers";
+
+const RECORDS_POINT = RECORDS_POINT_URL;
+const RECORDS_LINE = RECORDS_LINE_URL;
+const RECORDS_POLYGON = RECORDS_POLYGON_URL;
 
 /**
  * Converts LatLng[] polygon to ArcGIS JSON format for spatial queries

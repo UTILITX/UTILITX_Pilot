@@ -1,15 +1,20 @@
 "use client"
 
 import { useEffect, useState, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import nextDynamic from "next/dynamic"
 import type { RequestRecord, LatLng } from "@/lib/record-types"
 import type { GeorefMode } from "@/lib/types"
 import { loadStagedRecords, saveStagedRecords } from "@/lib/storage"
 import { fetchAllRecordsFromEsri, fetchAllWorkAreasFromEsri, type IndexedRecord } from "@/lib/fetchAllEsriData"
 import { WorkAreaAnalysisDrawer } from "@/components/work-areas/WorkAreaAnalysisDrawer"
+import { NavigationPanel } from "@/components/navigation/NavigationPanel"
+import Topbar from "@/components/Topbar"
 import { computeWorkAreaCompleteness } from "@/lib/completeness"
 import { queryRecordsInPolygon } from "@/lib/esri-records"
 import RegionSearch from "@/components/RegionSearch"
+import { UploadSectionProvider } from "@/components/upload/UploadSectionContext"
+import { useArcGISAuth } from "@/contexts/ArcGISAuthContext"
 
 // Dynamically import map components to avoid SSR issues with Leaflet
 const MapWithDrawing = nextDynamic(() => import("@/components/map-with-drawing"), {
@@ -49,6 +54,13 @@ type RecordDrawingConfig = {
 }
 
 export default function MapPage() {
+  // ============================================
+  // ALL HOOKS MUST BE DECLARED FIRST (before any returns)
+  // ============================================
+  
+  const router = useRouter()
+  const { token, isAuthenticated, isLoading } = useArcGISAuth()
+  
   // Shared records state for the unified workflow (used by UploadTab)
   const [records, setRecords] = useState<RequestRecord[]>([])
   const [preloadedPolygon, setPreloadedPolygon] = useState<LatLng[] | null>(null)
@@ -80,6 +92,10 @@ export default function MapPage() {
   // Bottom Drawer (Project Index) state
   const [bottomDrawerOpen, setBottomDrawerOpen] = useState(false)
 
+  // Navigation mode state (for left sidebar navigation)
+  const [navigationMode, setNavigationMode] = useState<"workareas" | "records" | "insights" | "share" | "settings">("workareas")
+  const [navigationPanelOpen, setNavigationPanelOpen] = useState(false)
+
   // Esri data for drawer (separate from workflow records)
   const [esriRecords, setEsriRecords] = useState<IndexedRecord[]>([])
   const [workAreas, setWorkAreas] = useState<
@@ -99,6 +115,21 @@ export default function MapPage() {
   const [workAreaSelectionEnabled, setWorkAreaSelectionEnabled] = useState(false)
   const [recordDrawingConfig, setRecordDrawingConfig] = useState<RecordDrawingConfig | null>(null)
   const [recordDrawCommand, setRecordDrawCommand] = useState(0)
+
+  // Check authentication on mount
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      // Redirect to login if not authenticated
+      router.push("/api/auth/login")
+    }
+  }, [isLoading, isAuthenticated, router])
+
+  // When navigation mode changes, open the navigation panel (unless a work area is selected)
+  useEffect(() => {
+    if (!analysisOpen && !selectedWorkAreaForAnalysis) {
+      setNavigationPanelOpen(true)
+    }
+  }, [navigationMode, analysisOpen, selectedWorkAreaForAnalysis])
 
   const startWorkAreaDraw = () => {
     setWorkAreaSelectionEnabled(false)
@@ -129,6 +160,51 @@ const handleRecordGeorefComplete = (
   setRecordDrawingConfig(null)
 }
 
+const handleSelectProject = (id: string) => {
+  const workArea = workAreas.find((w) => w.id === id)
+  if (workArea) {
+    setSelectedWorkArea(workArea)
+    // Persist selection to localStorage
+    if (typeof window !== "undefined") {
+      localStorage.setItem("utilitx-current-work-area", workArea.id)
+    }
+    // Open the work area analysis drawer
+    setSelectedWorkAreaForAnalysis({
+      id: workArea.id,
+      name: workArea.name,
+      polygon: null, // Will be loaded when work area is clicked on map or geometry is fetched
+      data: workArea,
+    })
+    setAnalysisOpen(true)
+    setNavigationPanelOpen(false)
+  }
+}
+
+// Handle panel mode changes from left sidebar
+const handleSetPanelMode = (mode: "overview" | "records" | "insights" | "share" | "settings") => {
+  if (!selectedWorkArea) return // Don't open panels if no project selected
+  
+  if (mode === "overview") {
+    // Open work area analysis panel
+    setSelectedWorkAreaForAnalysis({
+      id: selectedWorkArea.id,
+      name: selectedWorkArea.name,
+      polygon: null,
+      data: selectedWorkArea,
+    })
+    setAnalysisOpen(true)
+    setNavigationPanelOpen(false)
+  } else {
+    // For other modes, update navigation mode and open navigation panel
+    const navMode = mode === "records" ? "records" : 
+                   mode === "insights" ? "insights" : 
+                   mode === "share" ? "share" : "settings"
+    setNavigationMode(navMode)
+    setNavigationPanelOpen(true)
+    setAnalysisOpen(false)
+  }
+}
+
   // Load Esri data on mount (for Project Index drawer)
   useEffect(() => {
     // Don't run during SSR
@@ -137,8 +213,8 @@ const handleRecordGeorefComplete = (
     async function loadData() {
       try {
         const [r, wa] = await Promise.all([
-          fetchAllRecordsFromEsri(),
-          fetchAllWorkAreasFromEsri(),
+          fetchAllRecordsFromEsri(token),
+          fetchAllWorkAreasFromEsri(token),
         ]);
 
         console.log("📥 Loaded records from Esri:", r.length);
@@ -155,7 +231,32 @@ const handleRecordGeorefComplete = (
     }
 
     loadData();
-  }, []);
+  }, [token]);
+
+  // Restore saved project on page load
+  useEffect(() => {
+    if (!workAreas || workAreas.length === 0) return;
+    if (typeof window === "undefined") return;
+    if (selectedWorkArea) return; // Don't restore if already selected
+
+    const savedId = localStorage.getItem("utilitx-current-work-area");
+    if (!savedId) return;
+
+    const wa = workAreas.find((w) => w.id === savedId);
+    if (wa) {
+      console.log("🔄 Restoring saved project:", savedId);
+      // Restore the saved project state
+      setSelectedWorkArea(wa);
+      setSelectedWorkAreaForAnalysis({
+        id: wa.id,
+        name: wa.name,
+        polygon: null, // Will be loaded when work area is clicked on map or geometry is fetched
+        data: wa,
+      });
+      setAnalysisOpen(true);
+      setNavigationPanelOpen(false);
+    }
+  }, [workAreas, selectedWorkArea]);
 
   // Load staged records for workflow (separate from Esri data)
   useEffect(() => {
@@ -187,131 +288,208 @@ const handleRecordGeorefComplete = (
     saveStagedRecords(records)
   }, [records])
 
+  // ============================================
+  // MEMOIZED COMPONENTS (before return)
+  // ============================================
+  
+  // Memoize MapWithDrawing to prevent remounts on state changes
+  // MUST be at component top level (not inside JSX) per Rules of Hooks
+  const MemoizedMapWithDrawing = useMemo(() => (
+    <MapWithDrawing
+      mode="draw"
+      polygon={preloadedPolygon}
+      onPolygonChange={(path, area) => {
+        setPreloadedPolygon(path)
+        setPreloadedAreaSqMeters(area ?? null)
+        setWorkAreaSelectionEnabled(false)
+      }}
+      shouldStartWorkAreaDraw={workAreaDrawCommand}
+      enableWorkAreaSelection={workAreaSelectionEnabled}
+      onWorkAreaSelected={(path, area) => {
+        setPreloadedPolygon(path)
+        setPreloadedAreaSqMeters(area ?? null)
+        setWorkAreaSelectionEnabled(false)
+      }}
+      selectedWorkArea={selectedWorkArea}
+      arcgisToken={token}
+      georefMode={recordDrawingConfig?.georefMode ?? "none"}
+      georefColor={recordDrawingConfig?.georefColor}
+      onGeorefComplete={handleRecordGeorefComplete}
+      pickPointActive={recordDrawingConfig?.georefMode === "point"}
+      shouldStartRecordDraw={recordDrawCommand}
+      pendingRecordMetadata={recordDrawingConfig?.pendingRecordMetadata}
+      zoomToFeature={zoomToFeature}
+      onWorkAreaSelect={(workArea) => {
+        console.log("🖱️ Work area selected from click:", workArea.id);
+        // Update selected work area and open analysis panel
+        const workAreaToSelect = {
+          id: workArea.id,
+          name: workArea.name || workArea.id,
+          region: workArea.region,
+          owner: workArea.owner,
+          createdBy: workArea.createdBy,
+          date: workArea.date,
+          notes: workArea.notes,
+        };
+        handleSelectProject(workArea.id);
+      }}
+      onWorkAreaClick={(workArea) => {
+        setSelectedWorkAreaForAnalysis({
+          id: workArea.id,
+          name: workArea.name,
+          polygon: workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null,
+          data: workArea,
+        })
+      }}
+      onNewWorkAreaCreated={(newWorkArea) => {
+        // Immediately make new work area the selected project
+        console.log("🎉 New work area created, setting as active:", newWorkArea.id);
+        
+        // Add to work areas list if not already there
+        const workAreaToAdd = {
+          id: newWorkArea.id,
+          name: newWorkArea.name || newWorkArea.id,
+          region: newWorkArea.region,
+          owner: newWorkArea.owner,
+          createdBy: newWorkArea.created_by || newWorkArea.createdBy,
+          date: newWorkArea.timestamp || newWorkArea.date,
+          notes: newWorkArea.notes,
+        };
+        
+        setWorkAreas((prev) => {
+          if (prev.find((wa) => wa.id === newWorkArea.id)) {
+            return prev;
+          }
+          return [...prev, workAreaToAdd];
+        });
+        
+        // Set as selected work area AND open analysis panel
+        setSelectedWorkArea(workAreaToAdd);
+        setSelectedWorkAreaForAnalysis({
+          id: workAreaToAdd.id,
+          name: workAreaToAdd.name,
+          polygon: newWorkArea.geometry ? convertGeometryToPolygon(newWorkArea.geometry) : null,
+          data: workAreaToAdd,
+        });
+        setAnalysisOpen(true);
+        setNavigationPanelOpen(false);
+        
+        // Persist to localStorage
+        if (typeof window !== "undefined") {
+          localStorage.setItem("utilitx-current-work-area", workAreaToAdd.id);
+        }
+      }}
+      onOpenWorkAreaAnalysis={async (workArea) => {
+        const polygon = workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null
+
+        setSelectedWorkAreaForAnalysis({
+          id: workArea.id,
+          name: workArea.name,
+          polygon,
+          data: {
+            ...workArea,
+            completenessLoading: true,
+          },
+        })
+        setCompletenessLoading(true)
+        setAnalysisOpen(true)
+
+        try {
+          if (!polygon || polygon.length < 3) {
+            console.warn("No valid polygon on work area, cannot compute completeness.")
+            setCompletenessLoading(false)
+            return
+          }
+
+          const recordFeatures = await queryRecordsInPolygon(polygon)
+          const completeness = computeWorkAreaCompleteness({ records: recordFeatures })
+
+          setSelectedWorkAreaForAnalysis({
+            id: workArea.id,
+            name: workArea.name,
+            polygon,
+            data: {
+              ...workArea,
+              records: recordFeatures,
+              ...completeness,
+            },
+          })
+        } catch (error) {
+          console.error("❌ Error computing work area completeness:", error)
+        } finally {
+          setCompletenessLoading(false)
+        }
+      }}
+    >
+      <FloatingTools />
+      <RegionSearch />
+    </MapWithDrawing>
+  ), [
+    preloadedPolygon,
+    workAreaDrawCommand,
+    workAreaSelectionEnabled,
+    selectedWorkArea,
+    token,
+    recordDrawingConfig,
+    recordDrawCommand,
+    zoomToFeature,
+    // Note: Inline callbacks are recreated on each render, but that's acceptable
+    // The main benefit is preventing full component remount when these values don't change
+  ])
+
+  // ============================================
+  // CONDITIONAL RETURNS (after all hooks)
+  // ============================================
+
+  // Show loading state while checking auth
+  if (isLoading) {
+    return (
+      <div className="h-full w-full flex items-center justify-center bg-gray-100">
+        <div className="text-center">
+          <div className="text-lg font-medium text-gray-700">Checking authentication...</div>
+        </div>
+      </div>
+    )
+  }
+
+  // Show login prompt if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="h-full w-full flex items-center justify-center bg-gray-100">
+        <div className="text-center">
+          <div className="text-lg font-medium text-gray-700 mb-4">Authentication required</div>
+          <button
+            onClick={() => router.push("/api/auth/login")}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            Sign in with ArcGIS
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <>
-      <div className="relative h-full w-full overflow-hidden bg-white">
+    <UploadSectionProvider>
+      <div className="flex flex-col h-full w-full">
+        <Topbar
+          workAreas={workAreas}
+          selectedWorkArea={selectedWorkArea}
+          handleSelectProject={handleSelectProject}
+          onCreateNew={startWorkAreaDraw}
+        />
+        <div className="relative flex-1 w-full overflow-hidden bg-white">
         <div className="absolute inset-0 z-[5]">
-          {/* 🔥 PATCH 3: Memoize MapWithDrawing to prevent remounts on state changes */}
-          {useMemo(() => (
-            <MapWithDrawing
-              mode="draw"
-              polygon={preloadedPolygon}
-              onPolygonChange={(path, area) => {
-                setPreloadedPolygon(path)
-                setPreloadedAreaSqMeters(area ?? null)
-                setWorkAreaSelectionEnabled(false)
-              }}
-              shouldStartWorkAreaDraw={workAreaDrawCommand}
-              enableWorkAreaSelection={workAreaSelectionEnabled}
-              onWorkAreaSelected={(path, area) => {
-                setPreloadedPolygon(path)
-                setPreloadedAreaSqMeters(area ?? null)
-                setWorkAreaSelectionEnabled(false)
-              }}
-              georefMode={recordDrawingConfig?.georefMode ?? "none"}
-              georefColor={recordDrawingConfig?.georefColor}
-              onGeorefComplete={handleRecordGeorefComplete}
-              pickPointActive={recordDrawingConfig?.georefMode === "point"}
-              shouldStartRecordDraw={recordDrawCommand}
-              pendingRecordMetadata={recordDrawingConfig?.pendingRecordMetadata}
-              zoomToFeature={zoomToFeature}
-              onWorkAreaClick={(workArea) => {
-                setSelectedWorkAreaForAnalysis({
-                  id: workArea.id,
-                  name: workArea.name,
-                  polygon: workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null,
-                  data: workArea,
-                })
-              }}
-              onOpenWorkAreaAnalysis={async (workArea) => {
-                const polygon = workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null
-
-                setSelectedWorkAreaForAnalysis({
-                  id: workArea.id,
-                  name: workArea.name,
-                  polygon,
-                  data: {
-                    ...workArea,
-                    completenessLoading: true,
-                  },
-                })
-                setCompletenessLoading(true)
-                setAnalysisOpen(true)
-
-                try {
-                  if (!polygon || polygon.length < 3) {
-                    console.warn("No valid polygon on work area, cannot compute completeness.")
-                    setCompletenessLoading(false)
-                    return
-                  }
-
-                  const recordFeatures = await queryRecordsInPolygon(polygon)
-                  const completeness = computeWorkAreaCompleteness({ records: recordFeatures })
-
-                  setSelectedWorkAreaForAnalysis({
-                    id: workArea.id,
-                    name: workArea.name,
-                    polygon,
-                    data: {
-                      ...workArea,
-                      records: recordFeatures,
-                      ...completeness,
-                    },
-                  })
-                } catch (error) {
-                  console.error("❌ Error computing work area completeness:", error)
-                } finally {
-                  setCompletenessLoading(false)
-                }
-              }}
-            >
-              <FloatingTools />
-              <RegionSearch />
-            </MapWithDrawing>
-          ), [
-            preloadedPolygon,
-            workAreaDrawCommand,
-            workAreaSelectionEnabled,
-            recordDrawingConfig,
-            recordDrawCommand,
-            zoomToFeature,
-          ])}
+          {/* Memoized MapWithDrawing - prevents remounts on state changes */}
+          {MemoizedMapWithDrawing}
         </div>
 
         <div className="relative z-10 flex h-full w-full items-start justify-start pointer-events-none">
           <div className="pointer-events-auto">
             <LeftWorkspacePanel
-              mode="upload"
-              records={records}
-              setRecords={setRecords}
-              preloadedPolygon={preloadedPolygon}
-              preloadedAreaSqMeters={preloadedAreaSqMeters}
-              zoomToFeature={zoomToFeature}
-              onWorkAreaClick={(workArea) => {
-                setSelectedWorkAreaForAnalysis({
-                  id: workArea.id,
-                  name: workArea.name,
-                  polygon: workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null,
-                  data: workArea,
-                })
-              }}
-              onOpenWorkAreaAnalysis={(workArea) => {
-                setSelectedWorkAreaForAnalysis({
-                  id: workArea.id,
-                  name: workArea.name,
-                  polygon: workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null,
-                  data: {
-                    ...workArea,
-                    completenessLoading: true,
-                  },
-                })
-                setAnalysisOpen(true)
-              }}
-              onStartWorkAreaDraw={startWorkAreaDraw}
-              onStartWorkAreaSelection={startWorkAreaSelection}
-              onClearWorkArea={clearWorkArea}
-              onStartRecordDrawing={startRecordDrawing}
-              onOpenIndex={() => setBottomDrawerOpen(true)}
+              currentProject={selectedWorkArea}
+              setPanelMode={handleSetPanelMode}
+              selectedMode={analysisOpen ? "overview" : navigationMode === "workareas" ? "overview" : navigationMode}
             />
           </div>
         </div>
@@ -326,6 +504,45 @@ const handleRecordGeorefComplete = (
         records={records}
         data={selectedWorkAreaForAnalysis?.data}
         loading={completenessLoading}
+        onStartRecordDrawing={startRecordDrawing}
+        setRecords={setRecords}
+      />
+
+      <NavigationPanel
+        open={navigationPanelOpen && !analysisOpen}
+        onOpenChange={setNavigationPanelOpen}
+        mode={navigationMode}
+        esriRecords={esriRecords}
+        workAreas={workAreas}
+        onSelectWorkArea={(id) => {
+          const workArea = workAreas.find((w) => w.id === id)
+          if (workArea) {
+            setSelectedWorkAreaForAnalysis({
+              id: workArea.id,
+              name: workArea.name,
+              polygon: null, // Will be loaded when work area is clicked on map
+              data: workArea,
+            })
+            setAnalysisOpen(true)
+            setNavigationPanelOpen(false)
+          }
+        }}
+        onZoomToRecord={(rec) => {
+          setZoomSequence((prev: number) => {
+            const newVersion = prev + 1
+            setZoomToFeature({ feature: rec, version: newVersion })
+            setTimeout(() => setZoomToFeature(null), 150)
+            return newVersion
+          })
+        }}
+        onZoomToWorkArea={(wa) => {
+          setZoomSequence((prev: number) => {
+            const newVersion = prev + 1
+            setZoomToFeature({ feature: wa, version: newVersion })
+            setTimeout(() => setZoomToFeature(null), 150)
+            return newVersion
+          })
+        }}
       />
 
       <BottomDrawer
@@ -353,8 +570,9 @@ const handleRecordGeorefComplete = (
             return newVersion
           })
         }}
-      />
-    </>
+        />
+      </div>
+    </UploadSectionProvider>
   )
 }
 

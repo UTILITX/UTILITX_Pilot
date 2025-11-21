@@ -10,7 +10,25 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-export default function Topbar() {
+interface WorkArea {
+  id: string
+  name: string
+  region?: string
+  owner?: string
+  createdBy?: string
+  date?: string
+  notes?: string
+  records?: any[]
+}
+
+interface TopbarProps {
+  workAreas?: WorkArea[]
+  selectedWorkArea?: WorkArea | null
+  handleSelectProject?: (id: string) => void
+  onCreateNew?: () => void
+}
+
+export default function Topbar({ workAreas = [], selectedWorkArea = null, handleSelectProject, onCreateNew }: TopbarProps) {
   return (
     <header className="sticky top-0 z-40 w-full h-16 bg-white border-b border-[var(--utilitx-gray-200)] shadow-sm">
       <div className="flex items-center justify-between h-full px-6">
@@ -21,16 +39,39 @@ export default function Topbar() {
 
         {/* Center: Project Selector */}
         <div className="flex-1 flex justify-center">
-          <Select>
-            <SelectTrigger className="w-[280px]">
-              <SelectValue placeholder="Select Project / Municipality" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="project1">Project 1</SelectItem>
-              <SelectItem value="project2">Project 2</SelectItem>
-              <SelectItem value="municipality1">Municipality 1</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-3">
+            {/* Current Project Label */}
+            <span className="text-sm text-muted-foreground whitespace-nowrap">
+              {selectedWorkArea
+                ? `Current Project: ${selectedWorkArea.name || selectedWorkArea.id}`
+                : "Select Project:"}
+            </span>
+
+            {/* Switch project dropdown */}
+            <Select
+              value={selectedWorkArea?.id}
+              onValueChange={(id) => handleSelectProject?.(id)}
+            >
+              <SelectTrigger className="w-[220px]">
+                <SelectValue placeholder="Switch Project" />
+              </SelectTrigger>
+              <SelectContent>
+                {workAreas.map((wa) => (
+                  <SelectItem key={wa.id} value={wa.id}>
+                    {wa.name || wa.id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Create New Project */}
+            <button
+              onClick={onCreateNew}
+              className="rounded-md bg-primary text-primary-foreground text-sm px-3 py-2 hover:bg-primary/90 transition-colors"
+            >
+              + Create New
+            </button>
+          </div>
         </div>
 
         {/* Right: Actions */}

@@ -5,6 +5,8 @@
   "scripts": {
     "build": "next build",
     "dev": "next dev",
+    "dev:https": "next dev --experimental-https",
+    "dev:https:custom": "next dev --experimental-https --experimental-https-key cert/localhost.key --experimental-https-cert cert/localhost.crt",
     "lint": "next lint",
     "start": "next start",
     "deploy": "npm run build && firebase deploy",
@@ -12,6 +14,7 @@
     "firebase:serve": "npm run build && firebase serve"
   },
   "dependencies": {
+    "@arcgis/core": "^4.34.8",
     "@geoman-io/leaflet-geoman-free": "^2.18.3",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "latest",
