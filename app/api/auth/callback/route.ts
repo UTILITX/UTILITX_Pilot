@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { ARCGIS_PORTAL_URL } from "@/lib/arcgis/config";
+import { ARCGIS_PORTAL_URL, ARCGIS_CLIENT_ID } from "@/lib/arcgis/config";
 
 /**
  * OAuth Callback Route
@@ -16,9 +16,12 @@ export async function GET(req: NextRequest) {
 
   console.log("🔁 Received OAuth code:", code);
 
-  const clientId = process.env.ARCGIS_CLIENT_ID;
+  // Support both prefixed and non-prefixed env vars (server-side can read both)
+  const clientId = ARCGIS_CLIENT_ID || process.env.ARCGIS_CLIENT_ID;
   const clientSecret = process.env.ARCGIS_CLIENT_SECRET;
-  const redirectUri = process.env.ARCGIS_REDIRECT_URI || `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/auth/callback`;
+  
+  // 🚨 HARD-CODE redirect URI — must match exactly what was sent in login request
+  const redirectUri = "https://localhost:3000/api/auth/callback";
 
   // Debug logging
   console.log("🔍 DEBUG CLIENT_ID:", clientId ? `${clientId.substring(0, 10)}...` : "undefined");

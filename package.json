@@ -5,6 +5,8 @@
   "scripts": {
     "build": "next build",
     "dev": "next dev",
+    "dev:https": "next dev --experimental-https",
+    "dev:https:custom": "next dev --experimental-https --experimental-https-key cert/localhost.key --experimental-https-cert cert/localhost.crt",
     "lint": "next lint",
     "start": "next start",
     "deploy": "npm run build && firebase deploy",

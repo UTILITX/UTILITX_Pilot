@@ -289,6 +289,155 @@ const handleSetPanelMode = (mode: "overview" | "records" | "insights" | "share" 
   }, [records])
 
   // ============================================
+  // MEMOIZED COMPONENTS (before return)
+  // ============================================
+  
+  // Memoize MapWithDrawing to prevent remounts on state changes
+  // MUST be at component top level (not inside JSX) per Rules of Hooks
+  const MemoizedMapWithDrawing = useMemo(() => (
+    <MapWithDrawing
+      mode="draw"
+      polygon={preloadedPolygon}
+      onPolygonChange={(path, area) => {
+        setPreloadedPolygon(path)
+        setPreloadedAreaSqMeters(area ?? null)
+        setWorkAreaSelectionEnabled(false)
+      }}
+      shouldStartWorkAreaDraw={workAreaDrawCommand}
+      enableWorkAreaSelection={workAreaSelectionEnabled}
+      onWorkAreaSelected={(path, area) => {
+        setPreloadedPolygon(path)
+        setPreloadedAreaSqMeters(area ?? null)
+        setWorkAreaSelectionEnabled(false)
+      }}
+      selectedWorkArea={selectedWorkArea}
+      arcgisToken={token}
+      georefMode={recordDrawingConfig?.georefMode ?? "none"}
+      georefColor={recordDrawingConfig?.georefColor}
+      onGeorefComplete={handleRecordGeorefComplete}
+      pickPointActive={recordDrawingConfig?.georefMode === "point"}
+      shouldStartRecordDraw={recordDrawCommand}
+      pendingRecordMetadata={recordDrawingConfig?.pendingRecordMetadata}
+      zoomToFeature={zoomToFeature}
+      onWorkAreaSelect={(workArea) => {
+        console.log("🖱️ Work area selected from click:", workArea.id);
+        // Update selected work area and open analysis panel
+        const workAreaToSelect = {
+          id: workArea.id,
+          name: workArea.name || workArea.id,
+          region: workArea.region,
+          owner: workArea.owner,
+          createdBy: workArea.createdBy,
+          date: workArea.date,
+          notes: workArea.notes,
+        };
+        handleSelectProject(workArea.id);
+      }}
+      onWorkAreaClick={(workArea) => {
+        setSelectedWorkAreaForAnalysis({
+          id: workArea.id,
+          name: workArea.name,
+          polygon: workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null,
+          data: workArea,
+        })
+      }}
+      onNewWorkAreaCreated={(newWorkArea) => {
+        // Immediately make new work area the selected project
+        console.log("🎉 New work area created, setting as active:", newWorkArea.id);
+        
+        // Add to work areas list if not already there
+        const workAreaToAdd = {
+          id: newWorkArea.id,
+          name: newWorkArea.name || newWorkArea.id,
+          region: newWorkArea.region,
+          owner: newWorkArea.owner,
+          createdBy: newWorkArea.created_by || newWorkArea.createdBy,
+          date: newWorkArea.timestamp || newWorkArea.date,
+          notes: newWorkArea.notes,
+        };
+        
+        setWorkAreas((prev) => {
+          if (prev.find((wa) => wa.id === newWorkArea.id)) {
+            return prev;
+          }
+          return [...prev, workAreaToAdd];
+        });
+        
+        // Set as selected work area AND open analysis panel
+        setSelectedWorkArea(workAreaToAdd);
+        setSelectedWorkAreaForAnalysis({
+          id: workAreaToAdd.id,
+          name: workAreaToAdd.name,
+          polygon: newWorkArea.geometry ? convertGeometryToPolygon(newWorkArea.geometry) : null,
+          data: workAreaToAdd,
+        });
+        setAnalysisOpen(true);
+        setNavigationPanelOpen(false);
+        
+        // Persist to localStorage
+        if (typeof window !== "undefined") {
+          localStorage.setItem("utilitx-current-work-area", workAreaToAdd.id);
+        }
+      }}
+      onOpenWorkAreaAnalysis={async (workArea) => {
+        const polygon = workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null
+
+        setSelectedWorkAreaForAnalysis({
+          id: workArea.id,
+          name: workArea.name,
+          polygon,
+          data: {
+            ...workArea,
+            completenessLoading: true,
+          },
+        })
+        setCompletenessLoading(true)
+        setAnalysisOpen(true)
+
+        try {
+          if (!polygon || polygon.length < 3) {
+            console.warn("No valid polygon on work area, cannot compute completeness.")
+            setCompletenessLoading(false)
+            return
+          }
+
+          const recordFeatures = await queryRecordsInPolygon(polygon)
+          const completeness = computeWorkAreaCompleteness({ records: recordFeatures })
+
+          setSelectedWorkAreaForAnalysis({
+            id: workArea.id,
+            name: workArea.name,
+            polygon,
+            data: {
+              ...workArea,
+              records: recordFeatures,
+              ...completeness,
+            },
+          })
+        } catch (error) {
+          console.error("❌ Error computing work area completeness:", error)
+        } finally {
+          setCompletenessLoading(false)
+        }
+      }}
+    >
+      <FloatingTools />
+      <RegionSearch />
+    </MapWithDrawing>
+  ), [
+    preloadedPolygon,
+    workAreaDrawCommand,
+    workAreaSelectionEnabled,
+    selectedWorkArea,
+    token,
+    recordDrawingConfig,
+    recordDrawCommand,
+    zoomToFeature,
+    // Note: Inline callbacks are recreated on each render, but that's acceptable
+    // The main benefit is preventing full component remount when these values don't change
+  ])
+
+  // ============================================
   // CONDITIONAL RETURNS (after all hooks)
   // ============================================
 
@@ -331,145 +480,8 @@ const handleSetPanelMode = (mode: "overview" | "records" | "insights" | "share" 
         />
         <div className="relative flex-1 w-full overflow-hidden bg-white">
         <div className="absolute inset-0 z-[5]">
-          {/* 🔥 PATCH 3: Memoize MapWithDrawing to prevent remounts on state changes */}
-          {useMemo(() => (
-            <MapWithDrawing
-              mode="draw"
-              polygon={preloadedPolygon}
-              onPolygonChange={(path, area) => {
-                setPreloadedPolygon(path)
-                setPreloadedAreaSqMeters(area ?? null)
-                setWorkAreaSelectionEnabled(false)
-              }}
-              shouldStartWorkAreaDraw={workAreaDrawCommand}
-              enableWorkAreaSelection={workAreaSelectionEnabled}
-              onWorkAreaSelected={(path, area) => {
-                setPreloadedPolygon(path)
-                setPreloadedAreaSqMeters(area ?? null)
-                setWorkAreaSelectionEnabled(false)
-              }}
-              selectedWorkArea={selectedWorkArea}
-              arcgisToken={token}
-              georefMode={recordDrawingConfig?.georefMode ?? "none"}
-              georefColor={recordDrawingConfig?.georefColor}
-              onGeorefComplete={handleRecordGeorefComplete}
-              pickPointActive={recordDrawingConfig?.georefMode === "point"}
-              shouldStartRecordDraw={recordDrawCommand}
-              pendingRecordMetadata={recordDrawingConfig?.pendingRecordMetadata}
-              zoomToFeature={zoomToFeature}
-              onWorkAreaSelect={(workArea) => {
-                console.log("🖱️ Work area selected from click:", workArea.id);
-                // Update selected work area and open analysis panel
-                const workAreaToSelect = {
-                  id: workArea.id,
-                  name: workArea.name || workArea.id,
-                  region: workArea.region,
-                  owner: workArea.owner,
-                  createdBy: workArea.createdBy,
-                  date: workArea.date,
-                  notes: workArea.notes,
-                };
-                handleSelectProject(workArea.id);
-              }}
-              onWorkAreaClick={(workArea) => {
-                setSelectedWorkAreaForAnalysis({
-                  id: workArea.id,
-                  name: workArea.name,
-                  polygon: workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null,
-                  data: workArea,
-                })
-              }}
-              onNewWorkAreaCreated={(newWorkArea) => {
-                // Immediately make new work area the selected project
-                console.log("🎉 New work area created, setting as active:", newWorkArea.id);
-                
-                // Add to work areas list if not already there
-                const workAreaToAdd = {
-                  id: newWorkArea.id,
-                  name: newWorkArea.name || newWorkArea.id,
-                  region: newWorkArea.region,
-                  owner: newWorkArea.owner,
-                  createdBy: newWorkArea.created_by || newWorkArea.createdBy,
-                  date: newWorkArea.timestamp || newWorkArea.date,
-                  notes: newWorkArea.notes,
-                };
-                
-                setWorkAreas((prev) => {
-                  if (prev.find((wa) => wa.id === newWorkArea.id)) {
-                    return prev;
-                  }
-                  return [...prev, workAreaToAdd];
-                });
-                
-                // Set as selected work area AND open analysis panel
-                setSelectedWorkArea(workAreaToAdd);
-                setSelectedWorkAreaForAnalysis({
-                  id: workAreaToAdd.id,
-                  name: workAreaToAdd.name,
-                  polygon: newWorkArea.geometry ? convertGeometryToPolygon(newWorkArea.geometry) : null,
-                  data: workAreaToAdd,
-                });
-                setAnalysisOpen(true);
-                setNavigationPanelOpen(false);
-                
-                // Persist to localStorage
-                if (typeof window !== "undefined") {
-                  localStorage.setItem("utilitx-current-work-area", workAreaToAdd.id);
-                }
-              }}
-              onOpenWorkAreaAnalysis={async (workArea) => {
-                const polygon = workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null
-
-                setSelectedWorkAreaForAnalysis({
-                  id: workArea.id,
-                  name: workArea.name,
-                  polygon,
-                  data: {
-                    ...workArea,
-                    completenessLoading: true,
-                  },
-                })
-                setCompletenessLoading(true)
-                setAnalysisOpen(true)
-
-                try {
-                  if (!polygon || polygon.length < 3) {
-                    console.warn("No valid polygon on work area, cannot compute completeness.")
-                    setCompletenessLoading(false)
-                    return
-                  }
-
-                  const recordFeatures = await queryRecordsInPolygon(polygon)
-                  const completeness = computeWorkAreaCompleteness({ records: recordFeatures })
-
-                  setSelectedWorkAreaForAnalysis({
-                    id: workArea.id,
-                    name: workArea.name,
-                    polygon,
-                    data: {
-                      ...workArea,
-                      records: recordFeatures,
-                      ...completeness,
-                    },
-                  })
-                } catch (error) {
-                  console.error("❌ Error computing work area completeness:", error)
-                } finally {
-                  setCompletenessLoading(false)
-                }
-              }}
-            >
-              <FloatingTools />
-              <RegionSearch />
-            </MapWithDrawing>
-          ), [
-            preloadedPolygon,
-            workAreaDrawCommand,
-            workAreaSelectionEnabled,
-            recordDrawingConfig,
-            recordDrawCommand,
-            zoomToFeature,
-          ])}
+          {/* Memoized MapWithDrawing - prevents remounts on state changes */}
+          {MemoizedMapWithDrawing}
         </div>
 
         <div className="relative z-10 flex h-full w-full items-start justify-start pointer-events-none">
