@@ -61,8 +61,13 @@ const handle = app.getRequestHandler();
  * - Execution time
  * - Errors (if any)
  */
+// Declare secrets that this function needs access to
+// These will be available as environment variables at runtime
 export const nextApp = functions
   .region(region)
+  .runWith({
+    secrets: ["ARCGIS_CLIENT_SECRET"],
+  })
   .https.onRequest(async (req: express.Request, res: express.Response) => {
     const startTime = Date.now();
     const { method, url } = req;

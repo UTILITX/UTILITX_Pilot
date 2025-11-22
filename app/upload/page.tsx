@@ -1,5 +1,8 @@
 "use client"
 
+// Force dynamic rendering - NO static generation (uses browser APIs)
+export const dynamic = 'force-dynamic'
+
 import { useMemo, useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"

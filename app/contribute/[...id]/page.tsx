@@ -1,13 +1,11 @@
-import dynamic from "next/dynamic"
+import nextDynamic from "next/dynamic"
 
-const ContributePageClient = dynamic(() => import("./client"), {
+// Force dynamic rendering - NO static generation
+export const dynamic = 'force-dynamic'
+
+const ContributePageClient = nextDynamic(() => import("./client"), {
   ssr: false,
 })
-
-export function generateStaticParams() {
-  // Return a placeholder path for static export - actual routes handled client-side
-  return [{ id: ["placeholder"] }]
-}
 
 export default function ContributePage() {
   return <ContributePageClient />

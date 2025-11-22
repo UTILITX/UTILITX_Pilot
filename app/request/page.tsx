@@ -1,6 +1,9 @@
-import dynamic from "next/dynamic"
+import nextDynamic from "next/dynamic"
 
-const RequestPageClient = dynamic(() => import("./client"), {
+// Force dynamic rendering - NO static generation
+export const dynamic = 'force-dynamic'
+
+const RequestPageClient = nextDynamic(() => import("./client"), {
   ssr: false,
 })
 

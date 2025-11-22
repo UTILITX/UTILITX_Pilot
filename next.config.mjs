@@ -27,18 +27,32 @@
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
+  reactStrictMode: false, // Disabled to prevent ResizeObserver issues during SSR
+  
   swcMinify: true,
   
-  // UTILITX runs in SSR mode on Firebase Functions.
-  // DO NOT use output: 'export' - it breaks next start and dynamic routes.
-  // This configuration is required for Blaze plan networking (Supabase, Esri, GPT, Flask).
+  // CRITICAL: NO output mode - allows SSR through Firebase Functions
+  // Do NOT use "standalone" or "export" - both break SSR
+  // Firebase Functions handles the server, we just need standard Next.js SSR
   
+  // Disable static generation entirely
+  generateEtags: false,
+  
+  // Ensure dynamic rendering
+  onDemandEntries: {
+    maxInactiveAge: 1000 * 60 * 60, // 1 hour
+    pagesBufferLength: 5,
+  },
+  
+  // Transpile ArcGIS packages (required for SSR)
   transpilePackages: ["@arcgis/core"],
   
+  // TypeScript - ignore build errors for faster builds
   typescript: {
     ignoreBuildErrors: true,
   },
+  
+  // Images - unoptimized for Firebase Functions
   images: {
     unoptimized: true,
   },

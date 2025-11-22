@@ -21,14 +21,46 @@ export async function GET(req: NextRequest) {
   const clientSecret = process.env.ARCGIS_CLIENT_SECRET;
   
   // Determine redirect URI - must match exactly what was sent in login request
-  const redirectUri = 
-    process.env.NEXT_PUBLIC_ARCGIS_REDIRECT_URI ||
-    (process.env.NODE_ENV === "production" 
-      ? `${req.nextUrl.origin}/api/auth/callback`
-      : "https://localhost:3000/api/auth/callback"
-    );
+  // CRITICAL: Firebase Functions proxy makes req.nextUrl.hostname = 'localhost'
+  // We must use x-forwarded-host header to get the real domain
+  const forwardedHost = req.headers.get("x-forwarded-host");
+  const forwardedProto = req.headers.get("x-forwarded-proto") || "https";
+  const hostname = req.nextUrl.hostname;
+  const origin = req.nextUrl.origin;
+  
+  // Get the real hostname from forwarded headers (Firebase proxy) or request
+  const realHostname = forwardedHost?.split(",")[0]?.trim() || hostname;
+  const realOrigin = forwardedHost 
+    ? `${forwardedProto}://${realHostname}`
+    : origin;
+  
+  const isLocalhost = realHostname === "localhost" || realHostname === "127.0.0.1" || realHostname === "::1";
+  const isFirebaseDomain = realHostname?.includes("web.app") || realHostname?.includes("firebaseapp.com");
+  const envRedirectUri = process.env.NEXT_PUBLIC_ARCGIS_REDIRECT_URI;
+  
+  // NEVER use localhost redirect URI if we're on Firebase, even if env var is set
+  let redirectUri: string;
+  if (envRedirectUri && !envRedirectUri.includes("localhost") && !isLocalhost) {
+    // Use env var only if it's not localhost and we're not on localhost
+    redirectUri = envRedirectUri;
+  } else if (isLocalhost && !isFirebaseDomain) {
+    // Only use localhost if we're actually on localhost AND not on Firebase
+    redirectUri = "https://localhost:3000/api/auth/callback";
+  } else {
+    // Production: use the real origin from forwarded headers
+    redirectUri = `${realOrigin}/api/auth/callback`;
+  }
 
   // Debug logging
+  console.log("🔍 CALLBACK DEBUG:", {
+    realHostname,
+    realOrigin,
+    forwardedHost,
+    isLocalhost,
+    isFirebaseDomain,
+    envRedirectUri: envRedirectUri || "not set",
+    finalRedirectUri: redirectUri,
+  });
   console.log("🔍 DEBUG CLIENT_ID:", clientId ? `${clientId.substring(0, 10)}...` : "undefined");
   console.log("🔍 DEBUG SECRET:", clientSecret ? "present" : "missing");
   console.log("🔍 DEBUG REDIRECT_URI:", redirectUri);

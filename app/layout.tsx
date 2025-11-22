@@ -6,6 +6,9 @@ import './globals.css'
 import Sidebar from '@/components/Sidebar'
 import { ArcGISAuthProvider } from '@/contexts/ArcGISAuthContext'
 
+// Force dynamic rendering for entire app - NO static generation
+export const dynamic = 'force-dynamic'
+
 export const metadata: Metadata = {
   title: 'v0 App',
   description: 'Created with v0',

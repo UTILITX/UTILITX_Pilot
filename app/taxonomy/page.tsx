@@ -1,5 +1,8 @@
 "use client"
 
+// Force dynamic rendering - NO static generation (uses browser APIs)
+export const dynamic = 'force-dynamic'
+
 import * as React from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { DualRecordSelector, type UtilityType, type RecordType } from "@/components/dual-record-selector"

@@ -1,8 +1,11 @@
 "use client"
 
-import dynamic from "next/dynamic"
+// Force dynamic rendering - NO static generation (uses browser APIs like ResizeObserver)
+export const dynamic = 'force-dynamic'
 
-const ClientMapPage = dynamic(() => import("./ClientMapPage"), {
+import nextDynamic from "next/dynamic"
+
+const ClientMapPage = nextDynamic(() => import("./ClientMapPage"), {
   ssr: false,
   loading: () => (
     <div className="h-full w-full flex items-center justify-center bg-gray-100">
