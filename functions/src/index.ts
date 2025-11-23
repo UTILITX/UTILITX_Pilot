@@ -63,6 +63,7 @@ const handle = app.getRequestHandler();
  */
 // Declare secrets that this function needs access to
 // These will be available as environment variables at runtime
+// Using v2 functions for proper secrets support
 export const nextApp = functions
   .region(region)
   .runWith({

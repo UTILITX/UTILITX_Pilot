@@ -7,6 +7,14 @@ import { ARCGIS_PORTAL_URL, ARCGIS_CLIENT_ID } from "@/lib/arcgis/config";
  * Exchanges authorization code for access token
  */
 export async function GET(req: NextRequest) {
+  console.log("🔁 CALLBACK ROUTE HIT:", {
+    url: req.url,
+    pathname: req.nextUrl.pathname,
+    searchParams: Object.fromEntries(req.nextUrl.searchParams),
+    hostname: req.nextUrl.hostname,
+    forwardedHost: req.headers.get("x-forwarded-host"),
+  });
+  
   const code = req.nextUrl.searchParams.get("code");
 
   if (!code) {
@@ -14,11 +22,47 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing OAuth code" }, { status: 400 });
   }
 
-  console.log("🔁 Received OAuth code:", code);
+  console.log("🔁 Received OAuth code:", code.substring(0, 20) + "...");
 
   // Support both prefixed and non-prefixed env vars (server-side can read both)
   const clientId = ARCGIS_CLIENT_ID || process.env.ARCGIS_CLIENT_ID;
-  const clientSecret = process.env.ARCGIS_CLIENT_SECRET;
+  
+  // Get client secret - try multiple sources for Firebase Functions compatibility
+  // Priority: 1) process.env (secrets injected as env vars), 2) functions.config() (1st Gen), 3) null
+  let clientSecret = process.env.ARCGIS_CLIENT_SECRET;
+  
+  console.log("🔍 SECRET DEBUG:", {
+    fromEnv: !!process.env.ARCGIS_CLIENT_SECRET,
+    functionName: (process.env as any).FUNCTION_NAME,
+    hasProcess: typeof process !== 'undefined',
+  });
+  
+  // Fallback: Try functions.config() for 1st Gen functions (deprecated but still works)
+  // This is only available at runtime in Firebase Functions, not during build
+  if (!clientSecret) {
+    try {
+      // Use dynamic require to avoid Next.js build-time resolution
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const functions = eval('require')("firebase-functions");
+      console.log("🔍 functions module:", functions ? "loaded" : "failed");
+      if (functions && functions.config) {
+        const config = functions.config();
+        console.log("🔍 functions.config():", config ? "exists" : "null");
+        console.log("🔍 config.arcgis:", config?.arcgis ? "exists" : "null");
+        clientSecret = config?.arcgis?.client_secret || null;
+        if (clientSecret) {
+          console.log("✅ Found secret via functions.config()");
+        } else {
+          console.log("⚠️ functions.config().arcgis.client_secret is null/undefined");
+        }
+      } else {
+        console.log("⚠️ functions.config() not available");
+      }
+    } catch (err: any) {
+      console.log("⚠️ Could not load firebase-functions:", err?.message || err);
+      // firebase-functions not available (e.g., during build or local dev), that's okay
+    }
+  }
   
   // Determine redirect URI - must match exactly what was sent in login request
   // CRITICAL: Firebase Functions proxy makes req.nextUrl.hostname = 'localhost'
@@ -105,47 +149,91 @@ export async function GET(req: NextRequest) {
     const cookieStore = await cookies();
     const expiresIn = token.expires_in || 7200; // Default 2 hours
     const expiryDate = new Date(Date.now() + expiresIn * 1000);
-
-    cookieStore.set("arcgis_token", token.access_token, {
+    
+    // Determine if we're in production (Firebase Functions or production build)
+    const isProduction = !isLocalhost && isFirebaseDomain;
+    
+    // For Firebase Hosting, cookies need to be accessible across the domain
+    // Don't set domain explicitly - let Next.js handle it based on the request
+    // But ensure secure is true in production (HTTPS required)
+    const cookieOptions = {
       expires: expiryDate,
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      secure: isProduction, // Always secure in production (HTTPS required)
+      sameSite: "lax" as const,
       path: "/",
+      // Don't set domain - let browser use default (current domain)
+      // Setting domain explicitly can break cookie sharing in Firebase Hosting
+    };
+
+    console.log("🍪 Setting cookies:", {
+      isProduction,
+      realHostname,
+      realOrigin,
+      secure: cookieOptions.secure,
+      expires: expiryDate.toISOString(),
+      cookieDomain: "not set (using default)",
     });
 
-    cookieStore.set("arcgis_token_expiry", expiryDate.getTime().toString(), {
-      expires: expiryDate,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-    });
+    // Use Next.js cookies API - it should handle Firebase Functions correctly
+    cookieStore.set("arcgis_token", token.access_token, cookieOptions);
+    cookieStore.set("arcgis_token_expiry", expiryDate.getTime().toString(), cookieOptions);
 
     if (token.refresh_token) {
       cookieStore.set("arcgis_refresh_token", token.refresh_token, {
+        ...cookieOptions,
         expires: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 days
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        path: "/",
       });
     }
 
     if (token.username) {
       cookieStore.set("arcgis_username", token.username, {
-        expires: expiryDate,
+        ...cookieOptions,
         httpOnly: false, // Can be accessed by client
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        path: "/",
       });
     }
 
     console.log("✅ OAuth token stored successfully");
 
-    // Redirect to map page
-    return NextResponse.redirect(new URL("/map", req.url));
+    // Redirect to map page - use realOrigin to avoid localhost redirect
+    const redirectUrl = new URL("/map", realOrigin);
+    console.log("🔀 Redirecting to:", redirectUrl.toString());
+    
+    // Create redirect response
+    const response = NextResponse.redirect(redirectUrl);
+    
+    // CRITICAL: Also manually set cookies on the response for Firebase Functions compatibility
+    // Next.js cookies() API might not work correctly in Firebase Functions proxy environment
+    const secureFlag = isProduction ? "Secure; " : "";
+    const cookieExpires = expiryDate.toUTCString();
+    
+    response.headers.append(
+      "Set-Cookie",
+      `arcgis_token=${token.access_token}; HttpOnly; ${secureFlag}SameSite=Lax; Path=/; Expires=${cookieExpires}`
+    );
+    response.headers.append(
+      "Set-Cookie",
+      `arcgis_token_expiry=${expiryDate.getTime()}; HttpOnly; ${secureFlag}SameSite=Lax; Path=/; Expires=${cookieExpires}`
+    );
+    
+    if (token.refresh_token) {
+      const refreshExpires = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toUTCString();
+      response.headers.append(
+        "Set-Cookie",
+        `arcgis_refresh_token=${token.refresh_token}; HttpOnly; ${secureFlag}SameSite=Lax; Path=/; Expires=${refreshExpires}`
+      );
+    }
+    
+    if (token.username) {
+      response.headers.append(
+        "Set-Cookie",
+        `arcgis_username=${token.username}; ${secureFlag}SameSite=Lax; Path=/; Expires=${cookieExpires}`
+      );
+    }
+    
+    console.log("🍪 Manually set cookies on response headers for Firebase Functions");
+    
+    return response;
   } catch (error) {
     console.error("❌ OAuth callback error:", error);
     return NextResponse.json(

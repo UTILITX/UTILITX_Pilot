@@ -1,8 +1,9 @@
 {
   "_comment": "UTILITX Firebase Configuration - SSR Required",
   "_comment2": "This configuration requires SSR (Server-Side Rendering) for Firebase Functions on Node 20",
-  "_comment3": "DO NOT change rewrites - all routes must go through nextApp function for SSR",
+  "_comment3": "DO NOT change rewrites - all API routes must go to nextApp first to allow Next.js routing",
   "_comment4": "DO NOT use output: 'export' in next.config.mjs - breaks SSR and dynamic routes",
+
   "hosting": {
     "public": "public",
     "ignore": [
@@ -10,12 +11,18 @@
       "**/.*",
       "**/node_modules/**"
     ],
+
     "rewrites": [
+      {
+        "source": "/api/**",
+        "function": "nextApp"
+      },
       {
         "source": "**",
         "function": "nextApp"
       }
     ],
+
     "headers": [
       {
         "source": "**/*.@(jpg|jpeg|gif|png|webp|svg|ico)",
@@ -46,6 +53,7 @@
       }
     ]
   },
+
   "functions": {
     "source": "functions",
     "runtime": "nodejs20",
@@ -65,4 +73,3 @@
     ]
   }
 }
-
