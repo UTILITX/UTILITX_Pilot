@@ -16,6 +16,8 @@ export async function GET(req: NextRequest) {
 
   console.log("✅ Logged out - cleared ArcGIS tokens");
 
-  return NextResponse.redirect(new URL("/map", req.url));
+  // Use NEXTAUTH_URL or AUTH_PUBLIC_URL for redirect base
+  const baseUrl = process.env.NEXTAUTH_URL || process.env.AUTH_PUBLIC_URL || req.nextUrl.origin;
+  return NextResponse.redirect(new URL("/map", baseUrl));
 }
 

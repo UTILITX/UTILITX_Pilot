@@ -43,8 +43,8 @@ Moved routes to the correct paths and updated all references.
 Make sure your `.env.local` has:
 
 ```bash
-ARCGIS_CLIENT_ID=your_client_id_here
-ARCGIS_CLIENT_SECRET=your_client_secret_here
+ARCGIS_CLIENT_ID=wqvStHHasME6jfo2
+ARCGIS_CLIENT_SECRET=225dd4a3f42d4a0d9d32a8834d93bafc
 ARCGIS_REDIRECT_URI=http://localhost:3000/api/auth/callback
 ```
 

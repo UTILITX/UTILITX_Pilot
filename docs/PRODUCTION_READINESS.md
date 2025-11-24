@@ -38,10 +38,10 @@ This document outlines production readiness considerations for the ArcGIS OAuth 
 ```bash
 # ArcGIS OAuth Configuration
 NEXT_PUBLIC_ARCGIS_PORTAL_URL=https://yourorg.maps.arcgis.com
-NEXT_PUBLIC_ARCGIS_CLIENT_ID=your_production_client_id
+NEXT_PUBLIC_ARCGIS_CLIENT_ID=wqvStHHasME6jfo2
 
 # Server-side only (never exposed to client)
-ARCGIS_CLIENT_SECRET=your_production_client_secret
+ARCGIS_CLIENT_SECRET=225dd4a3f42d4a0d9d32a8834d93bafc
 
 # Production redirect URI (optional - will be derived from request origin if not set)
 NEXT_PUBLIC_ARCGIS_REDIRECT_URI=https://your-domain.com/api/auth/callback
@@ -295,6 +295,7 @@ Before deploying to production:
 
 **Last Updated:** January 2025  
 **Maintained By:** UTILITX Development Team
+
 
 
 

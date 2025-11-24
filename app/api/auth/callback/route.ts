@@ -64,9 +64,11 @@ export async function GET(req: NextRequest) {
     }
   }
   
-  // Determine redirect URI - must match exactly what was sent in login request
-  // CRITICAL: Firebase Functions proxy makes req.nextUrl.hostname = 'localhost'
-  // We must use x-forwarded-host header to get the real domain
+  // Determine redirect URI - use server-side environment variables
+  // Priority: ARCGIS_REDIRECT_URI (server-side) > NEXT_PUBLIC_ARCGIS_REDIRECT_URI (client-side)
+  const redirectUri = process.env.ARCGIS_REDIRECT_URI || process.env.NEXT_PUBLIC_ARCGIS_REDIRECT_URI || "https://localhost:3000/api/auth/callback";
+  
+  // Get hostname info for logging and final redirect
   const forwardedHost = req.headers.get("x-forwarded-host");
   const forwardedProto = req.headers.get("x-forwarded-proto") || "https";
   const hostname = req.nextUrl.hostname;
@@ -78,35 +80,23 @@ export async function GET(req: NextRequest) {
     ? `${forwardedProto}://${realHostname}`
     : origin;
   
-  const isLocalhost = realHostname === "localhost" || realHostname === "127.0.0.1" || realHostname === "::1";
-  const isFirebaseDomain = realHostname?.includes("web.app") || realHostname?.includes("firebaseapp.com");
-  const envRedirectUri = process.env.NEXT_PUBLIC_ARCGIS_REDIRECT_URI;
-  
-  // NEVER use localhost redirect URI if we're on Firebase, even if env var is set
-  let redirectUri: string;
-  if (envRedirectUri && !envRedirectUri.includes("localhost") && !isLocalhost) {
-    // Use env var only if it's not localhost and we're not on localhost
-    redirectUri = envRedirectUri;
-  } else if (isLocalhost && !isFirebaseDomain) {
-    // Only use localhost if we're actually on localhost AND not on Firebase
-    redirectUri = "https://localhost:3000/api/auth/callback";
-  } else {
-    // Production: use the real origin from forwarded headers
-    redirectUri = `${realOrigin}/api/auth/callback`;
-  }
+  // Use NEXTAUTH_URL or AUTH_PUBLIC_URL for final redirect base
+  const baseUrl = process.env.NEXTAUTH_URL || process.env.AUTH_PUBLIC_URL || realOrigin;
 
   // Debug logging
   console.log("🔍 CALLBACK DEBUG:", {
     realHostname,
     realOrigin,
     forwardedHost,
-    isLocalhost,
-    isFirebaseDomain,
-    envRedirectUri: envRedirectUri || "not set",
+    baseUrl,
+    serverRedirectUri: process.env.ARCGIS_REDIRECT_URI || "not set",
+    publicRedirectUri: process.env.NEXT_PUBLIC_ARCGIS_REDIRECT_URI || "not set", 
     finalRedirectUri: redirectUri,
+    nextAuthUrl: process.env.NEXTAUTH_URL || "not set",
+    authPublicUrl: process.env.AUTH_PUBLIC_URL || "not set",
   });
-  console.log("🔍 DEBUG CLIENT_ID:", clientId ? `${clientId.substring(0, 10)}...` : "undefined");
-  console.log("🔍 DEBUG SECRET:", clientSecret ? "present" : "missing");
+  console.log("🔍 DEBUG CLIENT_ID:", clientId ? `${clientId.substring(0, 12)}...` : "undefined");
+  console.log("🔍 DEBUG SECRET:", clientSecret ? `${clientSecret.substring(0, 12)}...` : "missing");
   console.log("🔍 DEBUG REDIRECT_URI:", redirectUri);
   console.log("🔍 DEBUG PORTAL_URL:", ARCGIS_PORTAL_URL);
 
@@ -195,9 +185,9 @@ export async function GET(req: NextRequest) {
 
     console.log("✅ OAuth token stored successfully");
 
-    // Redirect to map page - use realOrigin to avoid localhost redirect
-    const redirectUrl = new URL("/map", realOrigin);
-    console.log("🔀 Redirecting to:", redirectUrl.toString());
+      // Redirect to map page - use baseUrl (from NEXTAUTH_URL/AUTH_PUBLIC_URL)
+      const redirectUrl = new URL("/map", baseUrl);
+      console.log("🔀 Redirecting to:", redirectUrl.toString());
     
     // Create redirect response
     const response = NextResponse.redirect(redirectUrl);

@@ -107,10 +107,10 @@ Create or update `.env.local` in your project root:
 ```bash
 # ArcGIS OAuth Configuration
 NEXT_PUBLIC_ARCGIS_PORTAL_URL=https://yourorg.maps.arcgis.com
-NEXT_PUBLIC_ARCGIS_CLIENT_ID=your_client_id_here
+NEXT_PUBLIC_ARCGIS_CLIENT_ID=wqvStHHasME6jfo2
 
 # Server-side only (never exposed to client)
-ARCGIS_CLIENT_SECRET=your_client_secret_here
+ARCGIS_CLIENT_SECRET=225dd4a3f42d4a0d9d32a8834d93bafc
 
 # ArcGIS Feature Layer URLs
 NEXT_PUBLIC_ARCGIS_WORK_AREAS_URL=https://services7.arcgis.com/.../WORKAREA/FeatureServer/0
@@ -527,6 +527,7 @@ This approach:
 
 **Last Updated:** January 2025  
 **Maintained By:** UTILITX Development Team
+
 
 
 

@@ -4,9 +4,11 @@ import { ARCGIS_PORTAL_URL, ARCGIS_CLIENT_ID } from "@/lib/arcgis/config";
 export function GET(req: NextRequest) {
   const clientId = ARCGIS_CLIENT_ID || process.env.ARCGIS_CLIENT_ID;
 
-  // Determine redirect URI based on environment
-  // CRITICAL: Firebase Functions proxy makes req.nextUrl.hostname = 'localhost'
-  // We must use x-forwarded-host header to get the real domain
+  // Determine redirect URI - use server-side environment variables
+  // Priority: ARCGIS_REDIRECT_URI (server-side) > NEXT_PUBLIC_ARCGIS_REDIRECT_URI (client-side)
+  const redirectUri = process.env.ARCGIS_REDIRECT_URI || process.env.NEXT_PUBLIC_ARCGIS_REDIRECT_URI || "https://localhost:3000/api/auth/callback";
+  
+  // Get hostname info for logging
   const forwardedHost = req.headers.get("x-forwarded-host");
   const forwardedProto = req.headers.get("x-forwarded-proto") || "https";
   const hostname = req.nextUrl.hostname;
@@ -17,23 +19,6 @@ export function GET(req: NextRequest) {
   const realOrigin = forwardedHost 
     ? `${forwardedProto}://${realHostname}`
     : origin;
-  
-  const isLocalhost = realHostname === "localhost" || realHostname === "127.0.0.1" || realHostname === "::1";
-  const isFirebaseDomain = realHostname?.includes("web.app") || realHostname?.includes("firebaseapp.com");
-  const envRedirectUri = process.env.NEXT_PUBLIC_ARCGIS_REDIRECT_URI;
-  
-  // NEVER use localhost redirect URI if we're on Firebase, even if env var is set
-  let redirectUri: string;
-  if (envRedirectUri && !envRedirectUri.includes("localhost") && !isLocalhost) {
-    // Use env var only if it's not localhost and we're not on localhost
-    redirectUri = envRedirectUri;
-  } else if (isLocalhost && !isFirebaseDomain) {
-    // Only use localhost if we're actually on localhost AND not on Firebase
-    redirectUri = "https://localhost:3000/api/auth/callback";
-  } else {
-    // Production: use the real origin from forwarded headers
-    redirectUri = `${realOrigin}/api/auth/callback`;
-  }
 
   // Comprehensive debug logging
   console.log("🔍 LOGIN DEBUG:", {
@@ -42,10 +27,11 @@ export function GET(req: NextRequest) {
     realHostname,
     realOrigin,
     forwardedHost,
-    isLocalhost,
-    isFirebaseDomain,
-    envRedirectUri: envRedirectUri || "not set",
+    serverRedirectUri: process.env.ARCGIS_REDIRECT_URI || "not set",
+    publicRedirectUri: process.env.NEXT_PUBLIC_ARCGIS_REDIRECT_URI || "not set",
     finalRedirectUri: redirectUri,
+    nextAuthUrl: process.env.NEXTAUTH_URL || "not set",
+    authPublicUrl: process.env.AUTH_PUBLIC_URL || "not set",
     headers: {
       host: req.headers.get("host"),
       "x-forwarded-host": req.headers.get("x-forwarded-host"),
@@ -53,13 +39,6 @@ export function GET(req: NextRequest) {
     },
   });
   console.log("🔍 LOGIN USING REDIRECT URI:", redirectUri);
-  
-  // Safety check: Never use localhost in production
-  if (redirectUri.includes("localhost") && !isLocalhost) {
-    console.error("🚨 CRITICAL: Attempted to use localhost redirect in production!");
-    console.error("🚨 Overriding to use real origin:", realOrigin);
-    redirectUri = `${realOrigin}/api/auth/callback`;
-  }
 
   if (!clientId) {
     console.error("❌ Missing ArcGIS Client ID");

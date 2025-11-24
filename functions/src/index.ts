@@ -24,6 +24,71 @@ const region = "us-central1";
 // Detect environment - use dev mode only in local emulator
 const dev = process.env.NODE_ENV !== "production";
 
+// 🔥 Debug: Check what environment variables are available at startup
+console.log("🔍 Environment Variables at Startup", {
+  NODE_ENV: process.env.NODE_ENV,
+  FUNCTION_NAME: process.env.FUNCTION_NAME,
+  NEXTAUTH_URL: process.env.NEXTAUTH_URL || "not set",
+  AUTH_PUBLIC_URL: process.env.AUTH_PUBLIC_URL || "not set", 
+  ARCGIS_REDIRECT_URI: process.env.ARCGIS_REDIRECT_URI || "not set",
+  NEXT_PUBLIC_ARCGIS_REDIRECT_URI: process.env.NEXT_PUBLIC_ARCGIS_REDIRECT_URI || "not set",
+  ARCGIS_CLIENT_ID: process.env.ARCGIS_CLIENT_ID 
+      ? process.env.ARCGIS_CLIENT_ID.substring(0, 12) + "..."
+      : "not set",
+  ARCGIS_CLIENT_SECRET: process.env.ARCGIS_CLIENT_SECRET 
+      ? process.env.ARCGIS_CLIENT_SECRET.substring(0, 12) + "..."
+      : "not set",
+});
+
+// 🔥 Load environment variables for App Router API routes
+// App Router runs in a different runtime and needs .env file injection
+// Firebase config becomes fallback for any missing values
+console.log("🔍 Environment Variables from .env file", {
+  NEXTAUTH_URL: process.env.NEXTAUTH_URL || "not set",
+  AUTH_PUBLIC_URL: process.env.AUTH_PUBLIC_URL || "not set", 
+  ARCGIS_REDIRECT_URI: process.env.ARCGIS_REDIRECT_URI || "not set",
+  ARCGIS_CLIENT_ID: process.env.ARCGIS_CLIENT_ID 
+      ? process.env.ARCGIS_CLIENT_ID.substring(0, 12) + "..."
+      : "not set",
+  ARCGIS_CLIENT_SECRET: process.env.ARCGIS_CLIENT_SECRET 
+      ? process.env.ARCGIS_CLIENT_SECRET.substring(0, 12) + "..."
+      : "not set",
+});
+
+// 🔥 Fallback: Inject Firebase Runtime Config for any missing env vars
+// This ensures backwards compatibility and provides fallback values
+try {
+  const config = functions.config();
+  console.log("🔍 Firebase Config Available", {
+    hasConfig: !!config,
+    hasNextAuth: !!config?.nextauth,
+    hasAuth: !!config?.auth,
+    hasArcgis: !!config?.arcgis,
+  });
+  
+  // Use .env values first, Firebase config as fallback
+  process.env.NEXTAUTH_URL = process.env.NEXTAUTH_URL || config?.nextauth?.url;
+  process.env.AUTH_PUBLIC_URL = process.env.AUTH_PUBLIC_URL || config?.auth?.public_url;
+  process.env.ARCGIS_REDIRECT_URI = process.env.ARCGIS_REDIRECT_URI || config?.arcgis?.redirect_uri;
+  process.env.ARCGIS_CLIENT_ID = process.env.ARCGIS_CLIENT_ID || config?.arcgis?.client_id;
+  process.env.ARCGIS_CLIENT_SECRET = process.env.ARCGIS_CLIENT_SECRET || config?.arcgis?.client_secret;
+  
+  // Debug logging after fallback injection
+  console.log("🔥 Final Environment Variables (after .env + Firebase config)", {
+    NEXTAUTH_URL: process.env.NEXTAUTH_URL || "not set",
+    AUTH_PUBLIC_URL: process.env.AUTH_PUBLIC_URL || "not set",
+    ARCGIS_REDIRECT_URI: process.env.ARCGIS_REDIRECT_URI || "not set",
+    ARCGIS_CLIENT_ID: process.env.ARCGIS_CLIENT_ID 
+        ? process.env.ARCGIS_CLIENT_ID.substring(0, 12) + "..."
+        : "not set",
+    ARCGIS_CLIENT_SECRET: process.env.ARCGIS_CLIENT_SECRET 
+        ? process.env.ARCGIS_CLIENT_SECRET.substring(0, 12) + "..."
+        : "not set",
+  });
+} catch (error) {
+  console.error("❌ Failed to load Firebase config:", error);
+}
+
 // Initialize Next.js app
 // distDir points to .next directory (copied to functions/.next during deployment)
 // The copy-next-build.js script copies .next from project root to functions/.next
@@ -82,7 +147,7 @@ export const nextApp = functions
     });
     
     try {
-      // Prepare Next.js app (warmup)
+      // Prepare Next.js app (warmup) - env vars already loaded at startup
       await app.prepare();
       
       // Handle request
