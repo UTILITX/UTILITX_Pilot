@@ -168,7 +168,7 @@ async function saveWorkAreaInternal({ geometry, attributes }: SaveWorkAreaOption
       esriId.registerServers([
         {
           server: WORK_AREAS_SERVER_URL.trim(),
-          tokenServiceUrl: `${ARCGIS_PORTAL_URL}/sharing/rest/oauth2/token`,
+          tokenServiceUrl: `${ARCGIS_PORTAL_URL}/sharing/oauth2/token`,
         },
       ]);
 

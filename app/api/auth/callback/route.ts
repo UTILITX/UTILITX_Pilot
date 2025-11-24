@@ -110,7 +110,7 @@ export async function GET(req: NextRequest) {
 
   try {
     // Exchange code for token - use your org portal from config
-    const tokenResponse = await fetch(`${ARCGIS_PORTAL_URL}/sharing/rest/oauth2/token`, {
+    const tokenResponse = await fetch(`${ARCGIS_PORTAL_URL}/sharing/oauth2/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -140,7 +140,20 @@ export async function GET(req: NextRequest) {
     const expiresIn = token.expires_in || 7200; // Default 2 hours
     const expiryDate = new Date(Date.now() + expiresIn * 1000);
     
-    // Determine if we're in production (Firebase Functions or production build)
+    // 🔧 Host / environment helpers
+    const host = req.headers.get("x-forwarded-host") || req.nextUrl.hostname || "";
+
+    // Detect localhost (local emulator)
+    const isLocalhost =
+      host.includes("localhost") ||
+      host.includes("127.0.0.1");
+
+    // Detect Firebase Hosting domain (production)
+    const isFirebaseDomain =
+      host.includes("web.app") ||
+      host.includes("firebaseapp.com");
+
+    // Determine environment
     const isProduction = !isLocalhost && isFirebaseDomain;
     
     // For Firebase Hosting, cookies need to be accessible across the domain
