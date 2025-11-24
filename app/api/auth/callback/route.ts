@@ -200,6 +200,8 @@ export async function GET(req: NextRequest) {
 
       // Redirect to map page - use baseUrl (from NEXTAUTH_URL/AUTH_PUBLIC_URL)
       const redirectUrl = new URL("/map", baseUrl);
+      // Add parameter to indicate this is coming from OAuth callback
+      redirectUrl.searchParams.set('from_oauth', 'true');
       console.log("🔀 Redirecting to:", redirectUrl.toString());
     
     // Create redirect response
@@ -210,27 +212,34 @@ export async function GET(req: NextRequest) {
     const secureFlag = isProduction ? "Secure; " : "";
     const cookieExpires = expiryDate.toUTCString();
     
+    // CRITICAL: Set Domain attribute for Firebase Functions proxy compatibility
+    // Use the forwarded host (your app domain) instead of the functions domain
+    const cookieDomain = req.headers.get("x-forwarded-host") || req.nextUrl.hostname;
+    const domainFlag = cookieDomain ? `Domain=${cookieDomain}; ` : "";
+    
+    console.log("🍪 Setting cookies with domain:", cookieDomain);
+    
     response.headers.append(
       "Set-Cookie",
-      `arcgis_token=${token.access_token}; HttpOnly; ${secureFlag}SameSite=Lax; Path=/; Expires=${cookieExpires}`
+      `arcgis_token=${token.access_token}; HttpOnly; ${secureFlag}${domainFlag}SameSite=Lax; Path=/; Expires=${cookieExpires}`
     );
     response.headers.append(
       "Set-Cookie",
-      `arcgis_token_expiry=${expiryDate.getTime()}; HttpOnly; ${secureFlag}SameSite=Lax; Path=/; Expires=${cookieExpires}`
+      `arcgis_token_expiry=${expiryDate.getTime()}; HttpOnly; ${secureFlag}${domainFlag}SameSite=Lax; Path=/; Expires=${cookieExpires}`
     );
     
     if (token.refresh_token) {
       const refreshExpires = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toUTCString();
       response.headers.append(
         "Set-Cookie",
-        `arcgis_refresh_token=${token.refresh_token}; HttpOnly; ${secureFlag}SameSite=Lax; Path=/; Expires=${refreshExpires}`
+        `arcgis_refresh_token=${token.refresh_token}; HttpOnly; ${secureFlag}${domainFlag}SameSite=Lax; Path=/; Expires=${refreshExpires}`
       );
     }
     
     if (token.username) {
       response.headers.append(
         "Set-Cookie",
-        `arcgis_username=${token.username}; ${secureFlag}SameSite=Lax; Path=/; Expires=${cookieExpires}`
+        `arcgis_username=${token.username}; ${secureFlag}${domainFlag}SameSite=Lax; Path=/; Expires=${cookieExpires}`
       );
     }
     

@@ -110,12 +110,19 @@ export function ArcGISAuthProvider({ children }: { children: ReactNode }) {
     // If we're on an auth-required page, check auth status
     // This handles the case where we're redirected to /map after OAuth
     if (pathname === "/map" || pathname.startsWith("/dashboard")) {
-      // Small delay to ensure cookies are set after redirect
+      // Check if we just came from OAuth callback by looking at referrer
+      const isFromCallback = typeof window !== "undefined" && 
+        (document.referrer.includes('/api/auth/callback') || 
+         window.location.search.includes('from_oauth=true'));
+      
+      // Use longer delay if coming from OAuth callback to ensure cookies are processed
+      const delay = isFromCallback ? 2000 : 300;
+      
       const timeoutId = setTimeout(() => {
-        console.log("🔄 Pathname changed to auth-required page, re-checking auth status");
+        console.log(`🔄 Pathname changed to auth-required page (from OAuth: ${isFromCallback}), re-checking auth status`);
         setLoading(true);
         checkAuth();
-      }, 300);
+      }, delay);
       return () => clearTimeout(timeoutId);
     }
   }, [pathname]);
