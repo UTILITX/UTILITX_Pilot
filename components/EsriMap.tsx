@@ -3203,7 +3203,7 @@ function EsriMap({
       />
       {/* UI overlays */}
       <div className="absolute top-4 right-4 z-[500] pointer-events-none">
-        <BasemapToggle map={mapRef.current} />
+        <BasemapToggle map={mapRef.current} arcgisToken={arcgisToken} />
       </div>
       <div className="absolute bottom-4 right-4 z-[500] pointer-events-none">
         <Legend />

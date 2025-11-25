@@ -1,160 +1,111 @@
-// contexts/ArcGISAuthContext.tsx
 "use client";
 
-import React, {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  ReactNode,
-} from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import type Credential from "@arcgis/core/identity/Credential";
-import { signOut } from "@/lib/arcgis/setupIdentity";
+import { arcgisAuth } from "@/lib/auth/arcgis-pkce";
 
-type ArcGISAuthContextValue = {
-  credential: Credential | null;
+interface ArcGISAuthContextType {
   isAuthenticated: boolean;
-  loading: boolean;
+  isLoading: boolean;
+  username: string | null;
+  accessToken: string | null;
   login: () => Promise<void>;
   logout: () => void;
-  token: string | null;
-};
-
-const ArcGISAuthContext = createContext<ArcGISAuthContextValue>({
-  credential: null,
-  isAuthenticated: false,
-  loading: true,
-  login: async () => {},
-  logout: () => {},
-  token: null,
-});
-
-export function useArcGISAuth() {
-  return useContext(ArcGISAuthContext);
+  checkAuth: () => void;
 }
 
-export function ArcGISAuthProvider({ children }: { children: ReactNode }) {
-  const [credential, setCredential] = useState<Credential | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+const ArcGISAuthContext = createContext<ArcGISAuthContextType | undefined>(
+  undefined
+);
+
+export function ArcGISAuthProvider({ children }: { children: React.ReactNode }) {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [username, setUsername] = useState<string | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
   const pathname = usePathname();
 
-  // Check auth status via API (since token cookie is httpOnly)
-  // DO NOT call getCredential() - it will trigger IdentityManager's OAuth flow
-  async function checkAuth() {
-    if (typeof window === "undefined") {
-      setLoading(false);
-      return;
-    }
-
+  const checkAuth = () => {
     try {
-      const response = await fetch("/api/auth/check", {
-        cache: "no-store", // Always fetch fresh auth status
+      setIsLoading(true);
+      
+      // Check if user is authenticated using client-side storage
+      const authenticated = arcgisAuth.isAuthenticated();
+      const token = arcgisAuth.getAccessToken();
+      const user = arcgisAuth.getUsername();
+      
+      setIsAuthenticated(authenticated);
+      setAccessToken(token);
+      setUsername(user);
+      
+      console.log("🔍 Auth check result:", {
+        authenticated,
+        hasToken: !!token,
+        username: user,
       });
-      if (response.ok) {
-        const data = await response.json();
-        if (data.authenticated && data.token) {
-          console.log("🔐 User is authenticated");
-          setToken(data.token);
-        } else {
-          console.log("🔐 User is not authenticated");
-          setToken(null);
-        }
-      } else {
-        console.log("🔐 User is not authenticated");
-        setToken(null);
-      }
+      
     } catch (error) {
-      console.error("Error checking auth status:", error);
-      setToken(null);
+      console.error("Auth check failed:", error);
+      setIsAuthenticated(false);
+      setAccessToken(null);
+      setUsername(null);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
-  }
-
-  useEffect(() => {
-    // Check auth on mount
-    checkAuth();
-
-    // Re-check auth when window gains focus (e.g., after OAuth redirect)
-    // This ensures we pick up cookies set by the OAuth callback
-    const handleFocus = () => {
-      console.log("🔄 Window focused, re-checking auth status");
-      setLoading(true);
-      checkAuth();
-    };
-
-    // Also check on visibility change (tab becomes visible)
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        console.log("🔄 Tab visible, re-checking auth status");
-        setLoading(true);
-        checkAuth();
-      }
-    };
-
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    
-    return () => {
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, []);
-
-  // Re-check auth when pathname changes (e.g., after OAuth redirect to /map)
-  useEffect(() => {
-    if (!pathname) return;
-    
-    // If we're on an auth-required page, check auth status
-    // This handles the case where we're redirected to /map after OAuth
-    if (pathname === "/map" || pathname.startsWith("/dashboard")) {
-      // Check if we just came from OAuth callback by looking at referrer
-      const isFromCallback = typeof window !== "undefined" && 
-        (document.referrer.includes('/api/auth/callback') || 
-         window.location.search.includes('from_oauth=true'));
-      
-      // Use longer delay if coming from OAuth callback to ensure cookies are processed
-      const delay = isFromCallback ? 2000 : 300;
-      
-      const timeoutId = setTimeout(() => {
-        console.log(`🔄 Pathname changed to auth-required page (from OAuth: ${isFromCallback}), re-checking auth status`);
-        setLoading(true);
-        checkAuth();
-      }, delay);
-      return () => clearTimeout(timeoutId);
-    }
-  }, [pathname]);
+  };
 
   const login = async () => {
-    // Force browser redirect to our custom OAuth login route
-    // This ensures we use the correct redirect URI configured in the route
-    // DO NOT use getCredential() - it triggers IdentityManager with wrong redirect URI
-    window.location.href = "/api/auth/login";
+    try {
+      console.log("🔐 Initiating ArcGIS PKCE login");
+      await arcgisAuth.login();
+    } catch (error) {
+      console.error("Login failed:", error);
+      throw error;
+    }
   };
 
   const logout = () => {
-    // Clear client-side IdentityManager credentials
-    signOut();
-    
-    // Clear client-side state immediately
-    setCredential(null);
-    setToken(null);
-    
-    // Redirect to logout API route which clears server-side cookies and redirects to /map
-    window.location.href = "/api/auth/logout";
+    console.log("🚪 Logging out");
+    arcgisAuth.logout();
+    setIsAuthenticated(false);
+    setAccessToken(null);
+    setUsername(null);
   };
+
+  useEffect(() => {
+    // Skip auth check if we're on the OAuth callback page
+    if (pathname === '/auth/arcgis') {
+      console.log("🔄 On OAuth callback page, skipping auth check");
+      setIsLoading(false);
+      return;
+    }
+    
+    checkAuth();
+  }, [pathname]);
+
+  // Listen for storage changes (e.g., login in another tab)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key?.startsWith('arcgis_')) {
+        console.log("🔄 Auth storage changed, rechecking auth");
+        checkAuth();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   return (
     <ArcGISAuthContext.Provider
       value={{
-        credential,
-        isAuthenticated: !!token, // Use token presence to determine auth status
-        loading,
+        isAuthenticated,
+        isLoading,
+        username,
+        accessToken,
         login,
         logout,
-        token,
+        checkAuth,
       }}
     >
       {children}
@@ -162,3 +113,10 @@ export function ArcGISAuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
+export function useArcGISAuth() {
+  const context = useContext(ArcGISAuthContext);
+  if (context === undefined) {
+    throw new Error("useArcGISAuth must be used within an ArcGISAuthProvider");
+  }
+  return context;
+}

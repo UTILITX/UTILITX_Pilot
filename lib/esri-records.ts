@@ -55,7 +55,8 @@ function esriGeometryToArcGIS(geometry: any): any | null {
  * Uses ArcGIS REST API directly for reliable spatial queries
  */
 export async function queryRecordsInPolygon(
-  polygon: Array<{ lat: number; lng: number }> | any
+  polygon: Array<{ lat: number; lng: number }> | any,
+  authToken?: string | null
 ): Promise<any[]> {
   // Prevent SSR
   if (typeof window === "undefined") {
@@ -81,7 +82,18 @@ export async function queryRecordsInPolygon(
     return [];
   }
 
-  const apiKey = process.env.NEXT_PUBLIC_ARCGIS_API_KEY!;
+  // Use provided token or try to get from client-side auth, fall back to API key
+  let token = authToken;
+  if (!token && typeof window !== "undefined") {
+    try {
+      const { getArcGISToken } = await import('@/lib/auth/get-token');
+      token = getArcGISToken();
+    } catch (error) {
+      console.warn("Could not get OAuth token from client-side auth, falling back to API key");
+    }
+  }
+
+  const apiKey = token || process.env.NEXT_PUBLIC_ARCGIS_API_KEY!;
 
   // Query all three record layers in parallel
   const queryPromises = [

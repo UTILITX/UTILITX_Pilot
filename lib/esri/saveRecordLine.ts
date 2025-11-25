@@ -18,22 +18,12 @@ export async function saveRecordLine(
   let token: string | null = null;
   let username: string | null = null;
   try {
-    const response = await fetch("/api/auth/check");
-    if (response.ok) {
-      const data = await response.json();
-      if (data.authenticated && data.token) {
-        token = data.token;
-        username = data.username || null;
-        console.log("✅ [saveRecordLine] Got OAuth token from API");
-        console.log("🔍 [saveRecordLine] Token length:", token?.length || 0);
-        console.log("🔍 [saveRecordLine] Username:", username);
-      } else {
-        console.error("❌ [saveRecordLine] Token check returned:", data);
-      }
-    } else {
-      const errorText = await response.text();
-      console.error("❌ [saveRecordLine] Token check failed:", response.status, errorText);
-    }
+    const { getArcGISToken, getArcGISUsername } = await import('@/lib/auth/get-token');
+    token = getArcGISToken();
+    username = getArcGISUsername();
+    console.log("✅ [saveRecordLine] Got OAuth token from client-side auth");
+    console.log("🔍 [saveRecordLine] Token length:", token?.length || 0);
+    console.log("🔍 [saveRecordLine] Username:", username);
   } catch (err) {
     console.error("❌ [saveRecordLine] Failed to get token from API:", err);
     throw new Error("Authentication required. Please log in.");

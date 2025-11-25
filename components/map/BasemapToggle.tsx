@@ -7,11 +7,12 @@ import { initBasemapApiKey } from "@/lib/esriConfigPublic";
 
 type BasemapToggleProps = {
   map: L.Map | null;
+  arcgisToken?: string | null; // OAuth token from parent component
 };
 
 type BasemapType = "Imagery" | "Streets" | "Topographic";
 
-const BasemapToggle = ({ map }: BasemapToggleProps) => {
+const BasemapToggle = ({ map, arcgisToken }: BasemapToggleProps) => {
   // Initialize API key for basemaps (ONLY for basemaps, not for FeatureLayers)
   initBasemapApiKey();
 
@@ -31,7 +32,7 @@ const BasemapToggle = ({ map }: BasemapToggleProps) => {
     // Initialize basemap layers (factory functions - create new instances when needed)
     const createBasemap = (type: BasemapType): L.TileLayer => {
       return EL.basemapLayer(type, {
-        apikey: apiKey,
+        apikey: authToken,
         maxZoom: 19,
       });
     };
@@ -118,7 +119,7 @@ const BasemapToggle = ({ map }: BasemapToggleProps) => {
     }
 
     const newBasemap = EL.basemapLayer(basemapType, {
-      apikey: apiKey,
+        apikey: authToken,
       maxZoom: 19,
     });
 

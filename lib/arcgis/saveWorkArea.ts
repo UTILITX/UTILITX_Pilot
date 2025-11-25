@@ -58,27 +58,17 @@ async function saveWorkAreaInternal({ geometry, attributes }: SaveWorkAreaOption
 
   console.log("🔍 [saveWorkArea] Getting OAuth token and registering with IdentityManager");
 
-  // Get token from API (since it's in httpOnly cookie)
+  // Get token from client-side auth
   let token: string | null = null;
   let username: string | null = null;
   try {
-    const response = await fetch("/api/auth/check");
-    if (response.ok) {
-      const data = await response.json();
-      if (data.authenticated && data.token) {
-        token = data.token;
-        username = data.username || null;
-        console.log("✅ [saveWorkArea] Got OAuth token from API");
-        console.log("🔍 [saveWorkArea] Token length:", token?.length || 0);
-        console.log("🔍 [saveWorkArea] Username:", username);
-        console.log("🔍 [saveWorkArea] Token preview:", token ? `${token.substring(0, 20)}...` : "null");
-      } else {
-        console.error("❌ [saveWorkArea] Token check returned:", data);
-      }
-    } else {
-      const errorText = await response.text();
-      console.error("❌ [saveWorkArea] Token check failed:", response.status, errorText);
-    }
+    const { getArcGISToken, getArcGISUsername } = await import('@/lib/auth/get-token');
+    token = getArcGISToken();
+    username = getArcGISUsername();
+    console.log("✅ [saveWorkArea] Got OAuth token from client-side auth");
+    console.log("🔍 [saveWorkArea] Token length:", token?.length || 0);
+    console.log("🔍 [saveWorkArea] Username:", username);
+    console.log("🔍 [saveWorkArea] Token preview:", token ? `${token.substring(0, 20)}...` : "null");
   } catch (err) {
     console.error("❌ [saveWorkArea] Failed to get token from API:", err);
     throw new Error("Authentication required. Please log in.");

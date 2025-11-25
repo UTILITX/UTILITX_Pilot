@@ -18,24 +18,14 @@ export async function saveRecordPolygon(
   let token: string | null = null;
   let username: string | null = null;
   try {
-    const response = await fetch("/api/auth/check");
-    if (response.ok) {
-      const data = await response.json();
-      if (data.authenticated && data.token) {
-        token = data.token;
-        username = data.username || null;
-        console.log("✅ [saveRecordPolygon] Got OAuth token from API");
-        console.log("🔍 [saveRecordPolygon] Token length:", token?.length || 0);
-        console.log("🔍 [saveRecordPolygon] Username:", username);
-      } else {
-        console.error("❌ [saveRecordPolygon] Token check returned:", data);
-      }
-    } else {
-      const errorText = await response.text();
-      console.error("❌ [saveRecordPolygon] Token check failed:", response.status, errorText);
-    }
+    const { getArcGISToken, getArcGISUsername } = await import('@/lib/auth/get-token');
+    token = getArcGISToken();
+    username = getArcGISUsername();
+    console.log("✅ [saveRecordPolygon] Got OAuth token from client-side auth");
+    console.log("🔍 [saveRecordPolygon] Token length:", token?.length || 0);
+    console.log("🔍 [saveRecordPolygon] Username:", username);
   } catch (err) {
-    console.error("❌ [saveRecordPolygon] Failed to get token from API:", err);
+    console.error("❌ [saveRecordPolygon] Failed to get token from client-side auth:", err);
     throw new Error("Authentication required. Please log in.");
   }
 

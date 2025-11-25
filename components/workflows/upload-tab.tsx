@@ -659,18 +659,13 @@ ${rec.orgName ? `Org: ${rec.orgName} • ` : ""}Uploaded ${formatDistanceToNow(n
           // Save to ArcGIS Point layer
           const targetUrl = getRecordsLayerUrl("Point");
           if (targetUrl) {
-            // Try to get token from API route
+            // Try to get token from client-side auth
             let authToken: string | null = null;
             try {
-              const tokenResponse = await fetch("/api/auth/check");
-              if (tokenResponse.ok) {
-                const tokenData = await tokenResponse.json();
-                if (tokenData.authenticated && tokenData.token) {
-                  authToken = tokenData.token;
-                }
-              }
+              const { getArcGISToken } = await import('@/lib/auth/get-token');
+              authToken = getArcGISToken();
             } catch (error) {
-              console.warn("Could not fetch token, using API key fallback");
+              console.warn("Could not get token from client-side auth, using API key fallback");
             }
             
             savePromises.push(

@@ -59,7 +59,7 @@ export default function MapPage() {
   // ============================================
   
   const router = useRouter()
-  const { token, isAuthenticated, isLoading } = useArcGISAuth()
+  const { accessToken, isAuthenticated, isLoading, login } = useArcGISAuth()
   
   // Shared records state for the unified workflow (used by UploadTab)
   const [records, setRecords] = useState<RequestRecord[]>([])
@@ -119,10 +119,10 @@ export default function MapPage() {
   // Check authentication on mount
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      // Redirect to login if not authenticated
-      router.push("/api/auth/login")
+      // Trigger client-side login flow
+      login().catch(console.error);
     }
-  }, [isLoading, isAuthenticated, router])
+  }, [isLoading, isAuthenticated, login])
 
   // When navigation mode changes, open the navigation panel (unless a work area is selected)
   useEffect(() => {
@@ -213,8 +213,8 @@ const handleSetPanelMode = (mode: "overview" | "records" | "insights" | "share" 
     async function loadData() {
       try {
         const [r, wa] = await Promise.all([
-          fetchAllRecordsFromEsri(token),
-          fetchAllWorkAreasFromEsri(token),
+          fetchAllRecordsFromEsri(accessToken),
+          fetchAllWorkAreasFromEsri(accessToken),
         ]);
 
         console.log("📥 Loaded records from Esri:", r.length);
@@ -231,7 +231,7 @@ const handleSetPanelMode = (mode: "overview" | "records" | "insights" | "share" 
     }
 
     loadData();
-  }, [token]);
+  }, [accessToken]);
 
   // Restore saved project on page load
   useEffect(() => {
@@ -311,7 +311,7 @@ const handleSetPanelMode = (mode: "overview" | "records" | "insights" | "share" 
         setWorkAreaSelectionEnabled(false)
       }}
       selectedWorkArea={selectedWorkArea}
-      arcgisToken={token}
+      arcgisToken={accessToken}
       georefMode={recordDrawingConfig?.georefMode ?? "none"}
       georefColor={recordDrawingConfig?.georefColor}
       onGeorefComplete={handleRecordGeorefComplete}
@@ -429,7 +429,7 @@ const handleSetPanelMode = (mode: "overview" | "records" | "insights" | "share" 
     workAreaDrawCommand,
     workAreaSelectionEnabled,
     selectedWorkArea,
-    token,
+    accessToken,
     recordDrawingConfig,
     recordDrawCommand,
     zoomToFeature,
@@ -459,7 +459,7 @@ const handleSetPanelMode = (mode: "overview" | "records" | "insights" | "share" 
         <div className="text-center">
           <div className="text-lg font-medium text-gray-700 mb-4">Authentication required</div>
           <button
-            onClick={() => router.push("/api/auth/login")}
+            onClick={() => login().catch(console.error)}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
           >
             Sign in with ArcGIS

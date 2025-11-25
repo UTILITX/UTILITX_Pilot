@@ -4,7 +4,13 @@ export const ARCGIS_PORTAL_URL =
   "https://indib78f3690c643.maps.arcgis.com";
 
 export const ARCGIS_CLIENT_ID =
-  process.env.NEXT_PUBLIC_ARCGIS_CLIENT_ID ?? "";
+  process.env.NEXT_PUBLIC_ARCGIS_CLIENT_ID ?? "X59peolTbh7J43eY";
+
+export const ARCGIS_REDIRECT_URI =
+  process.env.NEXT_PUBLIC_ARCGIS_REDIRECT_URI ??
+  (typeof window !== 'undefined' 
+    ? `${window.location.origin}/auth/arcgis`
+    : "https://utilitx-pilot-a01bb.web.app/auth/arcgis");
 
 export const WORK_AREAS_LAYER_URL =
   process.env.NEXT_PUBLIC_ARCGIS_WORK_AREAS_URL ??
