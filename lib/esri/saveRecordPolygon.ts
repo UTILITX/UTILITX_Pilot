@@ -12,18 +12,13 @@ export async function saveRecordPolygon(
     throw new Error("saveRecordPolygon can only be called in the browser");
   }
 
-  console.log("🔍 [saveRecordPolygon] Getting OAuth token from API...");
-
-  // Get token from API (since it's in httpOnly cookie)
+  // Get token from client-side auth
   let token: string | null = null;
   let username: string | null = null;
   try {
     const { getArcGISToken, getArcGISUsername } = await import('@/lib/auth/get-token');
     token = getArcGISToken();
     username = getArcGISUsername();
-    console.log("✅ [saveRecordPolygon] Got OAuth token from client-side auth");
-    console.log("🔍 [saveRecordPolygon] Token length:", token?.length || 0);
-    console.log("🔍 [saveRecordPolygon] Username:", username);
   } catch (err) {
     console.error("❌ [saveRecordPolygon] Failed to get token from client-side auth:", err);
     throw new Error("Authentication required. Please log in.");

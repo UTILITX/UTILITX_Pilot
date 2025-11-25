@@ -11,18 +11,13 @@ export async function saveRecordPoint(
     throw new Error("saveRecordPoint can only be called in the browser");
   }
 
-  console.log("🔍 [saveRecordPoint] Getting OAuth token from API...");
-
-  // Get token from API (since it's in httpOnly cookie)
+  // Get token from client-side auth
   let token: string | null = null;
   let username: string | null = null;
   try {
     const { getArcGISToken, getArcGISUsername } = await import('@/lib/auth/get-token');
     token = getArcGISToken();
     username = getArcGISUsername();
-    console.log("✅ [saveRecordPoint] Got OAuth token from client-side auth");
-    console.log("🔍 [saveRecordPoint] Token length:", token?.length || 0);
-    console.log("🔍 [saveRecordPoint] Username:", username);
   } catch (err) {
     console.error("❌ [saveRecordPoint] Failed to get token from client-side auth:", err);
     throw new Error("Authentication required. Please log in.");

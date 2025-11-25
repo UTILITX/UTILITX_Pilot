@@ -56,8 +56,6 @@ async function saveWorkAreaInternal({ geometry, attributes }: SaveWorkAreaOption
   const esriId = (await import("@arcgis/core/identity/IdentityManager")).default;
   const { ARCGIS_CLIENT_ID, ARCGIS_PORTAL_URL: PORTAL_URL } = await import("./config");
 
-  console.log("🔍 [saveWorkArea] Getting OAuth token and registering with IdentityManager");
-
   // Get token from client-side auth
   let token: string | null = null;
   let username: string | null = null;
@@ -66,9 +64,6 @@ async function saveWorkAreaInternal({ geometry, attributes }: SaveWorkAreaOption
     token = getArcGISToken();
     username = getArcGISUsername();
     console.log("✅ [saveWorkArea] Got OAuth token from client-side auth");
-    console.log("🔍 [saveWorkArea] Token length:", token?.length || 0);
-    console.log("🔍 [saveWorkArea] Username:", username);
-    console.log("🔍 [saveWorkArea] Token preview:", token ? `${token.substring(0, 20)}...` : "null");
   } catch (err) {
     console.error("❌ [saveWorkArea] Failed to get token from API:", err);
     throw new Error("Authentication required. Please log in.");
