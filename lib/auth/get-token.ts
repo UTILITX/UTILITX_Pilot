@@ -16,3 +16,4 @@ export function getArcGISUsername(): string | null {
 export function isAuthenticated(): boolean {
   return arcgisAuth.isAuthenticated();
 }
+

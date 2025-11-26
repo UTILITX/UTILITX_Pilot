@@ -177,6 +177,22 @@ const handleSelectProject = (id: string) => {
     })
     setAnalysisOpen(true)
     setNavigationPanelOpen(false)
+    
+    // Zoom to the selected work area (only if it has geometry)
+    // Add delay to ensure layers are loaded before zooming
+    if (workArea.geometry) {
+      console.log("🔍 Zooming to work area with geometry:", workArea.id, workArea.geometry);
+      setTimeout(() => {
+        setZoomSequence((prev: number) => {
+          const newVersion = prev + 1
+          setZoomToFeature({ feature: workArea, version: newVersion })
+          setTimeout(() => setZoomToFeature(null), 150)
+          return newVersion
+        })
+      }, 500) // Wait 500ms for layers to finish loading
+    } else {
+      console.warn("⚠️ Work area has no geometry, skipping zoom:", workArea.id);
+    }
   }
 }
 
@@ -332,6 +348,22 @@ const handleSetPanelMode = (mode: "overview" | "records" | "insights" | "share" 
           notes: workArea.notes,
         };
         handleSelectProject(workArea.id);
+        
+        // Zoom to the selected work area (use the workArea from the click event which should have geometry)
+        // Add delay to ensure layers are loaded before zooming
+        if (workArea.geometry) {
+          console.log("🔍 Zooming to clicked work area with geometry:", workArea.id, workArea.geometry);
+          setTimeout(() => {
+            setZoomSequence((prev: number) => {
+              const newVersion = prev + 1
+              setZoomToFeature({ feature: workArea, version: newVersion })
+              setTimeout(() => setZoomToFeature(null), 150)
+              return newVersion
+            })
+          }, 500) // Wait 500ms for layers to finish loading
+        } else {
+          console.warn("⚠️ Clicked work area has no geometry, skipping zoom:", workArea.id);
+        }
       }}
       onWorkAreaClick={(workArea) => {
         setSelectedWorkAreaForAnalysis({
@@ -432,7 +464,7 @@ const handleSetPanelMode = (mode: "overview" | "records" | "insights" | "share" 
     accessToken,
     recordDrawingConfig,
     recordDrawCommand,
-    zoomToFeature,
+    // Removed zoomToFeature from deps to prevent map re-mounting on zoom changes
     // Note: Inline callbacks are recreated on each render, but that's acceptable
     // The main benefit is preventing full component remount when these values don't change
   ])
@@ -525,6 +557,22 @@ const handleSetPanelMode = (mode: "overview" | "records" | "insights" | "share" 
             })
             setAnalysisOpen(true)
             setNavigationPanelOpen(false)
+            
+            // Zoom to the selected work area (only if it has geometry)
+            // Add delay to ensure layers are loaded before zooming
+            if (workArea.geometry) {
+              console.log("🔍 Zooming to navigation panel work area with geometry:", workArea.id, workArea.geometry);
+              setTimeout(() => {
+                setZoomSequence((prev: number) => {
+                  const newVersion = prev + 1
+                  setZoomToFeature({ feature: workArea, version: newVersion })
+                  setTimeout(() => setZoomToFeature(null), 150)
+                  return newVersion
+                })
+              }, 500) // Wait 500ms for layers to finish loading
+            } else {
+              console.warn("⚠️ Navigation panel work area has no geometry, skipping zoom:", workArea.id);
+            }
           }
         }}
         onZoomToRecord={(rec) => {
@@ -551,9 +599,26 @@ const handleSetPanelMode = (mode: "overview" | "records" | "insights" | "share" 
         records={esriRecords}
         workAreas={workAreas}
         selectedWorkArea={selectedWorkArea}
-        onSelectWorkArea={(id) =>
-          setSelectedWorkArea(workAreas.find((w: { id: string }) => w.id === id) || null)
-        }
+        onSelectWorkArea={(id) => {
+          const workArea = workAreas.find((w: { id: string }) => w.id === id) || null
+          setSelectedWorkArea(workArea)
+          
+          // Zoom to the selected work area (only if it has geometry)
+          // Add delay to ensure layers are loaded before zooming
+          if (workArea && workArea.geometry) {
+            console.log("🔍 Zooming to bottom drawer work area with geometry:", workArea.id, workArea.geometry);
+            setTimeout(() => {
+              setZoomSequence((prev: number) => {
+                const newVersion = prev + 1
+                setZoomToFeature({ feature: workArea, version: newVersion })
+                setTimeout(() => setZoomToFeature(null), 150)
+                return newVersion
+              })
+            }, 500) // Wait 500ms for layers to finish loading
+          } else if (workArea) {
+            console.warn("⚠️ Bottom drawer work area has no geometry, skipping zoom:", workArea.id);
+          }
+        }}
         onZoomToRecord={(rec) => {
           setZoomSequence((prev: number) => {
             const newVersion = prev + 1

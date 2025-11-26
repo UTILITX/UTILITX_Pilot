@@ -188,22 +188,28 @@ export function zoomToEsriFeature(map: L.Map, featureOrGeometry: any, padding: n
     return;
   }
 
+  console.log("🔍 zoomToEsriFeature: Processing geometry:", geometry);
+
   const bounds = getBoundsFromEsriGeometry(geometry);
   if (!bounds) {
-    console.warn("zoomToEsriFeature: No bounds returned, skipping zoom.");
+    console.warn("zoomToEsriFeature: No bounds returned, skipping zoom. Geometry was:", geometry);
     return;
   }
+
+  console.log("🔍 zoomToEsriFeature: Calculated bounds:", bounds);
 
   try {
     map.fitBounds(bounds, {
       padding: [padding, padding],
       maxZoom: 18,
     });
+    console.log("✅ zoomToEsriFeature: Successfully zoomed to bounds");
   } catch (error) {
-    console.error("Error fitting bounds:", error);
+    console.error("❌ Error fitting bounds:", error);
     // Fallback to center point if bounds calculation fails
     const center = getCenterFromEsriGeometry(geometry);
     if (center) {
+      console.log("🔄 zoomToEsriFeature: Falling back to center point:", center);
       map.setView([center.lat, center.lng], 16);
     }
   }

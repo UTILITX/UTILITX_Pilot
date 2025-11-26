@@ -13,8 +13,10 @@ type BasemapToggleProps = {
 type BasemapType = "Imagery" | "Streets" | "Topographic";
 
 const BasemapToggle = ({ map, arcgisToken }: BasemapToggleProps) => {
-  // Initialize API key for basemaps (ONLY for basemaps, not for FeatureLayers)
-  initBasemapApiKey();
+  // Only initialize API key if we don't have an OAuth token
+  if (!arcgisToken) {
+    initBasemapApiKey();
+  }
 
   const [activeBasemap, setActiveBasemap] = useState<BasemapType>("Streets");
   const basemapLayersRef = useRef<Record<string, L.TileLayer>>({}); // Kept for compatibility but not used for switching
@@ -24,17 +26,22 @@ const BasemapToggle = ({ map, arcgisToken }: BasemapToggleProps) => {
     if (!map) return;
 
     const apiKey = process.env.NEXT_PUBLIC_ARCGIS_API_KEY;
-    if (!apiKey) {
+    if (!apiKey && !arcgisToken) {
       console.warn("⚠️ ArcGIS API key not found. Basemaps may not load correctly.");
       return;
     }
 
     // Initialize basemap layers (factory functions - create new instances when needed)
     const createBasemap = (type: BasemapType): L.TileLayer => {
-      return EL.basemapLayer(type, {
-        apikey: authToken,
-        maxZoom: 19,
-      });
+      // Use OAuth token if available, otherwise fall back to API key
+      const authOptions: any = { maxZoom: 19 };
+      if (arcgisToken) {
+        authOptions.token = arcgisToken;
+      } else if (apiKey) {
+        authOptions.apikey = apiKey;
+      }
+      
+      return EL.basemapLayer(type, authOptions);
     };
 
     // Store factory function instead of instances
@@ -113,15 +120,20 @@ const BasemapToggle = ({ map, arcgisToken }: BasemapToggleProps) => {
 
     // Create and add new basemap
     const apiKey = process.env.NEXT_PUBLIC_ARCGIS_API_KEY;
-    if (!apiKey) {
+    if (!apiKey && !arcgisToken) {
       console.warn("⚠️ ArcGIS API key not found. Basemaps may not load correctly.");
       return;
     }
 
-    const newBasemap = EL.basemapLayer(basemapType, {
-        apikey: authToken,
-      maxZoom: 19,
-    });
+    // Use OAuth token if available, otherwise fall back to API key
+    const authOptions: any = { maxZoom: 19 };
+    if (arcgisToken) {
+      authOptions.token = arcgisToken;
+    } else if (apiKey) {
+      authOptions.apikey = apiKey;
+    }
+    
+    const newBasemap = EL.basemapLayer(basemapType, authOptions);
 
     newBasemap.addTo(map);
     currentBasemapRef.current = newBasemap;

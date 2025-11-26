@@ -201,6 +201,7 @@ type EsriMapProps = {
     name?: string;
     [key: string]: any;
   } | null;
+  arcgisToken?: string | null;
   georefMode?: GeorefMode;
   georefColor?: string;
   onGeorefComplete?: (
@@ -459,20 +460,26 @@ function EsriMap({
           if (!document.getElementById(styleId)) {
             const style = document.createElement('style');
             style.id = styleId;
-            style.textContent = `
-              .leaflet-popup-pane {
-                z-index: 10000 !important;
-              }
-              .leaflet-popup {
-                z-index: 10000 !important;
-              }
-              .leaflet-popup-content-wrapper {
-                z-index: 10000 !important;
-              }
-              .custom-popup {
-                z-index: 10000 !important;
-              }
-            `;
+          style.textContent = `
+            .leaflet-popup-pane {
+              z-index: 10000 !important;
+            }
+            .leaflet-popup {
+              z-index: 10000 !important;
+            }
+            .leaflet-popup-content-wrapper {
+              z-index: 10000 !important;
+            }
+            .custom-popup {
+              z-index: 10000 !important;
+            }
+            .leaflet-top.leaflet-left {
+              left: 280px !important;
+            }
+            .leaflet-control-container .leaflet-left > .leaflet-control {
+              margin-left: 0 !important;
+            }
+          `;
             document.head.appendChild(style);
             console.log('✅ Injected popup z-index CSS fix');
           }
@@ -1268,12 +1275,8 @@ function EsriMap({
                 // Store rebind function in ref so it's accessible from record saving code
                 rebindWorkAreaPopupsRef.current = rebindAllPopups;
 
-                // Listen for load event (fires when layer loads or refreshes)
-                workAreas.on('load', () => {
-                  console.log('📦 Work areas layer loaded, rebinding popups...');
-                  // Use longer delay to ensure all features are fully processed
-                  setTimeout(rebindAllPopups, 300);
-                });
+                // Removed automatic rebinding on load - layers should be stable after initial binding
+                // Work area popups are bound once during initialization and should remain stable
 
                 // Also listen for when features are added (more reliable for new features)
                 workAreas.on('addfeature', (e: any) => {
@@ -1579,13 +1582,8 @@ function EsriMap({
                     pointLayer.on("load", () => {
                       console.log("Records Point layer loaded");
                       
-                      // 🔥 FIX: Rebind work area popups after records layer loads (they might get lost)
-                      if (rebindWorkAreaPopupsRef.current) {
-                        setTimeout(() => {
-                          console.log('🔄 Rebinding work area popups after Records Point layer load...');
-                          rebindWorkAreaPopupsRef.current?.();
-                        }, 300);
-                      }
+                      // Removed automatic rebinding - layers should not interfere with each other
+                      // Work area popups are bound once and should remain stable
                       setTimeout(() => {
                         try {
                           // Ensure map pane is ready
@@ -1624,13 +1622,8 @@ function EsriMap({
                     lineLayer.on("load", () => {
                       console.log("Records Line layer loaded");
                       
-                      // 🔥 FIX: Rebind work area popups after records layer loads (they might get lost)
-                      if (rebindWorkAreaPopupsRef.current) {
-                        setTimeout(() => {
-                          console.log('🔄 Rebinding work area popups after Records Line layer load...');
-                          rebindWorkAreaPopupsRef.current?.();
-                        }, 300);
-                      }
+                      // Removed automatic rebinding - layers should not interfere with each other
+                      // Work area popups are bound once and should remain stable
                       setTimeout(() => {
                         try {
                           // Ensure map pane is ready
@@ -1669,13 +1662,8 @@ function EsriMap({
                     polygonLayer.on("load", () => {
                       console.log("Records Polygon layer loaded");
                       
-                      // 🔥 FIX: Rebind work area popups after records layer loads (they might get lost)
-                      if (rebindWorkAreaPopupsRef.current) {
-                        setTimeout(() => {
-                          console.log('🔄 Rebinding work area popups after Records Polygon layer load...');
-                          rebindWorkAreaPopupsRef.current?.();
-                        }, 300);
-                      }
+                      // Removed automatic rebinding - layers should not interfere with each other
+                      // Work area popups are bound once and should remain stable
                       setTimeout(() => {
                         try {
                           // Ensure map pane is ready
@@ -2245,14 +2233,9 @@ function EsriMap({
             // Store georef layer
             currentGeorefLayerRef.current = layer;
 
-            // Don't remove the layer immediately - let it stay visible until the record is in state
-            // The layer will be replaced by the proper record rendering from bubbles/shapes
-            // Remove it after a short delay to allow state update to trigger re-render
-            setTimeout(() => {
-              if (map.hasLayer(layer)) {
-                map.removeLayer(layer);
-              }
-            }, 100);
+            // Keep the drawn layer visible - let the Esri feature layer "overdraw" it
+            // This prevents the "disappearing line" behavior while waiting for layer refresh
+            // The temporary layer will remain as visual confirmation until the real feature appears
             
             isDrawingRecordRef.current = false;
             
@@ -2545,26 +2528,33 @@ function EsriMap({
     const map = mapRef.current;
     if (!map) return;
 
-    // Add delay to ensure Map Pane is initialized
     setTimeout(() => {
       try {
-        // Ensure map pane is ready
         if (!map.getPane('mapPane') || !map.getContainer()) {
           console.warn("Map not ready for zoom, skipping...");
           return;
         }
-        
+
         const feature = zoomToFeature?.feature;
         if (feature?.geometry) {
+          isRestoringViewRef.current = true;
           zoomToEsriFeature(map, feature);
+
+          setTimeout(() => {
+            if (!map) return;
+            lastCenterRef.current = map.getCenter();
+            lastZoomRef.current = map.getZoom();
+            isRestoringViewRef.current = false;
+          }, 600);
         } else if (feature && !feature.geometry) {
           console.warn("Skipping zoom — feature missing geometry:", feature);
         }
       } catch (err) {
         console.error("Error zooming to feature:", err);
+        isRestoringViewRef.current = false;
       }
     }, 400);
-  }, [zoomToFeature?.version]); // ⭐ ONLY zoom when version increments
+  }, [zoomToFeature?.version]);
 
   // Separate effect to handle focusPoint/focusZoom updates
   // Only set view if we don't have a tracked view state (first mount) or if explicitly needed
@@ -2759,37 +2749,7 @@ function EsriMap({
     }
   }, [shouldStartRecordDraw, georefMode]);
 
-  // Update drawing controls when georefMode changes (setup controls only, no auto-enable)
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || mode !== "draw") return;
-
-    // Ensure Geoman toolbar is removed - using custom UTILITX toolbar instead
-    try {
-      map.pm.removeControls();
-    } catch (e) {
-      // Controls might not exist, that's fine
-    }
-
-    // Disable drawing when edit mode is enabled to prevent overlap
-    const handleEditModeToggle = (e: any) => {
-      if (e.enabled) {
-        map.pm.disableDraw();
-      }
-    };
-    map.on("pm:globaleditmodetoggled", handleEditModeToggle);
-
-    // Cleanup: remove event listener on unmount
-    return () => {
-      if (map && mapRef.current && handleEditModeToggle) {
-        try {
-          map.off("pm:globaleditmodetoggled", handleEditModeToggle);
-        } catch (e) {
-          // Ignore errors during cleanup
-        }
-      }
-    };
-  }, [mode, georefMode]);
+  // Removed duplicate pm:globaleditmodetoggled binding - handled in main initialization effect
 
   // Handle work area selection mode changes
   useEffect(() => {
