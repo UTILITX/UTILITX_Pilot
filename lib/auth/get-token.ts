@@ -17,3 +17,4 @@ export function isAuthenticated(): boolean {
   return arcgisAuth.isAuthenticated();
 }
 
+

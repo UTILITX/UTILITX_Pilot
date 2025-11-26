@@ -34,6 +34,7 @@ import {
   setActiveWorkArea,
   setInactiveWorkArea,
 } from "@/helpers/workAreaStyles";
+import { useMapToolbarContext } from "@/components/map/MapToolbarContext";
 
 // Note: Supabase client initialization is handled via singleton pattern in lib/supabase-client.ts
 // This prevents multiple GoTrueClient instances and eliminates duplication warnings
@@ -294,6 +295,37 @@ function EsriMap({
   const rebindWorkAreaPopupsRef = useRef<(() => void) | null>(null);
   const selectedWorkAreaRef = useRef(selectedWorkArea);
   const activeWorkAreaLayerRef = useRef<L.Layer | null>(null);
+  const { toolbarOffset } = useMapToolbarContext()
+
+  useEffect(() => {
+    if (!mapInstance) return
+
+    const selectors = [
+      ".leaflet-control-container",
+      ".leaflet-top.leaflet-left",
+      ".leaflet-control-zoom",
+      ".leaflet-pm-toolbar",
+    ]
+
+    const applyOffset = () => {
+      selectors.forEach((selector) => {
+        const el = document.querySelector(selector) as HTMLElement | null
+        if (el) {
+          el.style.left = `${toolbarOffset}px`
+        }
+      })
+    }
+
+    // Initial run
+    applyOffset()
+
+    // Observer to catch Geoman injecting its toolbar later
+    const container = mapInstance.getContainer()
+    const observer = new MutationObserver(() => applyOffset())
+    observer.observe(container, { childList: true, subtree: true })
+
+    return () => observer.disconnect()
+  }, [toolbarOffset, mapInstance])
   
   // Keep arcgisToken in a ref so it's accessible in async event handlers
   const arcgisTokenRef = useRef<string | null>(arcgisToken);

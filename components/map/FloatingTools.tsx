@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from "react"
 import { Plus, Minus, Type, Edit3, Trash2, Undo2 } from "lucide-react"
 import L from "leaflet"
 
+import { useMapToolbarContext } from "@/components/map/MapToolbarContext"
+
 type FloatingToolsProps = {
   map?: L.Map | null
 }
@@ -44,6 +46,8 @@ export default function FloatingTools({ map }: FloatingToolsProps) {
       map.off("pm:globalremovalmodetoggled", handleRemovalModeToggle)
     }
   }, [map, addToUndoStack])
+
+  const { toolbarOffset } = useMapToolbarContext()
 
   if (!map) return null
 
@@ -119,7 +123,10 @@ export default function FloatingTools({ map }: FloatingToolsProps) {
     "w-8 h-8 rounded-lg bg-white/20 backdrop-blur-sm text-gray-700 hover:bg-white/40 flex items-center justify-center shadow border border-white/40 transition disabled:opacity-40 disabled:cursor-not-allowed"
 
   return (
-    <div className="absolute bottom-4 left-[440px] z-[500] bg-white/20 backdrop-blur-xl border border-white/40 shadow-lg rounded-xl p-1.5 flex flex-col gap-1.5">
+    <div
+      className="absolute bottom-4 z-[500] bg-white/20 backdrop-blur-xl border border-white/40 shadow-lg rounded-xl p-1.5 flex flex-col gap-1.5"
+      style={{ left: `${toolbarOffset}px` }}
+    >
       <button className={buttonClass} onClick={() => map.zoomIn()}>
         <Plus size={14} />
       </button>

@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useEffect, useState, memo } from "react";
+import React, { useEffect, useRef, useState, memo } from "react";
 import type { ReactNode } from "react";
 import EsriMap from "@/components/EsriMap";
 import type { LatLng } from "@/lib/record-types";
 import type { GeorefMode } from "@/lib/types";
 import type L from "leaflet";
+import { MapToolbarProvider } from "@/components/map/MapToolbarContext";
 
 export type MapBubble = {
   id: string;
@@ -130,6 +131,7 @@ function MapWithDrawing({
 }: MapWithDrawingProps) {
   const [drawEnabled, setDrawEnabled] = useState(false);
   const [map, setMap] = useState<L.Map | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (shouldStartWorkAreaDraw > 0) {
@@ -150,7 +152,8 @@ function MapWithDrawing({
   };
 
   return (
-    <div className="h-full w-full flex flex-col relative">
+    <MapToolbarProvider containerRef={mapContainerRef}>
+      <div ref={mapContainerRef} className="h-full w-full flex flex-col relative">
       <EsriMap
         mode={mode}
         polygon={polygon}
@@ -189,7 +192,8 @@ function MapWithDrawing({
           map: map,
         });
       })}
-    </div>
+      </div>
+    </MapToolbarProvider>
   );
 }
 

@@ -1,6 +1,7 @@
-"use client"
+ "use client"
 
 import { cn } from "@/lib/utils"
+import { ProjectHeader } from "@/components/project/ProjectHeader"
 
 type PanelMode = "overview" | "records" | "insights" | "share" | "settings"
 
@@ -8,16 +9,25 @@ interface LeftWorkspacePanelProps {
   currentProject?: {
     id: string
     name?: string
+    geometry?: any
     [key: string]: any
   } | null
   setPanelMode?: (mode: PanelMode) => void
   selectedMode?: PanelMode
+  onRenameWorkArea: (newName: string) => void
+  onUploadRecord: () => void
+  onDrawGeometry: () => void
+  onZoomToArea: () => void
 }
 
 export default function LeftWorkspacePanel({
   currentProject = null,
   setPanelMode,
   selectedMode = "overview",
+  onRenameWorkArea,
+  onUploadRecord,
+  onDrawGeometry,
+  onZoomToArea,
 }: LeftWorkspacePanelProps) {
   const navItems: Array<{ mode: PanelMode; label: string }> = [
     { mode: "overview", label: "Overview" },
@@ -30,22 +40,27 @@ export default function LeftWorkspacePanel({
   const isProjectSelected = !!currentProject
 
   return (
-    <aside className="fixed left-[72px] top-[56px] h-[calc(100vh-64px)] w-[256px] bg-white shadow-xl rounded-r-2xl z-30 flex flex-col border-r border-[var(--utilitx-gray-200)]">
-      {/* Project Header */}
-      <div className="px-4 py-6 border-b border-[var(--utilitx-gray-200)]">
-        <div className="text-xs uppercase text-[var(--utilitx-gray-600)] mb-1">
-          {isProjectSelected ? "Current Project" : "No Project Selected"}
-        </div>
+    <aside
+      data-left-workspace-panel=""
+      className="fixed left-[72px] top-[56px] h-[calc(100vh-64px)] w-[300px] bg-white shadow-xl rounded-r-2xl z-30 flex flex-col border-r border-[var(--utilitx-gray-200)]"
+    >
+      <div className="px-4 pt-6 pb-2">
         {isProjectSelected ? (
-          <div className="font-semibold text-[var(--utilitx-gray-900)] text-lg">
-            {currentProject?.name || currentProject?.id}
-          </div>
+          <ProjectHeader
+            workArea={currentProject}
+            onRename={onRenameWorkArea}
+            onUploadRecord={onUploadRecord}
+            onDrawGeometry={onDrawGeometry}
+            onZoomToArea={onZoomToArea}
+          />
         ) : (
           <div className="text-sm text-[var(--utilitx-gray-600)]">
             Select a project above
           </div>
         )}
       </div>
+
+      <div className="mx-4 border-t border-[var(--utilitx-gray-200)] my-4" />
 
       {/* Navigation */}
       <nav className="flex-1 px-2 py-4 space-y-1">

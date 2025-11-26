@@ -12,6 +12,7 @@ import { NavigationPanel } from "@/components/navigation/NavigationPanel"
 import Topbar from "@/components/Topbar"
 import { computeWorkAreaCompleteness } from "@/lib/completeness"
 import { queryRecordsInPolygon } from "@/lib/esri-records"
+import { calculateGeoJSONAreaSqm, convertArcGISToGeoJSONPolygon } from "@/lib/geometry-utils"
 import RegionSearch from "@/components/RegionSearch"
 import { UploadSectionProvider } from "@/components/upload/UploadSectionContext"
 import { useArcGISAuth } from "@/contexts/ArcGISAuthContext"
@@ -196,6 +197,52 @@ const handleSelectProject = (id: string) => {
   }
 }
 
+const handleRenameWorkArea = (newName: string) => {
+  if (!selectedWorkArea) return
+  const targetId = selectedWorkArea.id
+  setSelectedWorkArea((prev) => (prev ? { ...prev, name: newName } : prev))
+  setWorkAreas((prev) =>
+    prev.map((wa) => (wa.id === targetId ? { ...wa, name: newName } : wa))
+  )
+  setSelectedWorkAreaForAnalysis((prev) =>
+    prev
+      ? {
+          ...prev,
+          name: newName,
+          data: {
+            ...prev.data,
+            name: newName,
+          },
+        }
+      : prev
+  )
+}
+
+const openRecordUploadDialog = () => {
+  if (!selectedWorkArea) return
+  setSelectedWorkAreaForAnalysis({
+    id: selectedWorkArea.id,
+    name: selectedWorkArea.name,
+    polygon: selectedWorkAreaForAnalysis?.polygon ?? null,
+    data: {
+      ...selectedWorkArea,
+      ...(selectedWorkAreaForAnalysis?.data ?? {}),
+    },
+  })
+  setAnalysisOpen(true)
+  setNavigationPanelOpen(false)
+}
+
+const zoomToSelectedWorkArea = () => {
+  if (!selectedWorkArea || !selectedWorkArea.geometry) return
+  setZoomSequence((prev) => {
+    const newVersion = prev + 1
+    setZoomToFeature({ feature: selectedWorkArea, version: newVersion })
+    setTimeout(() => setZoomToFeature(null), 150)
+    return newVersion
+  })
+}
+
 // Handle panel mode changes from left sidebar
 const handleSetPanelMode = (mode: "overview" | "records" | "insights" | "share" | "settings") => {
   if (!selectedWorkArea) return // Don't open panels if no project selected
@@ -303,6 +350,82 @@ const handleSetPanelMode = (mode: "overview" | "records" | "insights" | "share" 
   useEffect(() => {
     saveStagedRecords(records)
   }, [records])
+
+  const projectHeaderWorkArea = useMemo(() => {
+    if (!selectedWorkArea) return null
+
+    const toNumber = (value: unknown) => {
+      if (typeof value === "number" && Number.isFinite(value)) {
+        return value
+      }
+      if (typeof value === "string") {
+        const parsed = Number(value)
+        return Number.isFinite(parsed) ? parsed : undefined
+      }
+      return undefined
+    }
+
+    const attributes = selectedWorkArea.attributes ?? {}
+    const geometry = convertArcGISToGeoJSONPolygon(selectedWorkArea.geometry)
+    const derivedArea = geometry ? calculateGeoJSONAreaSqm(geometry) : undefined
+    const areaSqm = selectedWorkArea.areaSqm ?? derivedArea
+
+    const durationStart =
+      attributes.duration_start ??
+      attributes.start_date ??
+      attributes.begin_date ??
+      selectedWorkArea.date ??
+      undefined
+    const durationEnd =
+      attributes.duration_end ??
+      attributes.end_date ??
+      attributes.deadline ??
+      attributes.closed_date ??
+      attributes.timestamp ??
+      undefined
+
+    const coverage =
+      typeof selectedWorkAreaForAnalysis?.data?.completenessPct === "number"
+        ? selectedWorkAreaForAnalysis.data.completenessPct
+        : typeof attributes.coverage === "number"
+        ? attributes.coverage
+        : undefined
+
+    const complexity =
+      toNumber(attributes.complexity ?? attributes.Complexity) ??
+      toNumber(attributes.priority) ??
+      toNumber(selectedWorkArea.complexity) ??
+      3
+
+    const owner =
+      selectedWorkArea.owner ??
+      attributes.owner ??
+      attributes.created_by ??
+      attributes.creator ??
+      undefined
+
+    const updatedAt =
+      selectedWorkArea.updatedAt ??
+      attributes.updated_at ??
+      attributes.modified_at ??
+      attributes.timestamp ??
+      selectedWorkArea.date ??
+      undefined
+
+    return {
+      ...selectedWorkArea,
+      geometry,
+      areaSqm,
+      complexity,
+      duration: {
+        start: durationStart,
+        end: durationEnd,
+      },
+      coverage,
+      owner,
+      updatedAt,
+    }
+  }, [selectedWorkArea, selectedWorkAreaForAnalysis])
 
   // ============================================
   // MEMOIZED COMPONENTS (before return)
@@ -518,10 +641,14 @@ const handleSetPanelMode = (mode: "overview" | "records" | "insights" | "share" 
 
         <div className="relative z-10 flex h-full w-full items-start justify-start pointer-events-none">
           <div className="pointer-events-auto">
-            <LeftWorkspacePanel
-              currentProject={selectedWorkArea}
+          <LeftWorkspacePanel
+            currentProject={projectHeaderWorkArea}
               setPanelMode={handleSetPanelMode}
               selectedMode={analysisOpen ? "overview" : navigationMode === "workareas" ? "overview" : navigationMode}
+            onRenameWorkArea={handleRenameWorkArea}
+            onUploadRecord={openRecordUploadDialog}
+            onDrawGeometry={startWorkAreaDraw}
+            onZoomToArea={zoomToSelectedWorkArea}
             />
           </div>
         </div>

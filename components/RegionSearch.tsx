@@ -4,12 +4,14 @@ import { useState, useEffect, useRef } from "react";
 import { suggestRegions, geocodeMagicKey } from "@/lib/esriGeocoder";
 import L from "leaflet";
 import { useMap } from "@/contexts/MapContext";
+import { useMapToolbarContext } from "@/components/map/MapToolbarContext";
 
 type RegionSearchProps = {
   map?: L.Map | null;
 };
 
 export default function RegionSearch({ map: mapProp }: RegionSearchProps) {
+  const { toolbarOffset } = useMapToolbarContext();
   const { map: mapFromContext } = useMap();
   const map = mapProp || mapFromContext;
   const [query, setQuery] = useState("");
@@ -374,7 +376,10 @@ export default function RegionSearch({ map: mapProp }: RegionSearchProps) {
   };
 
   return (
-    <div className="absolute top-4 left-[440px] z-[1000] pointer-events-auto">
+    <div
+      className="absolute top-4 z-[1000] pointer-events-auto"
+      style={{ left: `${toolbarOffset}px` }}
+    >
       <div className="relative w-64" ref={containerRef}>
       <input
         type="text"
