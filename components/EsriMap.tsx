@@ -29,6 +29,11 @@ import { zoomToEsriFeature } from "@/lib/zoomToFeature";
 import Legend from "@/components/map/Legend";
 import BasemapToggle from "@/components/map/BasemapToggle";
 import { MapProvider } from "@/contexts/MapContext";
+import {
+  ACTIVE_WORK_AREA_STYLE,
+  setActiveWorkArea,
+  setInactiveWorkArea,
+} from "@/helpers/workAreaStyles";
 
 // Note: Supabase client initialization is handled via singleton pattern in lib/supabase-client.ts
 // This prevents multiple GoTrueClient instances and eliminates duplication warnings
@@ -288,6 +293,7 @@ function EsriMap({
   const isInitializingRef = useRef(false);
   const rebindWorkAreaPopupsRef = useRef<(() => void) | null>(null);
   const selectedWorkAreaRef = useRef(selectedWorkArea);
+  const activeWorkAreaLayerRef = useRef<L.Layer | null>(null);
   
   // Keep arcgisToken in a ref so it's accessible in async event handlers
   const arcgisTokenRef = useRef<string | null>(arcgisToken);
@@ -300,6 +306,32 @@ function EsriMap({
     selectedWorkAreaRef.current = selectedWorkArea;
   }, [selectedWorkArea]);
 
+  useEffect(() => {
+    const workAreas = workAreasLayerRef.current;
+    const selectedId = selectedWorkArea?.id;
+    if (!workAreas) return;
+
+    if (!selectedId) {
+      if (activeWorkAreaLayerRef.current) {
+        setInactiveWorkArea(activeWorkAreaLayerRef.current, defaultWorkAreaStyle);
+        activeWorkAreaLayerRef.current = null;
+      }
+      return;
+    }
+
+    const layers = (workAreas as any)._layers || {};
+    for (const key in layers) {
+      const layer = layers[key];
+      if (layer && layer.feature) {
+        const featureId = getFeatureId(layer.feature);
+        if (featureId === selectedId) {
+          activateWorkAreaLayer(layer);
+          break;
+        }
+      }
+    }
+  }, [selectedWorkArea?.id]);
+
   // Default work area style (de-emphasized for non-selected)
   const defaultWorkAreaStyle = {
     color: "#3B82F6",
@@ -309,14 +341,40 @@ function EsriMap({
     opacity: 0.6,
   };
 
-  // Selected work area highlight style (stronger, dashed border)
-  const selectedWorkAreaStyle = {
-    color: "#0047FF",
-    weight: 4,
-    dashArray: "4,3",
-    fillColor: "#0047FF33",
-    fillOpacity: 0.25,
-    opacity: 1,
+  const getFeatureId = (feature: any) => {
+    return (
+      feature?.properties?.id ||
+      feature?.properties?.workarea_id ||
+      (feature?.properties?.OBJECTID ? `WA-${String(feature.properties.OBJECTID).padStart(4, "0")}` : undefined)
+    );
+  };
+
+  const activateWorkAreaLayer = (layer: L.Layer) => {
+    if (!layer) return;
+    if (activeWorkAreaLayerRef.current && activeWorkAreaLayerRef.current !== layer) {
+      setInactiveWorkArea(activeWorkAreaLayerRef.current, defaultWorkAreaStyle);
+    }
+    setActiveWorkArea(layer);
+    activeWorkAreaLayerRef.current = layer;
+  };
+
+  const applyWorkAreaLayerStyling = (layer: L.Layer, feature: any) => {
+    const featureId = getFeatureId(feature);
+    const targetId = selectedWorkAreaRef.current?.id;
+    if (targetId && featureId === targetId) {
+      activateWorkAreaLayer(layer);
+      return;
+    }
+
+    if (!targetId && activeWorkAreaLayerRef.current === layer) {
+      setInactiveWorkArea(layer, defaultWorkAreaStyle);
+      activeWorkAreaLayerRef.current = null;
+      return;
+    }
+
+    if (activeWorkAreaLayerRef.current !== layer) {
+      setInactiveWorkArea(layer, defaultWorkAreaStyle);
+    }
   };
   
   // Record detail drawer state
@@ -446,6 +504,12 @@ function EsriMap({
       setMapInstance(map); // Update state so context updates
       isInitializingRef.current = false; // Mark initialization as complete
       
+      map.createPane("activeWorkAreaPane");
+      const activePane = map.getPane("activeWorkAreaPane");
+      if (activePane) {
+        (activePane as HTMLElement).style.zIndex = "650";
+      }
+
       // Notify parent component that map is ready
       if (onMapReady) {
         onMapReady(map);
@@ -780,6 +844,8 @@ function EsriMap({
                   target: e.originalEvent?.target,
                   latlng: e.latlng
                 });
+                
+                activateWorkAreaLayer(layer);
                 
                 // 🔥 FIX: Prevent default and stop propagation to ensure click is handled
                 if (e.originalEvent) {
@@ -1195,23 +1261,22 @@ function EsriMap({
                 
                 console.log("🔐 Creating WorkAreas layer with auth:", arcgisTokenRef.current ? "OAuth token" : "API key");
                 
+                const workAreaAuth: Record<string, string | number> = {};
+                if (arcgisTokenRef.current) {
+                  workAreaAuth.token = currentToken;
+                } else {
+                  workAreaAuth.apikey = currentToken;
+                }
+                
                 const workAreas = EL.featureLayer({
                   url: WORKAREA_URL,
-                  apikey: currentToken, // Always provide auth token
+                  ...workAreaAuth,
                   style: () => defaultWorkAreaStyle,
                   // 🔥 FIX: Ensure features are interactive
                   interactive: true,
                   onEachFeature: (feature: any, layer: L.Layer) => {
                     bindWorkAreaPopup(feature, layer);
-                    
-                    // Apply highlight if this feature is the selected work area
-                    const currentSelected = selectedWorkAreaRef.current;
-                    if (currentSelected && feature.properties?.id === currentSelected.id) {
-                      layer.setStyle(selectedWorkAreaStyle);
-                    } else {
-                      // Keep existing style
-                      layer.setStyle(defaultWorkAreaStyle);
-                    }
+                    applyWorkAreaLayerStyling(layer, feature);
                   },
                 }).addTo(map);
 
@@ -1322,6 +1387,7 @@ function EsriMap({
                         
                         if (actualLayer && typeof actualLayer.bindPopup === 'function') {
                           bindWorkAreaPopup(e.feature, actualLayer);
+                          applyWorkAreaLayerStyling(actualLayer, e.feature);
                         } else {
                           console.warn('⚠️ Could not find valid layer for new feature, will retry on layer load', {
                             hasActualLayer: !!actualLayer,
@@ -1380,9 +1446,16 @@ function EsriMap({
                 
                 console.log(`🔐 Creating ${geometryType} layer with auth:`, arcgisTokenRef.current ? "OAuth token" : "API key");
                 
+                const layerAuth: Record<string, string | number> = {};
+                if (arcgisTokenRef.current) {
+                  layerAuth.token = currentToken;
+                } else {
+                  layerAuth.apikey = currentToken;
+                }
+                
                 const layer = EL.featureLayer({
                   url: url,
-                  apikey: currentToken, // Always provide auth token
+                  ...layerAuth,
                   pointToLayer: geometryType === "Point" ? (feature: any, latlng: any) => {
                     const props = feature.properties || {};
                     const utilityType = props.utility_type;
@@ -3074,61 +3147,6 @@ function EsriMap({
   }, [bubbles, shapes]);
 
   // Reapply styles when selectedWorkArea changes - wait for all layers to be loaded
-  useEffect(() => {
-    if (!workAreasLayerRef.current || !selectedWorkArea) return;
-
-    // Use a small delay to ensure all layer rebinding is complete
-    const timeoutId = setTimeout(() => {
-      console.log("🎨 Applying highlight style to selected WA:", selectedWorkArea.id);
-
-      const workAreas = workAreasLayerRef.current;
-      const currentSelected = selectedWorkAreaRef.current;
-
-      if (!workAreas) return;
-
-      try {
-        // Method 1: Try eachFeature if available
-        if (typeof workAreas.eachFeature === 'function') {
-          workAreas.eachFeature((feature: any, layer: L.Layer | null | undefined) => {
-            if (!feature || !layer) return;
-            
-            const featureId = feature.properties?.id || feature.properties?.work_area_id || 
-              (feature.properties?.OBJECTID ? `WA-${String(feature.properties.OBJECTID).padStart(4, '0')}` : undefined);
-            
-            if (currentSelected && featureId === currentSelected.id) {
-              layer.setStyle(selectedWorkAreaStyle);
-              console.log("✨ Styled as SELECTED:", featureId);
-            } else {
-              layer.setStyle(defaultWorkAreaStyle);
-            }
-          });
-        } else {
-          // Method 2: Access through _layers
-          const layers = (workAreas as any)._layers || {};
-          Object.keys(layers).forEach((key) => {
-            const layer = layers[key];
-            if (layer && layer.feature) {
-              const feature = layer.feature;
-              const featureId = feature.properties?.id || feature.properties?.work_area_id || 
-                (feature.properties?.OBJECTID ? `WA-${String(feature.properties.OBJECTID).padStart(4, '0')}` : undefined);
-              
-              if (currentSelected && featureId === currentSelected.id) {
-                layer.setStyle(selectedWorkAreaStyle);
-                console.log("✨ Styled as SELECTED:", featureId);
-              } else {
-                layer.setStyle(defaultWorkAreaStyle);
-              }
-            }
-          });
-        }
-      } catch (err) {
-        console.warn("Error reapplying work area styles:", err);
-      }
-    }, 100); // Small delay to ensure rebinding is complete
-
-    return () => clearTimeout(timeoutId);
-  }, [selectedWorkArea?.id]);
-
   // Cleanup effect for proper map teardown on hot reloads
   useEffect(() => {
     return () => {
