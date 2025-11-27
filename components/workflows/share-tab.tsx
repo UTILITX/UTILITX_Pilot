@@ -43,16 +43,16 @@ export default function ShareTab({ records }: Props) {
     const b: MapBubble[] = []
     const s: GeorefShape[] = []
 
-    const getLabelFromPath = (path: string) => {
-      const parts = path.split("/").map((p) => p.trim())
-      return parts[2] || path
+    const getLabelFromPath = (path?: string) => {
+      const parts = (path ?? "").split("/").map((p) => p.trim())
+      return parts[2] || path || "Record"
     }
 
     for (const rec of records) {
       const colors = getUtilityColorsFromPath(rec.recordTypePath)
       const recordLabel = getLabelFromPath(rec.recordTypePath)
 
-      for (const f of rec.files) {
+      for (const f of Array.isArray(rec.files) ? rec.files : []) {
         if (f.status !== "Georeferenced") continue
 
         const baseDesc = `${rec.recordTypePath} • P${rec.priority}${
@@ -116,7 +116,11 @@ Uploaded ${formatDistanceToNow(new Date(rec.uploadedAt), { addSuffix: true })}`
     return { bubbles: b, shapes: s }
   }, [records])
 
-  const totalFiles = useMemo(() => records.reduce((acc, r) => acc + r.files.length, 0), [records])
+  const totalFiles = useMemo(
+    () =>
+      records.reduce((acc, r) => acc + (Array.isArray(r.files) ? r.files.length : 0), 0),
+    [records]
+  )
 
   async function generateSecureLink() {
     if (!polygon || polygon.length < 3) {

@@ -1,7 +1,8 @@
- "use client"
+"use client"
 
 import { cn } from "@/lib/utils"
-import { ProjectHeader } from "@/components/project/ProjectHeader"
+import type { RequestRecord } from "@/lib/record-types"
+import { ProjectHQ } from "@/components/project-hq/ProjectHQ"
 
 type PanelMode = "overview" | "records" | "insights" | "share" | "settings"
 
@@ -10,14 +11,19 @@ interface LeftWorkspacePanelProps {
     id: string
     name?: string
     geometry?: any
+    owner?: string
+    updatedAt?: string
+    duration?: { start?: string; end?: string }
     [key: string]: any
   } | null
   setPanelMode?: (mode: PanelMode) => void
   selectedMode?: PanelMode
   onRenameWorkArea: (newName: string) => void
   onUploadRecord: () => void
-  onDrawGeometry: () => void
+  onAddWorkArea: () => void
+  onShareProject: () => void
   onZoomToArea: () => void
+  records?: RequestRecord[]
 }
 
 export default function LeftWorkspacePanel({
@@ -26,8 +32,10 @@ export default function LeftWorkspacePanel({
   selectedMode = "overview",
   onRenameWorkArea,
   onUploadRecord,
-  onDrawGeometry,
+  onAddWorkArea,
+  onShareProject,
   onZoomToArea,
+  records = [],
 }: LeftWorkspacePanelProps) {
   const navItems: Array<{ mode: PanelMode; label: string }> = [
     { mode: "overview", label: "Overview" },
@@ -36,7 +44,7 @@ export default function LeftWorkspacePanel({
     { mode: "share", label: "Share" },
     { mode: "settings", label: "Settings" },
   ]
-  
+
   const isProjectSelected = !!currentProject
 
   return (
@@ -44,36 +52,42 @@ export default function LeftWorkspacePanel({
       data-left-workspace-panel=""
       className="fixed left-[72px] top-[56px] h-[calc(100vh-64px)] w-[300px] bg-white shadow-xl rounded-r-2xl z-30 flex flex-col border-r border-[var(--utilitx-gray-200)]"
     >
-      <div className="px-4 pt-6 pb-2">
+      <div className="px-4 pt-6 pb-2 space-y-3">
         {isProjectSelected ? (
-          <ProjectHeader
+          <ProjectHQ
+            project={{
+              name: currentProject?.name ?? currentProject?.id,
+              owner: currentProject?.owner,
+              updatedAt: currentProject?.updatedAt,
+            }}
             workArea={currentProject}
-            onRename={onRenameWorkArea}
+            records={records}
+            onRenameProject={onRenameWorkArea}
             onUploadRecord={onUploadRecord}
-            onDrawGeometry={onDrawGeometry}
+            onAddWorkArea={onAddWorkArea}
+            onShareProject={onShareProject}
             onZoomToArea={onZoomToArea}
           />
         ) : (
-          <div className="text-sm text-[var(--utilitx-gray-600)]">
-            Select a project above
-          </div>
+          <div className="text-sm text-[var(--utilitx-gray-600)]">Select a project above</div>
         )}
       </div>
 
-      <div className="mx-4 border-t border-[var(--utilitx-gray-200)] my-4" />
+      <div className="mx-4 border-t border-[var(--utilitx-gray-200)] my-2" />
 
       {/* Navigation */}
-      <nav className="flex-1 px-2 py-4 space-y-1">
+      <nav className="mt-auto flex flex-col gap-1 px-2 pb-4">
         {navItems.map((item) => (
           <button
             key={item.mode}
             disabled={!isProjectSelected}
             className={cn(
-              "w-full text-left py-2.5 px-3 rounded-md text-sm font-medium transition-colors",
+              "w-full text-left py-2 px-3 rounded-full text-sm font-semibold transition-colors",
+              "border border-transparent",
               !isProjectSelected && "opacity-40 cursor-not-allowed",
               selectedMode === item.mode
-                ? "bg-[var(--utilitx-gray-100)] text-[var(--utilitx-gray-900)]"
-                : isProjectSelected && "text-[var(--utilitx-gray-700)] hover:bg-[var(--utilitx-gray-50)] hover:text-[var(--utilitx-blue-600)]"
+                ? "bg-[var(--utilitx-blue)] text-white border-[var(--utilitx-blue)] shadow-sm"
+                : isProjectSelected && "bg-white text-[var(--utilitx-gray-700)] hover:bg-white/80 hover:border-[var(--utilitx-gray-200)]"
             )}
             onClick={() => {
               if (isProjectSelected && setPanelMode) {

@@ -268,6 +268,12 @@ const handleSetPanelMode = (mode: "overview" | "records" | "insights" | "share" 
   }
 }
 
+const openSharePanel = () => {
+  setNavigationMode("share")
+  setNavigationPanelOpen(true)
+  setAnalysisOpen(false)
+}
+
   // Load Esri data on mount (for Project Index drawer)
   useEffect(() => {
     // Don't run during SSR
@@ -643,13 +649,15 @@ const handleSetPanelMode = (mode: "overview" | "records" | "insights" | "share" 
           <div className="pointer-events-auto">
           <LeftWorkspacePanel
             currentProject={projectHeaderWorkArea}
-              setPanelMode={handleSetPanelMode}
-              selectedMode={analysisOpen ? "overview" : navigationMode === "workareas" ? "overview" : navigationMode}
+            setPanelMode={handleSetPanelMode}
+            selectedMode={analysisOpen ? "overview" : navigationMode === "workareas" ? "overview" : navigationMode}
             onRenameWorkArea={handleRenameWorkArea}
             onUploadRecord={openRecordUploadDialog}
-            onDrawGeometry={startWorkAreaDraw}
+            onAddWorkArea={startWorkAreaDraw}
+            onShareProject={openSharePanel}
             onZoomToArea={zoomToSelectedWorkArea}
-            />
+            records={selectedWorkAreaForAnalysis?.data?.records ?? records}
+          />
           </div>
         </div>
       </div>

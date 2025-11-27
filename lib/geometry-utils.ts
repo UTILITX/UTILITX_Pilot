@@ -72,3 +72,5 @@ export function calculateGeoJSONAreaSqm(polygon: GeoJsonPolygon | null): number 
 
 export type { GeoJsonPolygon }
 
+
+

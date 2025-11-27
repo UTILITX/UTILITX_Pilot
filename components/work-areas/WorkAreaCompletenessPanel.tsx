@@ -254,30 +254,33 @@ export function WorkAreaCompletenessPanel({
           {/* Utility Coverage Matrix */}
           <div className="mb-6">
             <h3 className="text-sm font-medium text-[var(--utilitx-gray-700)] mb-2">Utility Coverage</h3>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {ALL_UTILITIES.map((u) => {
-                // Use utilitiesPresent from data if available, otherwise check if it's in the missing list
                 const isPresent = utilitiesPresent.includes(u) && !utilitiesMissing.includes(u)
-                const colors = utilityAPWAColors[u] || {
-                  bg: "bg-gray-100",
-                  text: "text-gray-700",
-                  border: "border-gray-200",
-                }
+                const colors = getUtilityColorsFromUtilityType(u)
+                const style = isPresent
+                  ? {
+                      borderColor: colors.stroke,
+                      color: colors.stroke,
+                      backgroundColor: colors.fill,
+                    }
+                  : {
+                      borderColor: "#e5e7eb",
+                      color: "#94a3b8",
+                      backgroundColor: "#f8fafc",
+                    }
                 return (
-                  <span
+                  <div
                     key={u}
-                    className={`
-                      px-2 py-1 text-xs rounded-md border flex items-center gap-1
-                      ${
-                        isPresent
-                          ? `${colors.bg} ${colors.text} ${colors.border}`
-                          : "bg-gray-100 text-gray-400 border-gray-200 line-through opacity-60"
-                      }
-                    `}
+                    style={style}
+                    className="flex items-center justify-between rounded-full border px-3 py-1 text-xs font-semibold transition shadow-sm"
                   >
-                    {utilityIcons[u]}
-                    {u}
-                  </span>
+                    <span className="flex items-center gap-1">
+                      {utilityIcons[u]}
+                      {u}
+                    </span>
+                    <span>{isPresent ? "✓" : "0"}</span>
+                  </div>
                 )
               })}
             </div>
