@@ -230,6 +230,7 @@ type EsriMapProps = {
   // Optional DOM id so we can render multiple independent maps on the page
   mapId?: string;
   children?: React.ReactNode;
+  readOnly?: boolean;
 };
 
 function EsriMap({
@@ -265,6 +266,7 @@ function EsriMap({
   onMapReady,
   mapId = "map",
   children,
+  readOnly = false,
 }: EsriMapProps) {
   const mapRef = useRef<L.Map | null>(null);
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
@@ -2649,6 +2651,7 @@ function EsriMap({
 
   // Separate effect to handle zoom to feature updates without re-initializing the map
   useEffect(() => {
+    if (readOnly) return;
     const map = mapRef.current;
     if (!map) return;
 
@@ -2751,7 +2754,7 @@ function EsriMap({
   // Update refs whenever props change (for event listener)
   useEffect(() => {
     enableWorkAreaDrawingRef.current = enableWorkAreaDrawing;
-  }, [enableWorkAreaDrawing]);
+  }, [enableWorkAreaDrawing, readOnly]);
 
   useEffect(() => {
     georefModeRef.current = georefMode;
@@ -2764,6 +2767,7 @@ function EsriMap({
   // 🔥 PATCH A: Respond to work area draw triggers even when memoized
   // This ensures draw mode activates even after memoization prevents re-renders
   useEffect(() => {
+    if (readOnly) return;
     const map = mapRef.current;
     if (!map) return;
 
@@ -2790,7 +2794,7 @@ function EsriMap({
       drawingSessionActiveRef.current = true;
       hasActiveWorkAreaRef.current = true;
     }
-  }, [shouldStartWorkAreaDraw]);
+  }, [shouldStartWorkAreaDraw, readOnly]);
 
   // 🔒 Only toggle work area drawing when the prop actually changes state.
   useEffect(() => {
@@ -2838,6 +2842,7 @@ function EsriMap({
   // 🔥 PATCH B: Record drawing mode - respond to draw triggers even when memoized
   // This ensures draw mode activates even after memoization prevents re-renders
   useEffect(() => {
+    if (readOnly) return;
     const map = mapRef.current;
     if (!map) return;
     if (shouldStartRecordDraw === 0) return;
@@ -2871,7 +2876,7 @@ function EsriMap({
         map.pm.enableDraw("Marker", { snappable: true });
       }
     }
-  }, [shouldStartRecordDraw, georefMode]);
+  }, [shouldStartRecordDraw, georefMode, readOnly]);
 
   // Removed duplicate pm:globaleditmodetoggled binding - handled in main initialization effect
 

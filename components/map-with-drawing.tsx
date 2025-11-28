@@ -98,6 +98,7 @@ type MapWithDrawingProps = {
   children?: ReactNode;
   // Optional DOM id to allow multiple EsriMap instances
   mapId?: string;
+  readOnly?: boolean;
 };
 
 function MapWithDrawing({
@@ -131,16 +132,20 @@ function MapWithDrawing({
   pendingRecordMetadata,
   children,
   mapId,
+  readOnly = false,
 }: MapWithDrawingProps) {
   const [drawEnabled, setDrawEnabled] = useState(false);
   const [map, setMap] = useState<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (readOnly) {
+      return;
+    }
     if (shouldStartWorkAreaDraw > 0) {
       setDrawEnabled(true);
     }
-  }, [shouldStartWorkAreaDraw]);
+  }, [shouldStartWorkAreaDraw, readOnly]);
 
   useEffect(() => {
     if (polygon && polygon.length >= 3) {
@@ -154,6 +159,13 @@ function MapWithDrawing({
     setMap(mapInstance);
   };
 
+  const effectiveEnableWorkAreaDrawing = readOnly ? false : drawEnabled;
+  const effectiveShouldStartWorkAreaDraw = readOnly ? 0 : shouldStartWorkAreaDraw;
+  const effectiveShouldStartRecordDraw = readOnly ? 0 : shouldStartRecordDraw;
+  const effectiveEnableWorkAreaSelection = readOnly ? false : enableWorkAreaSelection;
+  const effectiveEnableDrop = readOnly ? false : enableDrop;
+  const effectiveOnDropFilesAt = readOnly ? undefined : onDropFilesAt;
+
   return (
     <MapToolbarProvider containerRef={mapContainerRef}>
       <div ref={mapContainerRef} className="h-full w-full flex flex-col relative">
@@ -162,10 +174,10 @@ function MapWithDrawing({
         mode={mode}
         polygon={polygon}
         onPolygonChange={onPolygonChange}
-        enableWorkAreaDrawing={drawEnabled}
-        shouldStartWorkAreaDraw={shouldStartWorkAreaDraw}
-        shouldStartRecordDraw={shouldStartRecordDraw}
-        enableWorkAreaSelection={enableWorkAreaSelection}
+        enableWorkAreaDrawing={effectiveEnableWorkAreaDrawing}
+        shouldStartWorkAreaDraw={effectiveShouldStartWorkAreaDraw}
+        shouldStartRecordDraw={effectiveShouldStartRecordDraw}
+        enableWorkAreaSelection={effectiveEnableWorkAreaSelection}
         onWorkAreaSelected={onWorkAreaSelected}
         onWorkAreaClick={onWorkAreaClick}
         onOpenWorkAreaAnalysis={onOpenWorkAreaAnalysis}
@@ -180,8 +192,8 @@ function MapWithDrawing({
         pickZoom={pickZoom}
         bubbles={bubbles}
         shapes={shapes}
-        enableDrop={enableDrop}
-        onDropFilesAt={onDropFilesAt}
+        enableDrop={effectiveEnableDrop}
+        onDropFilesAt={effectiveOnDropFilesAt}
         focusPoint={focusPoint}
         focusZoom={focusZoom}
         center={center}
@@ -189,6 +201,7 @@ function MapWithDrawing({
         zoomToFeature={zoomToFeature}
         pendingRecordMetadata={pendingRecordMetadata}
         onMapReady={handleMapReady}
+        readOnly={readOnly}
       />
       {React.Children.map(children, (child: ReactNode) => {
         if (!React.isValidElement(child)) return child;
@@ -212,6 +225,7 @@ export default memo(MapWithDrawing, (prev: MapWithDrawingProps, next: MapWithDra
     prev.zoomToFeature === next.zoomToFeature &&
     prev.mode === next.mode &&
     prev.georefMode === next.georefMode &&
-    prev.pickPointActive === next.pickPointActive
+    prev.pickPointActive === next.pickPointActive &&
+    prev.readOnly === next.readOnly
   );
 });

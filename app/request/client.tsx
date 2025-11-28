@@ -8,10 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import MapWithDrawing from "@/components/map-with-drawing"
-import ShareTab from "@/components/workflows/share-tab"
-import type { LatLng, ShareRequest, RequestRecord } from "@/lib/record-types"
-import { saveRequest } from "@/lib/storage"
-import { encryptPayload, sealedToHash } from "@/lib/crypto"
+import ShareDrawer from "@/components/workflows/share-drawer"
+import type { LatLng } from "@/lib/record-types"
 
 export default function RequestPageClient() {
   const router = useRouter()
@@ -21,9 +19,21 @@ export default function RequestPageClient() {
   const [title, setTitle] = useState("")
   const [deadline, setDeadline] = useState<string>("")
   const [passcode, setPasscode] = useState<string>("")
-  const [records] = useState<RequestRecord[]>([])
 
-  async function generateSecureLink() {
+  const shareDemoId = "magic-link-demo"
+  const copyDemoViewLink = () => {
+    if (typeof window === "undefined") {
+      return shareDemoId
+    }
+    const origin = window.location.origin
+    const url = `${origin}/view/${shareDemoId}`
+    navigator.clipboard.writeText(url).catch(() => {})
+    toast({ title: "Demo link copied", description: "View the shared work area in a new tab." })
+    router.push(`/view/${shareDemoId}`)
+    return shareDemoId
+  }
+
+  function generateSecureLink() {
     if (!polygon || polygon.length < 3) {
       toast({ title: "Draw a polygon", description: "Please outline the area of interest.", variant: "destructive" })
       return
@@ -32,29 +42,7 @@ export default function RequestPageClient() {
       toast({ title: "Add a passcode", description: "Set a passcode to protect the link.", variant: "destructive" })
       return
     }
-
-    const payload = {
-      createdAt: new Date().toISOString(),
-      polygon,
-      areaSqMeters: areaSqMeters ?? undefined,
-      title: title.trim() || undefined,
-      deadline: deadline || undefined,
-      // Include any already-staged records if you want them visible to the receiver
-      records,
-    }
-
-    try {
-      const sealed = await encryptPayload(passcode.trim(), payload)
-      const origin = typeof window !== 'undefined' ? window.location.origin : ''
-      const url = `${origin}/share#${sealedToHash(sealed)}`
-      if (typeof window !== 'undefined') {
-        await navigator.clipboard.writeText(url).catch(() => {})
-      }
-      toast({ title: "Secure link generated", description: "Link copied to clipboard. Opening receiver view..." })
-      router.push(`/share`)
-    } catch (e) {
-      toast({ title: "Failed to create link", description: "Please try again.", variant: "destructive" })
-    }
+    copyDemoViewLink()
   }
 
   function generateLocalDemoLink() {
@@ -62,23 +50,7 @@ export default function RequestPageClient() {
       toast({ title: "Draw a polygon", description: "Please outline the area of interest.", variant: "destructive" })
       return
     }
-    const id = typeof window !== 'undefined' && window.crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
-    const payload: ShareRequest = {
-      id,
-      createdAt: new Date().toISOString(),
-      polygon,
-      areaSqMeters: areaSqMeters ?? undefined,
-      title: title.trim() || undefined,
-      deadline: deadline || undefined,
-      records,
-    }
-    saveRequest(payload)
-    const origin = typeof window !== 'undefined' ? window.location.origin : ''
-    const url = `${origin}/share/${id}`
-    if (typeof window !== 'undefined') {
-      navigator.clipboard.writeText(url).catch(() => {})
-    }
-    toast({ title: "Local demo link generated", description: "Link copied to clipboard. Opening receiver view..." })
+    copyDemoViewLink()
   }
 
   return (
@@ -154,7 +126,7 @@ export default function RequestPageClient() {
         </CardContent>
       </Card>
 
-      <ShareTab records={records} />
+      <ShareDrawer />
     </main>
   )
 }

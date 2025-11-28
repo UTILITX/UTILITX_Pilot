@@ -6,7 +6,7 @@ import { Sheet, SheetHeader, SheetTitle, SheetDescription } from "@/components/u
 import { XIcon } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import type { IndexedRecord } from "@/lib/fetchAllEsriData"
-import ShareTab from "@/components/workflows/share-tab"
+import ShareDrawer from "@/components/workflows/share-drawer"
 
 // Custom SheetContent without overlay for GIS-style right panel
 const RightPanelSheetContent = React.forwardRef<
@@ -147,7 +147,7 @@ export function NavigationPanel({
 
           {mode === "share" && (
             <div className="space-y-3">
-              <ShareTab records={esriRecords} currentWorkArea={selectedWorkArea || undefined} />
+              <ShareDrawer currentWorkArea={selectedWorkArea || undefined} />
             </div>
           )}
 
