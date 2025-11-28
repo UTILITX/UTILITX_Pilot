@@ -11,6 +11,7 @@ import {
 type SaveWorkAreaOptions = {
   geometry: any; // ArcGIS Polygon - imported dynamically
   attributes: Record<string, any>;
+  layerUrl?: string; // Optional override for target layer (defaults to WORK_AREAS_LAYER_URL)
 };
 
 // Backward compatibility: accept (workAreaUrl, polygon) signature
@@ -40,7 +41,8 @@ export async function saveWorkArea(
       created_at: new Date().toISOString(),
     };
     
-    return saveWorkAreaInternal({ geometry, attributes });
+    // Preserve the original layer URL so applyEdits targets the same service
+    return saveWorkAreaInternal({ geometry, attributes, layerUrl: workAreaUrlOrOptions });
   }
 
   // Handle new signature: saveWorkArea({ geometry, attributes })
@@ -51,7 +53,7 @@ export async function saveWorkArea(
   throw new Error("Invalid arguments to saveWorkArea");
 }
 
-async function saveWorkAreaInternal({ geometry, attributes }: SaveWorkAreaOptions) {
+async function saveWorkAreaInternal({ geometry, attributes, layerUrl }: SaveWorkAreaOptions) {
   // Dynamically import ArcGIS modules to avoid SSR issues
   const esriId = (await import("@arcgis/core/identity/IdentityManager")).default;
   const { ARCGIS_CLIENT_ID, ARCGIS_PORTAL_URL: PORTAL_URL } = await import("./config");
@@ -284,21 +286,30 @@ async function saveWorkAreaInternal({ geometry, attributes }: SaveWorkAreaOption
   
   try {
     // Call applyEdits directly via REST API with our token
-    const applyEditsUrl = `${WORK_AREAS_LAYER_URL}/applyEdits`;
-    const formData = new FormData();
-    formData.append("f", "json");
-    formData.append("token", token || "");
-    formData.append("adds", JSON.stringify([{
-      geometry: geometryForAPI,
-      attributes: attributes,
-    }]));
+    // Prefer the explicit layerUrl (from the map/workflow) and fall back to config
+    const targetLayerUrl = (layerUrl || WORK_AREAS_LAYER_URL).trim().replace(/\/+$/, "");
+    const applyEditsUrl = `${targetLayerUrl}/applyEdits`;
+
+    const params = new URLSearchParams({
+      f: "json",
+      token: token || "",
+      adds: JSON.stringify([
+        {
+          geometry: geometryForAPI,
+          attributes,
+        },
+      ]),
+    });
 
     console.log("🔍 [saveWorkArea] Making direct REST API call to:", applyEditsUrl);
     console.log("🔍 [saveWorkArea] Token in request:", token ? `${token.substring(0, 30)}...` : "null");
-    
+
     const response = await fetch(applyEditsUrl, {
       method: "POST",
-      body: formData,
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: params.toString(),
     });
 
     const result = await response.json();
@@ -307,16 +318,22 @@ async function saveWorkAreaInternal({ geometry, attributes }: SaveWorkAreaOption
 
     if (result.error) {
       console.error("❌ [saveWorkArea] Direct REST API error:", result.error);
+      const details = Array.isArray(result.error.details) ? result.error.details.join(" | ") : "";
       throw new Error(
-        `ArcGIS applyEdits failed: ${result.error.message || "Unknown error"} (code ${result.error.code || "unknown"})`
+        `ArcGIS applyEdits failed: ${result.error.message || "Unknown error"} (code ${
+          result.error.code || "unknown"
+        })${details ? ` – ${details}` : ""}`
       );
     }
 
     const addResult = result.addResults?.[0];
     if (addResult?.error) {
       console.error("❌ [saveWorkArea] addResults error:", addResult.error);
+      const details = Array.isArray(addResult.error.details) ? addResult.error.details.join(" | ") : "";
       throw new Error(
-        `ArcGIS applyEdits failed: ${addResult.error.message} (code ${addResult.error.code})`
+        `ArcGIS applyEdits failed: ${addResult.error.message} (code ${addResult.error.code})${
+          details ? ` – ${details}` : ""
+        }`
       );
     }
 

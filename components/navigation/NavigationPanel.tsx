@@ -51,6 +51,11 @@ interface NavigationPanelProps {
     notes?: string
     records?: any[]
   }>
+  selectedWorkArea?: {
+    id: string
+    name?: string
+    [key: string]: any
+  } | null
   onSelectWorkArea?: (id: string | null) => void
   onZoomToRecord?: (record: IndexedRecord) => void
   onZoomToWorkArea?: (workArea: { id: string; name: string; [key: string]: any }) => void
@@ -62,6 +67,7 @@ export function NavigationPanel({
   mode,
   esriRecords = [],
   workAreas = [],
+  selectedWorkArea,
   onSelectWorkArea,
   onZoomToRecord,
   onZoomToWorkArea,
@@ -141,7 +147,7 @@ export function NavigationPanel({
 
           {mode === "share" && (
             <div className="space-y-3">
-              <ShareTab records={esriRecords} />
+              <ShareTab records={esriRecords} currentWorkArea={selectedWorkArea || undefined} />
             </div>
           )}
 

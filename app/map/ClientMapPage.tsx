@@ -16,6 +16,7 @@ import { calculateGeoJSONAreaSqm, convertArcGISToGeoJSONPolygon } from "@/lib/ge
 import RegionSearch from "@/components/RegionSearch"
 import { UploadSectionProvider } from "@/components/upload/UploadSectionContext"
 import { useArcGISAuth } from "@/contexts/ArcGISAuthContext"
+import { useWorkspaceStore } from "@/stores/workspaceStore"
 
 // Dynamically import map components to avoid SSR issues with Leaflet
 const MapWithDrawing = nextDynamic(() => import("@/components/map-with-drawing"), {
@@ -116,6 +117,10 @@ export default function MapPage() {
   const [workAreaSelectionEnabled, setWorkAreaSelectionEnabled] = useState(false)
   const [recordDrawingConfig, setRecordDrawingConfig] = useState<RecordDrawingConfig | null>(null)
   const [recordDrawCommand, setRecordDrawCommand] = useState(0)
+
+  // Workspace store actions
+  const setCurrentWorkspaceProject = useWorkspaceStore((s) => s.setCurrentProject)
+  const setWorkspaceRecords = useWorkspaceStore((s) => s.setRecords)
 
   // Check authentication on mount
   useEffect(() => {
@@ -433,6 +438,38 @@ const openSharePanel = () => {
     }
   }, [selectedWorkArea, selectedWorkAreaForAnalysis])
 
+  // Sync the derived work area into the global workspace store
+  useEffect(() => {
+    if (!projectHeaderWorkArea) {
+      // Don't clobber the workspace store when there is no derived header;
+      // new work areas may already have been pushed directly into the store.
+      return
+    }
+
+    const { id, name, geometry, areaSqm, complexity, duration, coverage, owner, updatedAt } = projectHeaderWorkArea
+
+    setCurrentWorkspaceProject({
+      id,
+      name,
+      geometry,
+      areaSqm,
+      complexity,
+      duration,
+      coveragePct: coverage,
+      owner,
+      updatedAt,
+      meta: {
+        source: "esri-workarea",
+      },
+    })
+  }, [projectHeaderWorkArea, setCurrentWorkspaceProject])
+
+  // Keep staged workflow records in sync with workspace store so that
+  // panels like Share / Insights can derive coverage from a single source.
+  useEffect(() => {
+    setWorkspaceRecords(records)
+  }, [records, setWorkspaceRecords])
+
   // ============================================
   // MEMOIZED COMPONENTS (before return)
   // ============================================
@@ -504,7 +541,7 @@ const openSharePanel = () => {
       }}
       onNewWorkAreaCreated={(newWorkArea) => {
         // Immediately make new work area the selected project
-        console.log("🎉 New work area created, setting as active:", newWorkArea.id);
+        console.log("🎉 [ClientMapPage] New work area created callback:", newWorkArea);
         
         // Add to work areas list if not already there
         const workAreaToAdd = {
@@ -515,6 +552,8 @@ const openSharePanel = () => {
           createdBy: newWorkArea.created_by || newWorkArea.createdBy,
           date: newWorkArea.timestamp || newWorkArea.date,
           notes: newWorkArea.notes,
+          // Preserve geometry so global state and zoom/area calculations work
+          geometry: newWorkArea.geometry,
         };
         
         setWorkAreas((prev) => {
@@ -522,6 +561,25 @@ const openSharePanel = () => {
             return prev;
           }
           return [...prev, workAreaToAdd];
+        });
+
+        // Push directly into the global workspace store so dependent UI
+        // (left panel, share drawer, etc.) reacts immediately.
+        console.log("[WorkspaceStore] setCurrentWorkspaceProject from onNewWorkAreaCreated:", {
+          id: workAreaToAdd.id,
+          name: workAreaToAdd.name,
+        });
+        setCurrentWorkspaceProject({
+          id: workAreaToAdd.id,
+          name: workAreaToAdd.name,
+          geometry: newWorkArea.geometry,
+          areaSqm: undefined,
+          complexity: undefined,
+          duration: undefined,
+          coveragePct: undefined,
+          owner: workAreaToAdd.owner,
+          updatedAt: workAreaToAdd.date,
+          meta: { source: "esri-workarea:new" },
         });
         
         // Set as selected work area AND open analysis panel
@@ -647,17 +705,16 @@ const openSharePanel = () => {
 
         <div className="relative z-10 flex h-full w-full items-start justify-start pointer-events-none">
           <div className="pointer-events-auto">
-          <LeftWorkspacePanel
-            currentProject={projectHeaderWorkArea}
-            setPanelMode={handleSetPanelMode}
-            selectedMode={analysisOpen ? "overview" : navigationMode === "workareas" ? "overview" : navigationMode}
-            onRenameWorkArea={handleRenameWorkArea}
-            onUploadRecord={openRecordUploadDialog}
-            onAddWorkArea={startWorkAreaDraw}
-            onShareProject={openSharePanel}
-            onZoomToArea={zoomToSelectedWorkArea}
-            records={selectedWorkAreaForAnalysis?.data?.records ?? records}
-          />
+            <LeftWorkspacePanel
+              setPanelMode={handleSetPanelMode}
+              selectedMode={analysisOpen ? "overview" : navigationMode === "workareas" ? "overview" : navigationMode}
+              onRenameWorkArea={handleRenameWorkArea}
+              onUploadRecord={openRecordUploadDialog}
+              onAddWorkArea={startWorkAreaDraw}
+              onShareProject={openSharePanel}
+              onZoomToArea={zoomToSelectedWorkArea}
+              records={selectedWorkAreaForAnalysis?.data?.records ?? records}
+            />
           </div>
         </div>
       </div>
@@ -681,6 +738,7 @@ const openSharePanel = () => {
         mode={navigationMode}
         esriRecords={esriRecords}
         workAreas={workAreas}
+        selectedWorkArea={selectedWorkArea}
         onSelectWorkArea={(id) => {
           const workArea = workAreas.find((w) => w.id === id)
           if (workArea) {

@@ -4,19 +4,11 @@ import { cn } from "@/lib/utils"
 import type { RequestRecord } from "@/lib/record-types"
 import { ProjectHQ } from "@/components/project-hq/ProjectHQ"
 import { LayoutDashboard, FileText, Lightbulb, Share2, Settings as SettingsIcon } from "lucide-react"
+import { useWorkspaceStore } from "@/stores/workspaceStore"
 
 type PanelMode = "overview" | "records" | "insights" | "share" | "settings"
 
 interface LeftWorkspacePanelProps {
-  currentProject?: {
-    id: string
-    name?: string
-    geometry?: any
-    owner?: string
-    updatedAt?: string
-    duration?: { start?: string; end?: string }
-    [key: string]: any
-  } | null
   setPanelMode?: (mode: PanelMode) => void
   selectedMode?: PanelMode
   onRenameWorkArea: (newName: string) => void
@@ -28,7 +20,6 @@ interface LeftWorkspacePanelProps {
 }
 
 export default function LeftWorkspacePanel({
-  currentProject = null,
   setPanelMode,
   selectedMode = "overview",
   onRenameWorkArea,
@@ -38,6 +29,16 @@ export default function LeftWorkspacePanel({
   onZoomToArea,
   records = [],
 }: LeftWorkspacePanelProps) {
+  const currentProject = useWorkspaceStore((s) => s.currentProject)
+  if (currentProject) {
+    console.log("[LeftWorkspacePanel] currentProject from workspace store:", {
+      id: currentProject.id,
+      name: currentProject.name,
+    })
+  } else {
+    console.log("[LeftWorkspacePanel] No currentProject in workspace store")
+  }
+
   const navItems: Array<{ mode: PanelMode; label: string; icon: React.ElementType }> = [
     { mode: "overview", label: "Overview", icon: LayoutDashboard },
     { mode: "records", label: "Records", icon: FileText },

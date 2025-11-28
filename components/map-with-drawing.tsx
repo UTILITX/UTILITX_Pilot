@@ -96,6 +96,8 @@ type MapWithDrawingProps = {
   zoomToFeature?: any | null;
   pendingRecordMetadata?: any;
   children?: ReactNode;
+  // Optional DOM id to allow multiple EsriMap instances
+  mapId?: string;
 };
 
 function MapWithDrawing({
@@ -128,6 +130,7 @@ function MapWithDrawing({
   zoomToFeature,
   pendingRecordMetadata,
   children,
+  mapId,
 }: MapWithDrawingProps) {
   const [drawEnabled, setDrawEnabled] = useState(false);
   const [map, setMap] = useState<L.Map | null>(null);
@@ -155,6 +158,7 @@ function MapWithDrawing({
     <MapToolbarProvider containerRef={mapContainerRef}>
       <div ref={mapContainerRef} className="h-full w-full flex flex-col relative">
       <EsriMap
+        mapId={mapId}
         mode={mode}
         polygon={polygon}
         onPolygonChange={onPolygonChange}

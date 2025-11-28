@@ -1,5 +1,5 @@
 "use client"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import MapWithDrawing, { type MapBubble, type GeorefShape } from "@/components/map-with-drawing"
 import { RecordsTable } from "@/components/records-table"
@@ -19,14 +19,18 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { encryptPayload, sealedToHash } from "@/lib/crypto"
-import { useRouter } from "next/navigation"
 
 type Props = {
-  records: RequestRecord[]
+  // In the workspace, we may get either legacy RequestRecord objects (with files)
+  // or IndexedRecord objects from Esri (without files). We treat them generically here.
+  records: any[]
+  currentWorkArea?: {
+    id?: string
+    name?: string
+  } | null
 }
 
-export default function ShareTab({ records }: Props) {
-  const router = useRouter()
+export default function ShareTab({ records, currentWorkArea }: Props) {
   const { toast } = useToast()
   const [polygon, setPolygon] = useState<LatLng[] | null>(null)
   const [areaSqMeters, setAreaSqMeters] = useState<number | null>(null)
@@ -39,7 +43,32 @@ export default function ShareTab({ records }: Props) {
   const [linkOpen, setLinkOpen] = useState(false)
   const [linkUrl, setLinkUrl] = useState("")
 
+  // Prefill Work ID / Project Name from the active work area, but don't
+  // overwrite anything the user has already typed.
+  useEffect(() => {
+    if (!currentWorkArea) return
+    if (title.trim()) return
+    const defaultTitle = currentWorkArea.name || currentWorkArea.id
+    if (defaultTitle) {
+      setTitle(defaultTitle)
+    }
+  }, [currentWorkArea, title])
+
+  // Some environments pass full RequestRecord objects with files;
+  // others pass lightweight IndexedRecord objects from Esri.
+  // Detect whether we actually have file-backed records available.
+  const hasFileBackedRecords = useMemo(
+    () => records.some((r) => Array.isArray((r as RequestRecord).files) && (r as RequestRecord).files.length > 0),
+    [records],
+  )
+
   const { bubbles, shapes } = useMemo(() => {
+    // If we don't have file-backed records, skip generating bubbles/shapes.
+    // The map will still support drawing a polygon, which is the primary need.
+    if (!hasFileBackedRecords) {
+      return { bubbles: [] as MapBubble[], shapes: [] as GeorefShape[] }
+    }
+
     const b: MapBubble[] = []
     const s: GeorefShape[] = []
 
@@ -48,7 +77,7 @@ export default function ShareTab({ records }: Props) {
       return parts[2] || path || "Record"
     }
 
-    for (const rec of records) {
+    for (const rec of records as RequestRecord[]) {
       const colors = getUtilityColorsFromPath(rec.recordTypePath)
       const recordLabel = getLabelFromPath(rec.recordTypePath)
 
@@ -114,12 +143,15 @@ Uploaded ${formatDistanceToNow(new Date(rec.uploadedAt), { addSuffix: true })}`
       }
     }
     return { bubbles: b, shapes: s }
-  }, [records])
+  }, [records, hasFileBackedRecords])
 
   const totalFiles = useMemo(
     () =>
-      records.reduce((acc, r) => acc + (Array.isArray(r.files) ? r.files.length : 0), 0),
-    [records]
+      records.reduce(
+        (acc, r) => acc + (Array.isArray((r as RequestRecord).files) ? (r as RequestRecord).files.length : 0),
+        0,
+      ),
+    [records],
   )
 
   async function generateSecureLink() {
@@ -127,20 +159,32 @@ Uploaded ${formatDistanceToNow(new Date(rec.uploadedAt), { addSuffix: true })}`
       toast({ title: "Draw a polygon", description: "Please outline the area of interest.", variant: "destructive" })
       return
     }
-    if (!passcode.trim()) {
-      toast({ title: "Add a passcode", description: "Set a passcode to protect the link.", variant: "destructive" })
+    const cleanPasscode = passcode.trim()
+    if (cleanPasscode.length < 6) {
+      toast({
+        title: "Add a longer passcode",
+        description: "Use at least 6 characters to protect the link (letters, numbers, or symbols).",
+        variant: "destructive",
+      })
       return
     }
     const payload = {
+      version: 1,
       createdAt: new Date().toISOString(),
       polygon,
       areaSqMeters: areaSqMeters ?? undefined,
       title: title.trim() || undefined,
       deadline: deadline || undefined,
+      workArea: currentWorkArea
+        ? {
+            id: currentWorkArea.id,
+            name: currentWorkArea.name,
+          }
+        : undefined,
       records,
     }
     try {
-      const sealed = await encryptPayload(passcode.trim(), payload)
+      const sealed = await encryptPayload(cleanPasscode, payload)
       const url = `${window.location.origin}/share#${sealedToHash(sealed)}`
       await navigator.clipboard.writeText(url).catch(() => {})
       setLinkUrl(url)
@@ -166,8 +210,8 @@ Uploaded ${formatDistanceToNow(new Date(rec.uploadedAt), { addSuffix: true })}`
         </div>
       </header>
 
-      <div className="grid gap-4 md:grid-cols-5">
-        <Card className="md:col-span-3 relative z-10 bg-white">
+      <div className="space-y-4">
+        <Card className="relative z-10 bg-white">
           <CardHeader>
             <CardTitle>Area of Interest</CardTitle>
             <CardDescription>
@@ -177,6 +221,7 @@ Uploaded ${formatDistanceToNow(new Date(rec.uploadedAt), { addSuffix: true })}`
           <CardContent className="space-y-3">
             <div className="aspect-[4/3] w-full rounded-md border">
               <MapWithDrawing
+                mapId="share-map"
                 mode="draw"
                 bubbles={bubbles}
                 shapes={shapes}
@@ -222,13 +267,40 @@ Uploaded ${formatDistanceToNow(new Date(rec.uploadedAt), { addSuffix: true })}`
           </CardContent>
         </Card>
 
-        <Card className="md:col-span-2 relative z-10 bg-white">
+        <Card className="relative z-10 bg-white">
           <CardHeader>
             <CardTitle>What’s There</CardTitle>
             <CardDescription>Files you’ve staged so far for this space.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            <RecordsTable records={records} showOrg />
+            {hasFileBackedRecords ? (
+              <RecordsTable records={records as RequestRecord[]} showOrg />
+            ) : (
+              <div className="space-y-2 text-sm text-muted-foreground">
+                {records.length === 0 ? (
+                  <div>No files yet.</div>
+                ) : (
+                  <>
+                    <div className="font-medium text-[var(--utilitx-gray-900)]">
+                      {records.length} record{records.length === 1 ? "" : "s"} in this project.
+                    </div>
+                    <ul className="space-y-1 text-xs">
+                      {records.slice(0, 6).map((r, idx) => (
+                        <li key={(r as any).id ?? idx}>
+                          <span className="font-semibold">
+                            {(r as any).utilityType || (r as any).utility || "Utility"}
+                          </span>
+                          {": "}
+                          {(r as any).recordType || (r as any).type || "Record"}
+                          {(r as any).organization ? ` • ${(r as any).organization}` : ""}
+                        </li>
+                      ))}
+                      {records.length > 6 && <li>…and more.</li>}
+                    </ul>
+                  </>
+                )}
+              </div>
+            )}
             <div className="text-xs text-muted-foreground">
               {records.length} record group(s), {totalFiles} file(s)
             </div>

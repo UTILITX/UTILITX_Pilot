@@ -91,7 +91,9 @@ export function RecordsTable({
 }
 
 function flatten(records: RequestRecord[]) {
-  return records.flatMap((record) => record.files.map((file) => ({ record, file })))
+  return records.flatMap((record) =>
+    Array.isArray(record.files) ? record.files.map((file) => ({ record, file })) : []
+  )
 }
 
 function StatusBadge({ status }: { status: FileStub["status"] }) {

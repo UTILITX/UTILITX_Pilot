@@ -227,6 +227,8 @@ type EsriMapProps = {
   zoomToFeature?: null | { feature: any; version: number }; // Esri feature geometry to zoom to
   pendingRecordMetadata?: any;
   onMapReady?: (map: L.Map) => void; // Callback when map is initialized
+  // Optional DOM id so we can render multiple independent maps on the page
+  mapId?: string;
   children?: React.ReactNode;
 };
 
@@ -261,6 +263,7 @@ function EsriMap({
   zoomToFeature,
   pendingRecordMetadata,
   onMapReady,
+  mapId = "map",
   children,
 }: EsriMapProps) {
   const mapRef = useRef<L.Map | null>(null);
@@ -294,6 +297,7 @@ function EsriMap({
   const isInitializingRef = useRef(false);
   const rebindWorkAreaPopupsRef = useRef<(() => void) | null>(null);
   const selectedWorkAreaRef = useRef(selectedWorkArea);
+  const lastCreatedWorkAreaIdRef = useRef<string | null>(null);
   const activeWorkAreaLayerRef = useRef<L.Layer | null>(null);
   const { toolbarOffset } = useMapToolbarContext()
 
@@ -392,9 +396,19 @@ function EsriMap({
 
   const applyWorkAreaLayerStyling = (layer: L.Layer, feature: any) => {
     const featureId = getFeatureId(feature);
-    const targetId = selectedWorkAreaRef.current?.id;
+    const explicitTargetId = selectedWorkAreaRef.current?.id;
+    const lastCreatedId = lastCreatedWorkAreaIdRef.current;
+
+    // Newly created work area should immediately be treated as active,
+    // even before React selection state has fully propagated.
+    const targetId = explicitTargetId || lastCreatedId;
+
     if (targetId && featureId === targetId) {
       activateWorkAreaLayer(layer);
+      // Clear the "last created" hint once we've applied it
+      if (lastCreatedId && lastCreatedId === featureId) {
+        lastCreatedWorkAreaIdRef.current = null;
+      }
       return;
     }
 
@@ -427,7 +441,7 @@ function EsriMap({
     // Check both mapRef and Leaflet ID to prevent double initialization
     if (isInitializingRef.current) return; // Already initializing, skip
     
-    const mapContainer = document.getElementById("map");
+    const mapContainer = document.getElementById(mapId);
     if (mapRef.current) {
       // Map already exists in ref, verify it's still valid
       if (mapContainer && (mapContainer as any)._leaflet_id) {
@@ -485,7 +499,7 @@ function EsriMap({
       
       isInitializingRef.current = true; // Mark as initializing
       
-      const mapContainer = document.getElementById("map");
+      const mapContainer = document.getElementById(mapId);
       if (!mapContainer) {
         isInitializingRef.current = false;
         return;
@@ -508,7 +522,7 @@ function EsriMap({
       }
 
       // Initialize map with default values (no prop dependencies)
-      const map = L.map("map", {
+      const map = L.map(mapId, {
         // Check for saved region first - if none, use neutral world view
         // RegionSearch will handle zooming to saved region on mount
         center: (() => {
@@ -1920,36 +1934,41 @@ function EsriMap({
             area = Math.abs(area / 2) * 111000 * 111000; // Convert to square meters (rough)
 
             // Save to workarea layer
-      const attributes = {
-        created_by: "PilotUser",
-        timestamp: new Date().toISOString(),
-      };
+            const attributes = {
+              created_by: "PilotUser",
+              timestamp: new Date().toISOString(),
+            };
 
-      try {
-          console.log("🔐 Saving work area...");
-          
-          const response = await saveWorkArea(WORKAREA_URL, path);
-          
-          // Extract the save result from the response
-          const saveResult = response.addFeatureResults?.[0];
-              
-              // Get the new work area ID from the save result
-              // ArcGIS returns objectId in the addResults[0] object
+            try {
+              console.log("🔐 Saving work area...");
+
+              const response = await saveWorkArea(WORKAREA_URL, path);
+              console.log("🧩 saveWorkArea response in EsriMap:", response);
+
+              // Normalized objectId extraction to handle both legacy and new response shapes
+              const objectId =
+                response?.objectId ??
+                response?.addResults?.[0]?.objectId ??
+                response?.addFeatureResults?.[0]?.objectId;
+
               let newWorkAreaId: string | undefined;
-              if (saveResult && saveResult.objectId !== undefined) {
-                // Format as WA-XXXX
-                newWorkAreaId = `WA-${String(saveResult.objectId).padStart(4, '0')}`;
+              if (objectId !== undefined && objectId !== null) {
+                newWorkAreaId = `WA-${String(objectId).padStart(4, "0")}`;
+              } else {
+                console.warn("⚠️ Could not derive new work area ID from save response:", response);
               }
-              
+
               // Notify parent about new work area creation
               if (onNewWorkAreaCreated && newWorkAreaId) {
                 const newWorkArea = {
                   id: newWorkAreaId,
                   name: `Work Area ${newWorkAreaId}`,
-                  geometry: geometry,
+                  geometry,
                   ...attributes,
                 };
                 console.log("🎉 Notifying parent of new work area:", newWorkArea);
+                // Remember this as the last created ID so we can auto-highlight its layer
+                lastCreatedWorkAreaIdRef.current = newWorkAreaId;
                 onNewWorkAreaCreated(newWorkArea);
               }
               
@@ -2679,7 +2698,7 @@ function EsriMap({
     const map = mapRef.current;
     if (!map) return;
 
-    const mapContainer = document.getElementById("map");
+    const mapContainer = document.getElementById(mapId);
     if (!mapContainer) return;
 
     if (enableDrop && onDropFilesAt) {
@@ -3197,7 +3216,7 @@ function EsriMap({
       // Reset initialization flag
       isInitializingRef.current = false;
       // Also clear the container's Leaflet ID to allow re-initialization
-      const mapContainer = document.getElementById("map");
+      const mapContainer = document.getElementById(mapId);
       if (mapContainer) {
         delete (mapContainer as any)._leaflet_id;
         delete (mapContainer as any)._leaflet;
@@ -3208,7 +3227,7 @@ function EsriMap({
   return (
     <div className="relative w-full h-full rounded-2xl overflow-hidden shadow-md border border-gray-200">
       <div
-        id="map"
+        id={mapId}
         className="w-full h-full"
       />
       {/* UI overlays */}
