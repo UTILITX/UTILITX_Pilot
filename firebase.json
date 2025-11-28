@@ -1,75 +1,14 @@
 {
-  "_comment": "UTILITX Firebase Configuration - SSR Required",
-  "_comment2": "This configuration requires SSR (Server-Side Rendering) for Firebase Functions on Node 20",
-  "_comment3": "DO NOT change rewrites - all API routes must go to nextApp first to allow Next.js routing",
-  "_comment4": "DO NOT use output: 'export' in next.config.mjs - breaks SSR and dynamic routes",
-
   "hosting": {
-    "public": "public",
+    "site": "utilitx-pilot-a01bb",
+    "source": ".",
     "ignore": [
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
     ],
-
-    "rewrites": [
-      {
-        "source": "/api/**",
-        "function": "nextApp"
-      },
-      {
-        "source": "**",
-        "function": "nextApp"
-      }
-    ],
-
-    "headers": [
-      {
-        "source": "**/*.@(jpg|jpeg|gif|png|webp|svg|ico)",
-        "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "max-age=31536000"
-          }
-        ]
-      },
-      {
-        "source": "**/*.@(js|css)",
-        "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "max-age=31536000"
-          }
-        ]
-      },
-      {
-        "source": "**/*.@(woff|woff2|ttf|eot)",
-        "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "max-age=31536000"
-          }
-        ]
-      }
-    ]
-  },
-
-  "functions": {
-    "source": "functions",
-    "runtime": "nodejs20",
-    "ignore": [
-      "node_modules",
-      ".git",
-      "firebase-debug.log",
-      "firebase-debug.*.log",
-      "*.log",
-      ".next/cache/**",
-      ".next/trace",
-      "**/*.map"
-    ],
-    "predeploy": [
-      "npm --prefix \"$RESOURCE_DIR/..\" run build",
-      "node \"$RESOURCE_DIR/copy-next-build.js\""
-    ]
+    "frameworksBackend": {
+      "region": "us-central1"
+    }
   }
 }
