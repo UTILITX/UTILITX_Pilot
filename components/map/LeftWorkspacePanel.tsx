@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils"
 import type { RequestRecord } from "@/lib/record-types"
 import { ProjectHQ } from "@/components/project-hq/ProjectHQ"
+import { LayoutDashboard, FileText, Lightbulb, Share2, Settings as SettingsIcon } from "lucide-react"
 
 type PanelMode = "overview" | "records" | "insights" | "share" | "settings"
 
@@ -37,12 +38,12 @@ export default function LeftWorkspacePanel({
   onZoomToArea,
   records = [],
 }: LeftWorkspacePanelProps) {
-  const navItems: Array<{ mode: PanelMode; label: string }> = [
-    { mode: "overview", label: "Overview" },
-    { mode: "records", label: "Records" },
-    { mode: "insights", label: "Insights" },
-    { mode: "share", label: "Share" },
-    { mode: "settings", label: "Settings" },
+  const navItems: Array<{ mode: PanelMode; label: string; icon: React.ElementType }> = [
+    { mode: "overview", label: "Overview", icon: LayoutDashboard },
+    { mode: "records", label: "Records", icon: FileText },
+    { mode: "insights", label: "Insights", icon: Lightbulb },
+    { mode: "share", label: "Share", icon: Share2 },
+    { mode: "settings", label: "Settings", icon: SettingsIcon },
   ]
 
   const isProjectSelected = !!currentProject
@@ -95,7 +96,19 @@ export default function LeftWorkspacePanel({
               }
             }}
           >
-            {item.label}
+            <span className="flex items-center gap-2">
+              <span
+                className={cn(
+                  "flex h-7 w-7 items-center justify-center rounded-full border text-xs",
+                  selectedMode === item.mode
+                    ? "border-white/40 bg-white/10 text-white"
+                    : "border-[var(--utilitx-gray-200)] bg-slate-50 text-[var(--utilitx-gray-500)]"
+                )}
+              >
+                <item.icon className="h-3 w-3" />
+              </span>
+              <span>{item.label}</span>
+            </span>
           </button>
         ))}
       </nav>
