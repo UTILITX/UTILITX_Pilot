@@ -32,6 +32,9 @@ import {
 import { cn } from "@/lib/utils";
 import { getSignedUrl } from "@/lib/supabase";
 import { getThumbnail, getBlurThumb, getPreviewImage, getPdfThumbnail } from "@/lib/getThumbnail";
+import { AISummaryCard } from "@/components/ai/AISummaryCard";
+import { AIGeolocationPreview } from "@/components/ai/AIGeolocationPreview";
+import { AIInterpretationDrawer } from "@/components/ai/AIInterpretationDrawer";
 
 type RecordDetailDrawerProps = {
   open: boolean;
@@ -347,6 +350,11 @@ export function RecordDetailDrawer({
                 </div>
               )}
 
+              <div className="space-y-3 animate-slideUpFade" style={{ animationDelay: "0.2s" }}>
+                <AISummaryCard />
+                <AIGeolocationPreview />
+              </div>
+
               <Separator className="bg-[var(--utilitx-gray-200)]" />
 
               {/* Details Section */}
@@ -491,6 +499,11 @@ export function RecordDetailDrawer({
                   </Button>
                 )}
               </div>
+
+              <div className="mt-4 animate-slideUpFade" style={{ animationDelay: "0.3s" }}>
+                <AIInterpretationDrawer />
+              </div>
+
             </>
           )}
         </div>

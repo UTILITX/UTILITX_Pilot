@@ -44,3 +44,4 @@ export function persistSharedWorkarea(project: DemoProject) {
   window.localStorage.setItem("shared-workarea", JSON.stringify(payload))
 }
 
+

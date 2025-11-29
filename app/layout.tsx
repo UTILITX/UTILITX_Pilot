@@ -10,9 +10,14 @@ import { ArcGISAuthProvider } from '@/contexts/ArcGISAuthContext'
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
+  title: 'UTILITX',
+  description: 'Utility map and planning workspace for UTILITX',
   generator: 'v0.app',
+  icons: {
+    icon: '/favicon.ico',
+    shortcut: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
+  },
 }
 
 export default function RootLayout({

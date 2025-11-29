@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils"
 import type { RequestRecord } from "@/lib/record-types"
 import { ProjectHQ } from "@/components/project-hq/ProjectHQ"
+import { WorkAreaAIMetrics } from "@/components/ai/WorkAreaAIMetrics"
 import { LayoutDashboard, FileText, Lightbulb, Share2, Settings as SettingsIcon } from "lucide-react"
 import { useWorkspaceStore } from "@/stores/workspaceStore"
 
@@ -54,22 +55,25 @@ export default function LeftWorkspacePanel({
       data-left-workspace-panel=""
       className="fixed left-[72px] top-[56px] h-[calc(100vh-64px)] w-[300px] bg-white shadow-xl rounded-r-2xl z-30 flex flex-col border-r border-[var(--utilitx-gray-200)]"
     >
-      <div className="px-4 pt-6 pb-2 space-y-3">
+      <div className="px-4 pt-6 pb-2">
         {isProjectSelected ? (
-          <ProjectHQ
-            project={{
-              name: currentProject?.name ?? currentProject?.id,
-              owner: currentProject?.owner,
-              updatedAt: currentProject?.updatedAt,
-            }}
-            workArea={currentProject}
-            records={records}
-            onRenameProject={onRenameWorkArea}
-            onUploadRecord={onUploadRecord}
-            onAddWorkArea={onAddWorkArea}
-            onShareProject={onShareProject}
-            onZoomToArea={onZoomToArea}
-          />
+          <div className="space-y-3">
+            <ProjectHQ
+              project={{
+                name: currentProject?.name ?? currentProject?.id,
+                owner: currentProject?.owner,
+                updatedAt: currentProject?.updatedAt,
+              }}
+              workArea={currentProject}
+              records={records}
+              onRenameProject={onRenameWorkArea}
+              onUploadRecord={onUploadRecord}
+              onAddWorkArea={onAddWorkArea}
+              onShareProject={onShareProject}
+              onZoomToArea={onZoomToArea}
+            />
+            <WorkAreaAIMetrics />
+          </div>
         ) : (
           <div className="text-sm text-[var(--utilitx-gray-600)]">Select a project above</div>
         )}
