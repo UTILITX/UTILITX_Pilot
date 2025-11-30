@@ -1,14 +1,14 @@
 "use client"
 
 import { ComingSoon } from "@/components/ui/ComingSoon"
-import { Brain } from "lucide-react"
+import { Sparkles } from "lucide-react"
 
 export function WorkAreaAIMetrics() {
   return (
     <ComingSoon>
       <div className="border rounded-md p-4 bg-white shadow-sm">
         <div className="flex items-center gap-2 mb-3">
-          <Brain className="w-5 h-5 text-indigo-500" />
+          <Sparkles className="w-5 h-5 text-[var(--utilitx-blue)]" />
           <p className="font-medium text-sm">Work Area Intelligence</p>
         </div>
 

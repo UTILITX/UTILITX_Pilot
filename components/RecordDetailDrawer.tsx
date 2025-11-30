@@ -355,6 +355,10 @@ export function RecordDetailDrawer({
                 <AIGeolocationPreview />
               </div>
 
+              <div className="mt-4 animate-slideUpFade" style={{ animationDelay: "0.2s" }}>
+                <AIInterpretationDrawer />
+              </div>
+
               <Separator className="bg-[var(--utilitx-gray-200)]" />
 
               {/* Details Section */}
@@ -498,10 +502,6 @@ export function RecordDetailDrawer({
                     View File
                   </Button>
                 )}
-              </div>
-
-              <div className="mt-4 animate-slideUpFade" style={{ animationDelay: "0.3s" }}>
-                <AIInterpretationDrawer />
               </div>
 
             </>
