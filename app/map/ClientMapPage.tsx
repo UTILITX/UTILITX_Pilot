@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { useCallback, useEffect, useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import nextDynamic from "next/dynamic"
 import type { RequestRecord, LatLng } from "@/lib/record-types"
@@ -17,6 +17,8 @@ import RegionSearch from "@/components/RegionSearch"
 import { UploadSectionProvider } from "@/components/upload/UploadSectionContext"
 import { useArcGISAuth } from "@/contexts/ArcGISAuthContext"
 import { useWorkspaceStore } from "@/stores/workspaceStore"
+import { useToast } from "@/hooks/use-toast"
+import { updateWorkAreaAttributes } from "@/lib/arcgis/saveWorkArea"
 
 // Dynamically import map components to avoid SSR issues with Leaflet
 const MapWithDrawing = nextDynamic(() => import("@/components/map-with-drawing"), {
@@ -61,6 +63,7 @@ export default function MapPage() {
   // ============================================
   
   const router = useRouter()
+  const { toast } = useToast()
   const { accessToken, isAuthenticated, isLoading, login } = useArcGISAuth()
   
   // Shared records state for the unified workflow (used by UploadTab)
@@ -166,6 +169,68 @@ const handleRecordGeorefComplete = (
   setRecordDrawingConfig(null)
 }
 
+const openWorkAreaAnalysis = useCallback(
+  async (workArea: {
+    id: string
+    name?: string
+    geometry?: any
+    [key: string]: any
+  } | null | undefined) => {
+    if (!workArea) return
+    const polygon = workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null
+
+    const basePayload = {
+      id: workArea.id,
+      name: workArea.name,
+      polygon,
+    }
+
+    setSelectedWorkArea(workArea)
+
+    setSelectedWorkAreaForAnalysis({
+      ...basePayload,
+      data: {
+        ...workArea,
+        completenessLoading: true,
+      },
+    })
+    setCompletenessLoading(true)
+    setAnalysisOpen(true)
+    setNavigationPanelOpen(false)
+
+    if (!polygon || polygon.length < 3) {
+      console.warn("No valid polygon on work area, cannot compute completeness.")
+      setCompletenessLoading(false)
+      return
+    }
+
+    try {
+      const recordFeatures = await queryRecordsInPolygon(polygon)
+      const completeness = computeWorkAreaCompleteness({ records: recordFeatures })
+
+      setSelectedWorkAreaForAnalysis({
+        ...basePayload,
+        data: {
+          ...workArea,
+          records: recordFeatures,
+          ...completeness,
+        },
+      })
+    } catch (error) {
+      console.error("❌ Error computing work area completeness:", error)
+    } finally {
+      setCompletenessLoading(false)
+    }
+  },
+  [
+    setAnalysisOpen,
+    setCompletenessLoading,
+    setNavigationPanelOpen,
+    setSelectedWorkArea,
+    setSelectedWorkAreaForAnalysis,
+  ]
+)
+
 const handleSelectProject = (id: string) => {
   const workArea = workAreas.find((w) => w.id === id)
   if (workArea) {
@@ -174,15 +239,7 @@ const handleSelectProject = (id: string) => {
     if (typeof window !== "undefined") {
       localStorage.setItem("utilitx-current-work-area", workArea.id)
     }
-    // Open the work area analysis drawer
-    setSelectedWorkAreaForAnalysis({
-      id: workArea.id,
-      name: workArea.name,
-      polygon: null, // Will be loaded when work area is clicked on map or geometry is fetched
-      data: workArea,
-    })
-    setAnalysisOpen(true)
-    setNavigationPanelOpen(false)
+    openWorkAreaAnalysis(workArea)
     
     // Zoom to the selected work area (only if it has geometry)
     // Add delay to ensure layers are loaded before zooming
@@ -204,23 +261,89 @@ const handleSelectProject = (id: string) => {
 
 const handleRenameWorkArea = (newName: string) => {
   if (!selectedWorkArea) return
-  const targetId = selectedWorkArea.id
-  setSelectedWorkArea((prev) => (prev ? { ...prev, name: newName } : prev))
+  const trimmedName = newName.trim()
+  if (!trimmedName) return
+  if (trimmedName === selectedWorkArea.name) return
+
+  const updatedAttributes = {
+    ...(selectedWorkArea.attributes || {}),
+    work_area_name: trimmedName,
+  }
+
+  const updatedWorkArea = {
+    ...selectedWorkArea,
+    name: trimmedName,
+    attributes: updatedAttributes,
+  }
+
+  setSelectedWorkArea(updatedWorkArea)
+
   setWorkAreas((prev) =>
-    prev.map((wa) => (wa.id === targetId ? { ...wa, name: newName } : wa))
+    prev.map((wa) =>
+      wa.id === selectedWorkArea.id
+        ? {
+            ...wa,
+            name: trimmedName,
+            attributes: updatedAttributes,
+          }
+        : wa
+    )
   )
+
   setSelectedWorkAreaForAnalysis((prev) =>
     prev
       ? {
           ...prev,
-          name: newName,
+          name: trimmedName,
           data: {
             ...prev.data,
-            name: newName,
+            name: trimmedName,
           },
         }
       : prev
   )
+
+  setCurrentWorkspaceProject({
+    id: updatedWorkArea.id,
+    name: updatedWorkArea.name,
+    geometry: updatedWorkArea.geometry,
+    areaSqm: updatedWorkArea.areaSqm,
+    complexity: updatedWorkArea.complexity,
+    duration: updatedWorkArea.duration,
+    coveragePct: updatedWorkArea.coveragePct,
+    owner: updatedWorkArea.owner,
+    updatedAt: updatedWorkArea.updatedAt,
+    records: updatedWorkArea.records,
+    meta: updatedWorkArea.meta,
+  })
+
+  const objectId =
+    selectedWorkArea.attributes?.OBJECTID ??
+    selectedWorkArea.attributes?.workarea_id ??
+    selectedWorkArea.attributes?.work_area_id ??
+    undefined
+
+  if (!objectId) {
+    console.warn("⚠️ Cannot persist work area rename - missing OBJECTID", selectedWorkArea.id)
+    toast({
+      title: "Rename saved locally",
+      description: "Layer ID not available so the new name could not be persisted to ArcGIS.",
+      variant: "destructive",
+    })
+    return
+  }
+
+  updateWorkAreaAttributes({
+    objectId,
+    attributes: { work_area_name: trimmedName },
+  }).catch((err) => {
+    console.error("❌ Failed to persist work area name:", err)
+    toast({
+      title: "Rename failed",
+      description: "Could not update the work area name on the layer. Please try again.",
+      variant: "destructive",
+    })
+  })
 }
 
 const openRecordUploadDialog = () => {
@@ -254,14 +377,7 @@ const handleSetPanelMode = (mode: "overview" | "records" | "insights" | "share" 
   
   if (mode === "overview") {
     // Open work area analysis panel
-    setSelectedWorkAreaForAnalysis({
-      id: selectedWorkArea.id,
-      name: selectedWorkArea.name,
-      polygon: null,
-      data: selectedWorkArea,
-    })
-    setAnalysisOpen(true)
-    setNavigationPanelOpen(false)
+    openWorkAreaAnalysis(selectedWorkArea)
   } else {
     // For other modes, update navigation mode and open navigation panel
     const navMode = mode === "records" ? "records" : 
@@ -598,47 +714,7 @@ const openSharePanel = () => {
           localStorage.setItem("utilitx-current-work-area", workAreaToAdd.id);
         }
       }}
-      onOpenWorkAreaAnalysis={async (workArea) => {
-        const polygon = workArea.geometry ? convertGeometryToPolygon(workArea.geometry) : null
-
-        setSelectedWorkAreaForAnalysis({
-          id: workArea.id,
-          name: workArea.name,
-          polygon,
-          data: {
-            ...workArea,
-            completenessLoading: true,
-          },
-        })
-        setCompletenessLoading(true)
-        setAnalysisOpen(true)
-
-        try {
-          if (!polygon || polygon.length < 3) {
-            console.warn("No valid polygon on work area, cannot compute completeness.")
-            setCompletenessLoading(false)
-            return
-          }
-
-          const recordFeatures = await queryRecordsInPolygon(polygon)
-          const completeness = computeWorkAreaCompleteness({ records: recordFeatures })
-
-          setSelectedWorkAreaForAnalysis({
-            id: workArea.id,
-            name: workArea.name,
-            polygon,
-            data: {
-              ...workArea,
-              records: recordFeatures,
-              ...completeness,
-            },
-          })
-        } catch (error) {
-          console.error("❌ Error computing work area completeness:", error)
-        } finally {
-          setCompletenessLoading(false)
-        }
-      }}
+      onOpenWorkAreaAnalysis={openWorkAreaAnalysis}
     >
       <FloatingTools />
       <RegionSearch />
@@ -651,6 +727,7 @@ const openSharePanel = () => {
     accessToken,
     recordDrawingConfig,
     recordDrawCommand,
+    openWorkAreaAnalysis,
     // Removed zoomToFeature from deps to prevent map re-mounting on zoom changes
     // Note: Inline callbacks are recreated on each render, but that's acceptable
     // The main benefit is preventing full component remount when these values don't change
@@ -698,7 +775,7 @@ const openSharePanel = () => {
           onCreateNew={startWorkAreaDraw}
         />
         <div className="relative flex-1 w-full overflow-hidden bg-white">
-        <div className="absolute inset-0 z-[5]">
+        <div className="absolute inset-0 z-0">
           {/* Memoized MapWithDrawing - prevents remounts on state changes */}
           {MemoizedMapWithDrawing}
         </div>
@@ -742,14 +819,8 @@ const openSharePanel = () => {
         onSelectWorkArea={(id) => {
           const workArea = workAreas.find((w) => w.id === id)
           if (workArea) {
-            setSelectedWorkAreaForAnalysis({
-              id: workArea.id,
-              name: workArea.name,
-              polygon: null, // Will be loaded when work area is clicked on map
-              data: workArea,
-            })
-            setAnalysisOpen(true)
-            setNavigationPanelOpen(false)
+            setSelectedWorkArea(workArea)
+            openWorkAreaAnalysis(workArea)
             
             // Zoom to the selected work area (only if it has geometry)
             // Add delay to ensure layers are loaded before zooming
