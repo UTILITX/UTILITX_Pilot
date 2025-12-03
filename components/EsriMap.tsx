@@ -518,7 +518,7 @@ function EsriMap({
         })(),
         zoom: 2, // Neutral world view - RegionSearch will handle actual zoom
         minZoom: 2, // Allow zoom level 2 for world view
-        maxZoom: 19, // Proper maxZoom for Esri vector basemaps (fixes Leaflet-Geoman pm:create issue)
+        maxZoom: 21, // Proper maxZoom for Esri vector basemaps (fixes Leaflet-Geoman pm:create issue)
         wheelDebounceTime: 25, // smoother zoom
         wheelPxPerZoomLevel: 60,
         zoomControl: false, // Disable default zoom controls - using custom UTILITX toolbar instead
@@ -1223,15 +1223,15 @@ function EsriMap({
           const basemaps: Record<string, L.TileLayer> = {
             Imagery: EL.basemapLayer("Imagery", {
               apikey: authToken,
-              maxZoom: 19,
+              maxZoom: 21,
             }),
             Streets: EL.basemapLayer("Streets", {
               apikey: authToken,
-              maxZoom: 19,
+              maxZoom: 21,
             }),
             Topographic: EL.basemapLayer("Topographic", {
               apikey: authToken,
-              maxZoom: 19,
+              maxZoom: 21,
             }),
           };
   
