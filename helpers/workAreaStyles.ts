@@ -1,5 +1,8 @@
 import L from "leaflet";
 
+export const WORK_AREA_PANE = "utilitx-work-area-pane";
+export const ACTIVE_WORK_AREA_PANE = "activeWorkAreaPane";
+
 export const ACTIVE_WORK_AREA_STYLE = {
   color: "rgba(0, 255, 120, 1)",
   weight: 3,
@@ -13,7 +16,7 @@ export function setActiveWorkArea(layer: L.Layer) {
   }
   (layer as any).options = {
     ...(layer as any).options,
-    pane: "activeWorkAreaPane",
+    pane: ACTIVE_WORK_AREA_PANE,
   };
   const el = (layer as any).getElement?.();
   if (el) {
@@ -27,7 +30,7 @@ export function setInactiveWorkArea(layer: L.Layer, INACTIVE_STYLE: any) {
   }
   (layer as any).options = {
     ...(layer as any).options,
-    pane: "overlayPane",
+    pane: WORK_AREA_PANE,
   };
   const el = (layer as any).getElement?.();
   if (el) {

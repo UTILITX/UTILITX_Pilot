@@ -33,6 +33,8 @@ import {
   ACTIVE_WORK_AREA_STYLE,
   setActiveWorkArea,
   setInactiveWorkArea,
+  WORK_AREA_PANE,
+  ACTIVE_WORK_AREA_PANE,
 } from "@/helpers/workAreaStyles";
 import { useMapToolbarContext } from "@/components/map/MapToolbarContext";
 
@@ -144,32 +146,7 @@ function getCentroidFromGeometry(geometry: any): [number, number] | null {
   return null;
 }
 
-// Helper function to get record type icons (lazy initialization to avoid SSR issues)
-function getRecordTypeIcons(): Record<string, L.DivIcon> {
-  if (typeof window === 'undefined') {
-    return {};
-  }
-  return {
-    asbuilt: L.divIcon({
-      html: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/><circle cx="18" cy="16" r="1"/></svg>`,
-      className: "record-icon",
-      iconSize: [20, 20],
-      iconAnchor: [10, 10],
-    }),
-    permit: L.divIcon({
-      html: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/><path d="M20 8v8"/><path d="M18 12h4"/></svg>`,
-      className: "record-icon",
-      iconSize: [20, 20],
-      iconAnchor: [10, 10],
-    }),
-    locate: L.divIcon({
-      html: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><circle cx="12" cy="12" r="7"/></svg>`,
-      className: "record-icon",
-      iconSize: [20, 20],
-      iconAnchor: [10, 10],
-    }),
-  };
-}
+const RECORD_LAYER_PANE = "utilitx-record-layer-pane";
 
 type EsriMapProps = {
   mode?: "draw" | "view";
@@ -294,7 +271,6 @@ function EsriMap({
   const lastZoomRef = useRef<number | null>(null);
   const resizeTimeoutRef = useRef<any>(null);
   const safeResizeRef = useRef<(() => void) | null>(null);
-  const recordIconLayerRef = useRef<L.LayerGroup | null>(null);
   const isRestoringViewRef = useRef(false);
   const isInitializingRef = useRef(false);
   const rebindWorkAreaPopupsRef = useRef<(() => void) | null>(null);
@@ -552,10 +528,26 @@ function EsriMap({
       setMapInstance(map); // Update state so context updates
       isInitializingRef.current = false; // Mark initialization as complete
       
-      map.createPane("activeWorkAreaPane");
-      const activePane = map.getPane("activeWorkAreaPane");
+      map.createPane(WORK_AREA_PANE);
+      const workAreaPane = map.getPane(WORK_AREA_PANE);
+      if (workAreaPane) {
+        const workAreaEl = workAreaPane as HTMLElement;
+        workAreaEl.style.zIndex = "430";
+        workAreaEl.style.pointerEvents = "auto";
+      }
+
+      map.createPane(RECORD_LAYER_PANE);
+      const recordPane = map.getPane(RECORD_LAYER_PANE);
+      if (recordPane) {
+        const recordEl = recordPane as HTMLElement;
+        recordEl.style.zIndex = "620";
+        recordEl.style.pointerEvents = "auto";
+      }
+
+      map.createPane(ACTIVE_WORK_AREA_PANE);
+      const activePane = map.getPane(ACTIVE_WORK_AREA_PANE);
       if (activePane) {
-        (activePane as HTMLElement).style.zIndex = "650";
+        (activePane as HTMLElement).style.zIndex = "700";
       }
 
       // Notify parent component that map is ready
@@ -864,11 +856,6 @@ function EsriMap({
               (layer as any).options.bubblingMouseEvents = true;
             }
             
-            // 🔥 FIX: Ensure layer is brought to front so it can receive clicks
-            if (typeof (layer as any).bringToFront === 'function') {
-              (layer as any).bringToFront();
-            }
-            
             if (typeof layer.off === 'function') {
               layer.off('click');
               layer.off('mousedown');
@@ -1145,30 +1132,6 @@ function EsriMap({
           map.removeControl(map.zoomControl);
         }
 
-        // Create record icon layer for zoom >= 15
-        const recordIconLayer = L.layerGroup().addTo(map);
-        recordIconLayer.setZIndex(9999);
-        recordIconLayer.options.minZoom = 15;
-        recordIconLayerRef.current = recordIconLayer;
-
-        // Show/hide icon layer based on zoom level
-        const updateIconLayerVisibility = () => {
-          const zoom = map.getZoom();
-          if (zoom >= 15) {
-            if (!map.hasLayer(recordIconLayer)) {
-              map.addLayer(recordIconLayer);
-            }
-          } else {
-            if (map.hasLayer(recordIconLayer)) {
-              recordIconLayer.clearLayers();
-              map.removeLayer(recordIconLayer);
-            }
-          }
-        };
-
-        map.on("zoomend", updateIconLayerVisibility);
-        updateIconLayerVisibility(); // Initial check
-
         // Fix bounce caused by sidebar/layout changes with debounced resize
         const safeResize = () => {
           if (resizeTimeoutRef.current) {
@@ -1318,6 +1281,7 @@ function EsriMap({
                 
                 const workAreas = EL.featureLayer({
                   url: WORKAREA_URL,
+                  pane: WORK_AREA_PANE,
                   ...workAreaAuth,
                   style: () => defaultWorkAreaStyle,
                   // 🔥 FIX: Ensure features are interactive
@@ -1503,6 +1467,7 @@ function EsriMap({
                 
                 const layer = EL.featureLayer({
                   url: url,
+                  pane: RECORD_LAYER_PANE,
                   ...layerAuth,
                   pointToLayer: geometryType === "Point" ? (feature: any, latlng: any) => {
                     const props = feature.properties || {};
@@ -1540,34 +1505,6 @@ function EsriMap({
                   } : undefined,
                   onEachFeature: (feature: any, layer: L.Layer) => {
                     const props = feature.properties || {};
-                    
-                    // Add record type icon (will be shown/hidden based on zoom)
-                    if (recordIconLayerRef.current) {
-                      let recordType = (props.record_type || "").toLowerCase().trim();
-                      // Handle "as built" with space
-                      if (recordType === "as built") {
-                        recordType = "asbuilt";
-                      }
-                      if (recordType && (recordType === "asbuilt" || recordType === "permit" || recordType === "locate")) {
-                        const recordTypeIcons = getRecordTypeIcons();
-                        const icon = recordTypeIcons[recordType];
-                        if (icon) {
-                          // Get geometry from feature
-                          const geometry = feature.geometry || getFeatureGeometry(feature);
-                          const centroid = getCentroidFromGeometry(geometry);
-                          
-                          if (centroid) {
-                            const marker = L.marker([centroid[0], centroid[1]], { icon });
-                            // Store marker on layer for potential cleanup
-                            (layer as any)._recordIconMarker = marker;
-                            // Add to icon layer if zoom is high enough
-                            if (map.getZoom() >= 15 && recordIconLayerRef.current) {
-                              marker.addTo(recordIconLayerRef.current);
-                            }
-                          }
-                        }
-                      }
-                    }
                     
                     // Format record ID (use OBJECTID or record_id, format as R-XXXXX)
                     const recordId = props.record_id 

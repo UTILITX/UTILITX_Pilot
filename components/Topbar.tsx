@@ -49,7 +49,7 @@ export default function Topbar({ workAreas = [], selectedWorkArea = null, handle
 
             {/* Switch project dropdown */}
             <Select
-              value={selectedWorkArea?.id}
+              value={selectedWorkArea?.id ?? ""}
               onValueChange={(id) => handleSelectProject?.(id)}
             >
               <SelectTrigger className="w-[220px]">

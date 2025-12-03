@@ -185,6 +185,13 @@ const openWorkAreaAnalysis = useCallback(
       polygon,
     }
 
+    console.log("[ClientMapPage] openWorkAreaAnalysis:", {
+      id: workArea.id,
+      name: workArea.name,
+      hasGeometry: !!workArea.geometry,
+      polygonPoints: polygon?.length,
+    })
+
     setSelectedWorkArea(workArea)
 
     setSelectedWorkAreaForAnalysis({
@@ -199,7 +206,7 @@ const openWorkAreaAnalysis = useCallback(
     setNavigationPanelOpen(false)
 
     if (!polygon || polygon.length < 3) {
-      console.warn("No valid polygon on work area, cannot compute completeness.")
+      console.warn("No valid polygon on work area, cannot compute completeness.", { workAreaId: workArea.id })
       setCompletenessLoading(false)
       return
     }
@@ -207,6 +214,12 @@ const openWorkAreaAnalysis = useCallback(
     try {
       const recordFeatures = await queryRecordsInPolygon(polygon)
       const completeness = computeWorkAreaCompleteness({ records: recordFeatures })
+
+      console.log("[ClientMapPage] Work area completeness computed:", {
+        id: workArea.id,
+        completenessPct: completeness.completenessPct,
+        recordCount: recordFeatures.length,
+      })
 
       setSelectedWorkAreaForAnalysis({
         ...basePayload,
@@ -234,6 +247,29 @@ const openWorkAreaAnalysis = useCallback(
 const handleSelectProject = (id: string) => {
   const workArea = workAreas.find((w) => w.id === id)
   if (workArea) {
+    console.log("[ClientMapPage] handleSelectProject:", {
+      id: workArea.id,
+      name: workArea.name,
+      hasGeometry: !!workArea.geometry,
+      coverage: workArea.coveragePct,
+    })
+
+    setCurrentWorkspaceProject({
+      id: workArea.id,
+      name: workArea.name,
+      geometry: workArea.geometry,
+      areaSqm: workArea.areaSqm,
+      complexity: workArea.complexity,
+      duration: workArea.duration,
+      coveragePct: workArea.coveragePct,
+      owner: workArea.owner,
+      updatedAt: workArea.updatedAt,
+      records: workArea.records,
+      meta: {
+        source: "esri-workarea:topbar-select",
+      },
+    })
+
     setSelectedWorkArea(workArea)
     // Persist selection to localStorage
     if (typeof window !== "undefined") {
@@ -373,6 +409,12 @@ const zoomToSelectedWorkArea = () => {
 
 // Handle panel mode changes from left sidebar
 const handleSetPanelMode = (mode: "overview" | "records" | "insights" | "share" | "settings") => {
+  console.log("[ClientMapPage] handleSetPanelMode:", {
+    mode,
+    selectedWorkAreaId: selectedWorkArea?.id,
+    hasAnalysisData: !!selectedWorkAreaForAnalysis?.data,
+    coveragePct: selectedWorkAreaForAnalysis?.data?.completenessPct ?? selectedWorkArea?.coveragePct,
+  })
   if (!selectedWorkArea) return // Don't open panels if no project selected
   
   if (mode === "overview") {
@@ -563,6 +605,12 @@ const openSharePanel = () => {
     }
 
     const { id, name, geometry, areaSqm, complexity, duration, coverage, owner, updatedAt } = projectHeaderWorkArea
+    console.log("[ClientMapPage] Syncing workspace project state:", {
+      id,
+      name,
+      coverage,
+      recordsCount: projectHeaderWorkArea?.records?.length,
+    })
 
     setCurrentWorkspaceProject({
       id,
