@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState, memo } from "react";
+import React, { useEffect, useRef, useState, memo, useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -405,6 +405,9 @@ function EsriMap({
   const [recordDrawerOpen, setRecordDrawerOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [recordDrawerLoading, setRecordDrawerLoading] = useState(false);
+  const handleAiSummaryUpdated = useCallback((summary: string) => {
+    setSelectedRecord((prev) => (prev ? { ...prev, textBlob: summary } : prev));
+  }, []);
   
   // 🔥 Stable callback references for Geoman event listeners (prevents "wrong listener type" errors)
   const pmCreateHandlerRef = useRef<((e: any) => void) | null>(null);
@@ -3236,6 +3239,9 @@ function EsriMap({
             window.open(record.fileUrl, "_blank");
           }
         }}
+        feature={selectedRecord?.feature}
+        layer={selectedRecord?.layer}
+        onAiSummaryUpdated={handleAiSummaryUpdated}
       />
     </div>
   );

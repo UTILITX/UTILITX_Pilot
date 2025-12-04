@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   Sheet,
   SheetContent,
@@ -9,6 +9,7 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -31,7 +32,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getSignedUrl } from "@/lib/supabase";
+import { getRecordsLayerUrl } from "@/lib/getRecordsLayerUrl";
 import { getThumbnail, getBlurThumb, getPreviewImage, getPdfThumbnail } from "@/lib/getThumbnail";
+import { updateArcGISFeature } from "@/lib/esri/updateFeature";
+import { useToast } from "@/hooks/use-toast";
 import { AISummaryCard } from "@/components/ai/AISummaryCard";
 import { AIGeolocationPreview } from "@/components/ai/AIGeolocationPreview";
 import { AIInterpretationDrawer } from "@/components/ai/AIInterpretationDrawer";
@@ -55,6 +59,9 @@ type RecordDetailDrawerProps = {
   organization?: string;
   processedDate?: string;
   uploadedBy?: string;
+  feature?: any;
+  layer?: any;
+  onAiSummaryUpdated?: (value: string) => void;
   onZoomToRecord?: () => void;
   onViewFile?: () => void;
   isLoading?: boolean;
@@ -82,11 +89,18 @@ export function RecordDetailDrawer({
   onViewFile,
   isLoading = false,
   cloudinaryId,
+  feature,
+  layer,
+  onAiSummaryUpdated,
 }: RecordDetailDrawerProps) {
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [fileType, setFileType] = useState<string | null>(null);
+  const [aiSummaryDraft, setAiSummaryDraft] = useState(textBlob ?? "");
+  const [isSavingAiSummary, setIsSavingAiSummary] = useState(false);
+  const [aiSummaryError, setAiSummaryError] = useState<string | null>(null);
+  const { toast } = useToast();
 
   // Determine file type from filename or path
   const getFileType = (name?: string, path?: string): string => {
@@ -182,6 +196,10 @@ export function RecordDetailDrawer({
     }
   }, [open, cloudinaryId, filePath, fileUrl, thumbnail, filename]);
 
+  useEffect(() => {
+    setAiSummaryDraft(textBlob ?? "");
+  }, [textBlob]);
+
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return null;
     try {
@@ -210,6 +228,87 @@ export function RecordDetailDrawer({
     return "text-red-600";
   };
 
+  const resolveFeatureObjectId = (): number | null => {
+    if (!feature) return null;
+    const attributes = feature.properties ?? feature.attributes ?? {};
+    const candidates = [
+      attributes.OBJECTID,
+      attributes.objectid,
+      attributes.objectId,
+      attributes.objectID,
+      feature.id,
+      feature.feature?.attributes?.OBJECTID,
+      feature.feature?.attributes?.objectid,
+    ];
+    for (const candidate of candidates) {
+      if (candidate === undefined || candidate === null || candidate === "") {
+        continue;
+      }
+      const parsed = Number(candidate);
+      if (!Number.isNaN(parsed)) {
+        return parsed;
+      }
+    }
+    return null;
+  };
+
+  const recordLayerUrl =
+    (layer as any)?.options?.url || (geometryType ? getRecordsLayerUrl(geometryType) : null);
+  const resolvedObjectId = resolveFeatureObjectId();
+  const attributeFields = feature?.properties || feature?.attributes || {};
+  const aiSummaryFieldName = Object.keys(attributeFields).find((key) => {
+    const normalized = key.replace(/_/g, "").toLowerCase();
+    return normalized === "aisummary";
+  });
+  const canEditAiSummary = Boolean(recordLayerUrl && resolvedObjectId !== null && aiSummaryFieldName);
+  const aiSummaryBaseValue = textBlob ?? "";
+  const aiSummaryDirty = aiSummaryDraft !== aiSummaryBaseValue;
+
+  const handleSaveAiSummary = async () => {
+    if (!canEditAiSummary || !recordLayerUrl || resolvedObjectId === null) {
+      return;
+    }
+
+    setIsSavingAiSummary(true);
+    setAiSummaryError(null);
+
+    try {
+      await updateArcGISFeature({
+        layerUrl: recordLayerUrl,
+        objectId: resolvedObjectId,
+        attributes: {
+          [aiSummaryFieldName as string]: aiSummaryDraft,
+        },
+      });
+
+      if (feature?.properties && aiSummaryFieldName) {
+        feature.properties[aiSummaryFieldName] = aiSummaryDraft;
+      }
+
+      if (feature?.attributes && aiSummaryFieldName) {
+        feature.attributes[aiSummaryFieldName] = aiSummaryDraft;
+      }
+
+      onAiSummaryUpdated?.(aiSummaryDraft);
+
+      toast({
+        title: "AI summary updated",
+        description: "Saved to the ai_summary field in ArcGIS",
+      });
+    } catch (error: any) {
+      const message = error?.message || "Unable to save AI summary";
+      setAiSummaryError(message);
+      console.error("Error saving AI summary:", error);
+      toast({
+        title: "Failed to save AI summary",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingAiSummary(false);
+    }
+  };
+
   const isPdf = fileType === 'pdf';
   const isImage = fileType === 'image';
   const isDocument = fileType === 'document';
@@ -221,6 +320,7 @@ export function RecordDetailDrawer({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
+        hideOverlay
         side="right"
         className="group w-full sm:w-[420px] lg:w-[480px] overflow-y-auto p-6 bg-white border-l border-[var(--utilitx-gray-200)] animate-slideInRight animate-fadeIn"
         style={{ boxShadow: "var(--utilitx-shadow-md)" }}
@@ -468,16 +568,44 @@ export function RecordDetailDrawer({
               </div>
 
               {/* AI Summary (text_blob) */}
-              {textBlob && (
-                <div className="animate-slideUpFade" style={{ animationDelay: "0.2s" }}>
-                  <h3 className="text-sm font-medium text-[var(--utilitx-gray-700)] mb-2">AI Summary</h3>
-                  <div className="bg-[var(--utilitx-gray-50)] border border-[var(--utilitx-gray-200)] rounded-lg p-3 min-h-[60px]">
-                    <p className="text-sm text-[var(--utilitx-gray-700)] whitespace-pre-wrap leading-relaxed">
-                      {textBlob}
+              <div className="animate-slideUpFade" style={{ animationDelay: "0.2s" }}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-medium text-[var(--utilitx-gray-700)] mb-1">AI Summary</h3>
+                    <p className="text-xs text-[var(--utilitx-gray-500)]">
+                      {canEditAiSummary
+                        ? "Writes straight back to the ai_summary field in ArcGIS."
+                        : "Records originating outside ArcGIS are read-only."}
                     </p>
                   </div>
+                  <span className="text-xs text-[var(--utilitx-gray-500)]">
+                    {canEditAiSummary ? "Editable" : "Read-only"}
+                  </span>
                 </div>
-              )}
+                <Textarea
+                  value={aiSummaryDraft}
+                  onChange={(event) => {
+                    setAiSummaryDraft(event.target.value);
+                    setAiSummaryError(null);
+                  }}
+                  readOnly={!canEditAiSummary}
+                  placeholder="AI summary will appear here."
+                  className="resize-none min-h-[160px] mt-3"
+                />
+                <div className="mt-2 flex items-center justify-between gap-4">
+                  <p className="text-xs text-destructive min-h-4">{aiSummaryError || ""}</p>
+                  {canEditAiSummary && (
+                    <Button
+                      onClick={handleSaveAiSummary}
+                      disabled={!aiSummaryDirty || isSavingAiSummary}
+                      variant="secondary"
+                      size="sm"
+                    >
+                      {isSavingAiSummary ? "Saving..." : "Save summary"}
+                    </Button>
+                  )}
+                </div>
+              </div>
 
               <Separator className="bg-[var(--utilitx-gray-200)]" />
 

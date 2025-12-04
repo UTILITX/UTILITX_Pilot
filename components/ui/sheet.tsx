@@ -34,10 +34,12 @@ const SheetContent = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content> & {
     side?: "top" | "right" | "bottom" | "left"
+    hideOverlay?: boolean
+    overlayClassName?: string
   }
->(({ className, children, side = "right", ...props }, ref) => (
+>(({ className, children, side = "right", hideOverlay = false, overlayClassName, ...props }, ref) => (
   <SheetPortal>
-    <SheetOverlay />
+    {!hideOverlay && <SheetOverlay className={overlayClassName} />}
     <SheetPrimitive.Content
       ref={ref}
       data-slot="sheet-content"
