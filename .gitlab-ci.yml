@@ -1,0 +1,71 @@
+image: node:20
+
+variables:
+  NODE_ENV: production
+  CI_DEBUG_TRACE: "false"
+
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+  paths:
+    - node_modules/
+
+stages:
+  - test
+  - security
+  - deploy
+
+include:
+  - template: Jobs/SAST.gitlab-ci.yml
+  - template: Jobs/Secret-Detection.gitlab-ci.yml
+  - template: Jobs/Dependency-Scanning.gitlab-ci.yml
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "staging"
+    - when: never
+
+lint:
+  stage: test
+  script:
+    - npm ci
+    - npm run lint
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "staging"
+    - when: never
+
+deploy_staging:
+  stage: deploy
+  environment:
+    name: staging
+    url: https://staging.utilitx-pilot.web.app
+  variables:
+    NEXT_PUBLIC_ENVIRONMENT: staging
+    SENTRY_RELEASE: $CI_COMMIT_SHA
+  script:
+    - npm ci
+    - npm run build
+    - npm run deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH == "staging"
+      when: on_success
+
+deploy_prod:
+  stage: deploy
+  environment:
+    name: prod
+    url: https://utilitx-pilot.web.app
+  variables:
+    NEXT_PUBLIC_ENVIRONMENT: production
+    SENTRY_RELEASE: $CI_COMMIT_SHA
+  script:
+    - npm ci
+    - npm run build
+    - npm run deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: on_success
+

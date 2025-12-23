@@ -19,11 +19,19 @@
  * This logger formats logs consistently for easy filtering in Firebase Console.
  */
 
+import { appVersion, environment, commit } from './app-metadata';
+
 type LogLevel = 'info' | 'warn' | 'error' | 'debug';
 
 interface LogContext {
   [key: string]: any;
 }
+
+const metadata = {
+  environment,
+  appVersion,
+  commit,
+};
 
 class UTILITXLogger {
   /**
@@ -63,6 +71,7 @@ class UTILITXLogger {
       service: service.toUpperCase(),
       operation,
       timestamp: new Date().toISOString(),
+      ...metadata,
       ...context,
     };
 
