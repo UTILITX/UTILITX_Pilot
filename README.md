@@ -82,4 +82,5 @@ This is a common issue with Firebase Functions deployment. The Supabase client f
 
 **Fix:** Remove `output: 'export'` - SSR is required for Firebase Functions. See [Blaze Plan Setup Guide](docs/BLAZE_PLAN_SETUP.md) for details.
 
-Testing
+Testing, testing
+
