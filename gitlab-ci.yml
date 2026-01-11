@@ -1,0 +1,18 @@
+name: Trigger GitLab CI
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+
+jobs:
+  trigger-gitlab:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger GitLab pipeline
+        run: |
+          curl -X POST \
+            -F token=${{ secrets.GITLAB_TRIGGER_TOKEN }} \
+            -F ref=main \
+            https://gitlab.com/api/v4/projects/<77619993>/trigger/pipeline
