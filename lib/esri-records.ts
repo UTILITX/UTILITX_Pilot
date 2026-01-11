@@ -82,24 +82,27 @@ export async function queryRecordsInPolygon(
     return [];
   }
 
-  // Use provided token or try to get from client-side auth, fall back to API key
+  // Use provided token or try to get from client-side auth (no API key fallback)
   let token = authToken;
   if (!token && typeof window !== "undefined") {
     try {
       const { getArcGISToken } = await import('@/lib/auth/get-token');
       token = getArcGISToken();
     } catch (error) {
-      console.warn("Could not get OAuth token from client-side auth, falling back to API key");
+      console.warn("Could not get OAuth token from client-side auth", error);
     }
   }
 
-  const apiKey = token || process.env.NEXT_PUBLIC_ARCGIS_API_KEY!;
+  if (!token) {
+    console.error("ArcGIS OAuth token required for record polygon queries");
+    throw new Error("ArcGIS OAuth token required");
+  }
 
   // Query all three record layers in parallel
   const queryPromises = [
-    queryLayerWithGeometry(RECORDS_POINT, arcgisGeometry, apiKey),
-    queryLayerWithGeometry(RECORDS_LINE, arcgisGeometry, apiKey),
-    queryLayerWithGeometry(RECORDS_POLYGON, arcgisGeometry, apiKey),
+    queryLayerWithGeometry(RECORDS_POINT, arcgisGeometry, token),
+    queryLayerWithGeometry(RECORDS_LINE, arcgisGeometry, token),
+    queryLayerWithGeometry(RECORDS_POLYGON, arcgisGeometry, token),
   ];
 
   try {
@@ -133,7 +136,7 @@ export async function queryRecordsInPolygon(
 async function queryLayerWithGeometry(
   layerUrl: string,
   geometry: any,
-  apiKey: string
+  token: string
 ): Promise<any[]> {
   if (!layerUrl) {
     return [];
@@ -151,7 +154,7 @@ async function queryLayerWithGeometry(
       spatialRel: "esriSpatialRelIntersects", // Features that intersect the polygon
       outFields: "*", // Get all fields
       returnGeometry: "true",
-      token: apiKey,
+      token: token,
     });
 
     const response = await fetch(`${queryUrl}?${params.toString()}`);

@@ -25,37 +25,76 @@
  * - All routes are handled by nextApp function in firebase.json
  */
 
+import { withSentryConfig } from '@sentry/nextjs';
+
+const cspDirectives = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  'upgrade-insecure-requests',
+  'block-all-mixed-content',
+  "script-src 'self' https://js.arcgis.com https://browser.sentry-cdn.com",
+  "style-src 'self' 'unsafe-inline' https://js.arcgis.com",
+  "img-src 'self' data: blob: https://*.arcgis.com https://*.arcgisonline.com https://res.cloudinary.com",
+  "connect-src 'self' https://*.arcgis.com https://*.arcgisonline.com https://*.sentry.io https://*.ingest.sentry.io https://*.supabase.co https://api.cloudinary.com",
+  "worker-src 'self' blob:",
+];
+
+const securityHeaders = [
+  {
+    key: 'Content-Security-Policy',
+    value: `${cspDirectives.join('; ')};`,
+  },
+  {
+    key: 'X-Frame-Options',
+    value: 'DENY',
+  },
+  {
+    key: 'X-Content-Type-Options',
+    value: 'nosniff',
+  },
+  {
+    key: 'Referrer-Policy',
+    value: 'strict-origin-when-cross-origin',
+  },
+  {
+    key: 'Permissions-Policy',
+    value: 'geolocation=(), microphone=(), camera=()',
+  },
+];
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: false, // Disabled to prevent ResizeObserver issues during SSR
-  
   swcMinify: true,
-  
-  // CRITICAL: NO output mode - allows SSR through Firebase Functions
-  // Do NOT use "standalone" or "export" - both break SSR
-  // Firebase Functions handles the server, we just need standard Next.js SSR
-  
-  // Disable static generation entirely
   generateEtags: false,
-  
-  // Ensure dynamic rendering
+  productionBrowserSourceMaps: false,
   onDemandEntries: {
     maxInactiveAge: 1000 * 60 * 60, // 1 hour
     pagesBufferLength: 5,
   },
-  
-  // Transpile ArcGIS packages (required for SSR)
   transpilePackages: ["@arcgis/core"],
-  
-  // TypeScript - ignore build errors for faster builds
   typescript: {
     ignoreBuildErrors: true,
   },
-  
-  // Images - unoptimized for Firebase Functions
   images: {
     unoptimized: true,
   },
-}
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: securityHeaders,
+      },
+    ];
+  },
+};
 
-export default nextConfig
+const sentryWebpackPluginOptions = {
+  hideSourceMaps: true,
+  deleteAfterCompile: true,
+  silent: true,
+};
+
+export default withSentryConfig(nextConfig, sentryWebpackPluginOptions)

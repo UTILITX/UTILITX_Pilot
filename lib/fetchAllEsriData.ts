@@ -20,6 +20,11 @@ export interface IndexedRecord {
 }
 
 export async function fetchAllRecordsFromEsri(token?: string | null): Promise<IndexedRecord[]> {
+  if (!token) {
+    console.warn("[fetchAllRecordsFromEsri] ArcGIS OAuth token missing, skipping records fetch");
+    return [];
+  }
+
   const [points, lines, polygons] = await Promise.all([
     queryEsriLayer(RECORDS_POINT, token),
     queryEsriLayer(RECORDS_LINE, token),
@@ -125,6 +130,11 @@ export async function fetchAllRecordsFromEsri(token?: string | null): Promise<In
 }
 
 export async function fetchAllWorkAreasFromEsri(token?: string | null) {
+  if (!token) {
+    console.warn("[fetchAllWorkAreasFromEsri] ArcGIS OAuth token missing, skipping work area fetch");
+    return [];
+  }
+
   const features = await queryEsriLayer(WORKAREAS, token);
 
   return features.map((f: any) => {

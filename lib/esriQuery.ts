@@ -4,21 +4,19 @@ export async function queryEsriLayer(layerUrl: string, token?: string | null) {
     return [];
   }
 
-  // Use provided token, or fall back to API key, or try to get from cookies
   let authToken = token;
   if (!authToken) {
-    // Try to get token from API route (reads from HTTP-only cookies)
     try {
       const { getArcGISToken } = await import('@/lib/auth/get-token');
       authToken = getArcGISToken();
     } catch (error) {
-      console.warn("Could not fetch token from API, falling back to API key");
+      console.warn("Could not fetch OAuth token from client-side auth:", error);
     }
   }
-  
-  // Fall back to API key if no token
+
   if (!authToken) {
-    authToken = process.env.NEXT_PUBLIC_ARCGIS_API_KEY!;
+    console.error("ArcGIS OAuth token required for secured layer queries");
+    throw new Error("ArcGIS OAuth token required");
   }
 
   const cleanUrl = layerUrl.replace(/\/$/, "");

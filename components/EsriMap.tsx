@@ -1266,21 +1266,16 @@ function EsriMap({
               if (map.getPane('overlayPane') && map.getContainer()) {
                 // IMPORTANT: Use the token from ref to ensure we get the latest value
                 // This ensures all layers are authenticated and can be edited
-                const currentToken = arcgisTokenRef.current || process.env.NEXT_PUBLIC_ARCGIS_API_KEY;
-                
+                const currentToken = arcgisTokenRef.current;
+
                 if (!currentToken) {
-                  console.warn("⚠️ No authentication token available for WorkAreas layer - skipping");
+                  console.warn("⚠️ OAuth token required for WorkAreas layer - skipping");
                   return;
                 }
                 
-                console.log("🔐 Creating WorkAreas layer with auth:", arcgisTokenRef.current ? "OAuth token" : "API key");
-                
-                const workAreaAuth: Record<string, string | number> = {};
-                if (arcgisTokenRef.current) {
-                  workAreaAuth.token = currentToken;
-                } else {
-                  workAreaAuth.apikey = currentToken;
-                }
+                const workAreaAuth: Record<string, string | number> = {
+                  token: currentToken,
+                };
                 
                 const workAreas = EL.featureLayer({
                   url: WORKAREA_URL,
@@ -1452,21 +1447,16 @@ function EsriMap({
               // Helper function to create a records layer with consistent styling
               function createRecordsLayer(url: string, geometryType: "Point" | "Line" | "Polygon") {
                 // IMPORTANT: Use the token from ref to ensure we get the latest value
-                const currentToken = arcgisTokenRef.current || process.env.NEXT_PUBLIC_ARCGIS_API_KEY;
+                const currentToken = arcgisTokenRef.current;
                 
                 if (!currentToken) {
-                  console.warn(`⚠️ No authentication token available for ${geometryType} layer - skipping`);
+                  console.warn(`⚠️ OAuth token required for ${geometryType} layer - skipping`);
                   return null;
                 }
                 
-                console.log(`🔐 Creating ${geometryType} layer with auth:`, arcgisTokenRef.current ? "OAuth token" : "API key");
-                
-                const layerAuth: Record<string, string | number> = {};
-                if (arcgisTokenRef.current) {
-                  layerAuth.token = currentToken;
-                } else {
-                  layerAuth.apikey = currentToken;
-                }
+                const layerAuth: Record<string, string | number> = {
+                  token: currentToken,
+                };
                 
                 const layer = EL.featureLayer({
                   url: url,

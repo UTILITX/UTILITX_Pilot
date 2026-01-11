@@ -33,6 +33,7 @@ function getEnvVar(key: string, defaultValue?: string): string {
 
 export const env = {
   // Support both NEXT_PUBLIC_ prefixed and non-prefixed versions for flexibility
+  // The ArcGIS API key is optional (basemaps only); secured layers must use OAuth.
   ARCGIS_API_KEY: getEnvVar("NEXT_PUBLIC_ARCGIS_API_KEY") || getEnvVar("ARCGIS_API_KEY"),
   WORKAREA_LAYER_URL: getEnvVar("NEXT_PUBLIC_WORKAREA_LAYER_URL") || getEnvVar("WORKAREA_LAYER_URL"),
   // Legacy: kept for backward compatibility but no longer required
@@ -50,7 +51,6 @@ export const env = {
 export function validateEnv() {
   const missing: string[] = [];
   
-  if (!env.ARCGIS_API_KEY) missing.push("NEXT_PUBLIC_ARCGIS_API_KEY");
   if (!env.WORKAREA_LAYER_URL) missing.push("NEXT_PUBLIC_WORKAREA_LAYER_URL");
   
   // Validate the three separate record layers (replaces legacy RECORDS_LAYER_URL)

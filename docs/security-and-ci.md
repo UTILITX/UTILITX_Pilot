@@ -36,6 +36,12 @@ This enforcement layer prevents bypassing the automated scans. No manual overrid
 * Never commit `.env` files or secrets into Git. `.env*` is already ignored in `.gitignore`. Keep `.env.local` for local dev only.
 * Prod secrets are scoped to the deploy jobs via protected variable masks and environment scoped values.
 * Document the owner of each secret in GitLab (key description) so auditors see accountability.
+* Frontend environment variables prefixed with `NEXT_PUBLIC_` contain no secrets and are safe for client-side exposure when they represent public configuration.
+* `NEXT_PUBLIC_ARCGIS_API_KEY` (if present) must be a referrer-restricted basemap/public-services key and must not grant edit privileges; secured-layer access requires OAuth tokens.
+
+## Dependency Security Update
+
+Automated dependency scanning identified vulnerabilities in transitive frontend dependencies. These were remediated via a patch-level framework update (Next.js `14.2.35`) and lockfile regeneration. A subsequent audit confirms zero remaining advisories. All existing security controls (CSP, CI scanning, OAuth enforcement, and secure observability) remain unchanged.
 
 ## 5. Cloudflare Edge Protection
 
