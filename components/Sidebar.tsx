@@ -7,13 +7,15 @@ import {
   Map, 
   FolderOpen, 
   MapPin,
-  BarChart3 
+  BarChart3,
+  Beaker,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const navItems = [
   { label: "Map", route: "/map", icon: Map },
   { label: "Dashboard", route: "/dashboard", icon: LayoutDashboard },
+  { label: "Playground", route: "/pilot/playground", icon: Beaker },
   { label: "Work Areas", route: "/work-areas", icon: MapPin },
   { label: "Records", route: "/records", icon: FolderOpen },
   { label: "Insights", route: "/insights", icon: BarChart3 },

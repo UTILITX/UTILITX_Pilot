@@ -27,42 +27,37 @@
 
 import { withSentryConfig } from '@sentry/nextjs';
 
-const cspDirectives = [
+const scriptSrcBase = ["'self'", "https://js.arcgis.com", "https://browser.sentry-cdn.com"];
+
+const cspDirectivesBase = [
   "default-src 'self'",
   "base-uri 'self'",
   "object-src 'none'",
   "frame-ancestors 'none'",
   'upgrade-insecure-requests',
   'block-all-mixed-content',
-  "script-src 'self' https://js.arcgis.com https://browser.sentry-cdn.com",
   "style-src 'self' 'unsafe-inline' https://js.arcgis.com",
   "img-src 'self' data: blob: https://*.arcgis.com https://*.arcgisonline.com https://res.cloudinary.com",
-  "connect-src 'self' https://*.arcgis.com https://*.arcgisonline.com https://*.sentry.io https://*.ingest.sentry.io https://*.supabase.co https://api.cloudinary.com",
+  "connect-src 'self' https://*.arcgis.com https://*.arcgisonline.com https://*.sentry.io https://*.ingest.sentry.io https://*.supabase.co https://api.cloudinary.com https://infra-mvp-api-195923635623.northamerica-northeast2.run.app",
   "worker-src 'self' blob:",
 ];
 
-const securityHeaders = [
-  {
-    key: 'Content-Security-Policy',
-    value: `${cspDirectives.join('; ')};`,
-  },
-  {
-    key: 'X-Frame-Options',
-    value: 'DENY',
-  },
-  {
-    key: 'X-Content-Type-Options',
-    value: 'nosniff',
-  },
-  {
-    key: 'Referrer-Policy',
-    value: 'strict-origin-when-cross-origin',
-  },
-  {
-    key: 'Permissions-Policy',
-    value: 'geolocation=(), microphone=(), camera=()',
-  },
-];
+const devScriptExtras = ["'unsafe-inline'", "'unsafe-eval'"];
+
+function buildScriptSrcDirective() {
+  const values = [...scriptSrcBase];
+  if (process.env.NODE_ENV !== "production") {
+    values.push(...devScriptExtras);
+  }
+  return `script-src ${values.join(" ")}`;
+}
+
+function buildCspValue() {
+  return `${[
+    ...cspDirectivesBase,
+    buildScriptSrcDirective(),
+  ].join('; ')};`;
+}
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -85,7 +80,28 @@ const nextConfig = {
     return [
       {
         source: '/(.*)',
-        headers: securityHeaders,
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: buildCspValue(),
+          },
+          {
+            key: 'X-Frame-Options',
+            value: 'DENY',
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin',
+          },
+          {
+            key: 'Permissions-Policy',
+            value: 'geolocation=(), microphone=(), camera=()',
+          },
+        ],
       },
     ];
   },
